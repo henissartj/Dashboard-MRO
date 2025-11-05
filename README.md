@@ -67,46 +67,11 @@ Ajout de presets et overlay de plusieurs séries.
 ### 🔈 FFT
 Isolation de la fréquence dominante (signature spectrale).
 
-### 📦 Export scientifique
+### 📦 Export
 - PNG HD,
 - SVG,
 - ZIP automatisé,
 - README exploratoire embarqué.
-
-### 🗒️ Post-it dynamiques (overlay)
-Pour prise de notes live (recherche expérimentale).
-
----
-
-## 🧰 Stack technique
-
-- **Python 3.10+**
-- **Dash** (multipages)
-- **Plotly**
-- **NumPy / SciPy**
-- **Gunicorn + Nginx** (prod)
-- **Kaleido** (rendu offline)
-- Ubuntu Server (production)
-
----
-
-## 📁 Structure du dépôt
-
-├─ app.py # Application principale Dash
-├─ pages/
-│ ├─ home.py
-│ ├─ fft.py
-│ ├─ docs.py
-│ ├─ credits.py
-├─ assets/
-│ ├─ style.css # CSS custom (post-it, layout, etc.)
-│ ├─ favicon.ico
-├─ requirements.txt
-├─ service/ # (optionnel)
-│ └─ mro_dash.service # Unité systemd
-├─ deploy.sh # Script de déploiement automatisé
-└─ README.md
-
 
 ---
 
