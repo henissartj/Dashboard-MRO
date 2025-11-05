@@ -11,6 +11,10 @@
 
 </p>
 
+<p align="center">
+  <img src="assets/screenshot_home.png" alt="Dashboard MRO — Accueil" width="860">
+</p>
+
 # Dashboard MRO – Modèle de Résonance Ontogénétique
 
 **Visualisation, exploration et expérimentation interactive** autour du Modèle de Résonance Ontogénétique (MRO) :  
