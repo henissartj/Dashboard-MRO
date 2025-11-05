@@ -1,3 +1,5 @@
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+
 <p align="center">
 
   <!-- Version du dépôt -->
@@ -5,9 +7,6 @@
 
   <!-- Statut de build (CI optionnelle plus bas) -->
   <img alt="Build Status" src="https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge">
-
-  <!-- Licence -->
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 
   <!-- Technologies principales -->
   <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python">
