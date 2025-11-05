@@ -7,7 +7,7 @@
   <img alt="Build Status" src="https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge">
 
   <!-- Licence -->
-  <img alt="GitHub license" src="https://img.shields.io/github/license/henissartj/Dashboard-MRO?style=for-the-badge">
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 
   <!-- Technologies principales -->
   <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python">
