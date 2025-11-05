@@ -92,3 +92,32 @@ Pour prise de notes live (recherche expérimentale).
 
 ## 📁 Structure du dépôt
 
+├─ app.py # Application principale Dash
+├─ pages/
+│ ├─ home.py
+│ ├─ fft.py
+│ ├─ docs.py
+│ ├─ credits.py
+├─ assets/
+│ ├─ style.css # CSS custom (post-it, layout, etc.)
+│ ├─ favicon.ico
+├─ requirements.txt
+├─ service/ # (optionnel)
+│ └─ mro_dash.service # Unité systemd
+├─ deploy.sh # Script de déploiement automatisé
+└─ README.md
+
+
+---
+
+## ⚙️ Installation (développement local)
+
+```bash
+git clone https://github.com/henissartj/Dashboard-MRO.git
+cd Dashboard-MRO
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+pip install -r requirements.txt
+python app.py
