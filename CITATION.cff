@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+title: "Dashboard MRO: Modèle de Résonance Ontogénétique — Simulations dynamiques"
+message: "Veuillez citer ce dépôt si vous utilisez ce dashboard dans une publication."
+type: software
+authors:
+  - family-names: Henissart-Miquel
+    given-names: Jules
+    orcid: "https://orcid.org/0009-0007-1822-5741"
+abstract: "Dashboard interactif permettant l'étude de la dynamique MRO: mémoire de résonance, dissipation constructive, espaces de phases, FFT et attracteurs."
+repository-code: "https://github.com/henissartj/Dashboard-MRO"
+doi: "10.22541/au.176175046.68446609/v1"
+version: "1.0.0"
+date-released: "2025-11-05"
+license: "MIT"
+keywords:
+  - dynamical systems
+  - resonance
+  - ontogenesis
+  - phase space
+  - dissipation constructive
