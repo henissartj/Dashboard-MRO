@@ -47,10 +47,27 @@ app = dash.Dash(
     use_pages=True,
     suppress_callback_exceptions=True,
     title="MRO • Ontogenetic Resonance Model",
-    external_stylesheets=[ "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"]
+    external_stylesheets=["https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"],
+    meta_tags=[
+        # SEO / mobile
+        {"name": "viewport", "content": "width=device-width, initial-scale=1"},
+        {"name": "description", "content": "Visualisations interactives du Modèle de Résonance Ontogénétique (MRO) : x(t), espace des phases, heatmaps (γ,k), FFT, exports PNG/SVG/ZIP."},
+
+        # Open Graph (LinkedIn, Slack…)
+        {"property": "og:title", "content": "Modèle de Résonance Ontogénétique (MRO) — Visualisations interactives"},
+        {"property": "og:description", "content": "Explorez x(t), l’espace des phases, les heatmaps (γ,k) et la FFT. Exports PNG/SVG/ZIP. Projet open source."},
+        {"property": "og:type", "content": "website"},
+        {"property": "og:url", "content": "https://epheverisme.art/"},
+        {"property": "og:image", "content": "https://epheverisme.art/assets/og-image.png"},
+
+        # Twitter Card
+        {"name": "twitter:card", "content": "summary_large_image"},
+        {"name": "twitter:title", "content": "MRO — Visualisations interactives"},
+        {"name": "twitter:description", "content": "x(t), espace des phases, heatmaps (γ,k), FFT, exports — open source"},
+        {"name": "twitter:image", "content": "https://epheverisme.art/assets/og-image.png"},
+    ],
 )
 server = app.server
-
 
 intro_md = """
 # Modèle de Résonance Ontogénétique (MRO)
@@ -65,16 +82,16 @@ Cette page présente des visualisations interactives du MRO :
 Astuce : utilisez la molette et la sélection pour zoomer, double-clic pour reset.
 """
 
-app.layout = html.Div(
-    style={"maxWidth": "1200px", "margin": "0 auto", "padding": "24px"},
-    children=[
-
+app.layout = html.Div([
         # --- barre de navigation ---
         html.Div([
             dcc.Link("Accueil", href="/", style={"marginRight": "20px"}),
             dcc.Link("FFT", href="/fft", style={"marginRight": "20px"}),
             dcc.Link("Explications", href="/docs", style={"marginRight": "20px"}),
-            dcc.Link("Crédits", href="/credits", style={"marginRight": "20px"}),  # <— AJOUT
+            dcc.Link("Crédits", href="/credits", style={"marginRight": "20px"}),
+            dcc.Link("Heatmap 3D", href="/heatmap3d", style={"marginRight": "20px"}),
+            dcc.Link("Tests & Expériences", href="/experiences", style={"marginRight": "20px"}),
+            dcc.Store(id="export-done"),
         ],
         style={
             "padding": "15px",
@@ -285,29 +302,40 @@ def update_multi(data, x0, v0, tend):
     fig.update_layout(xaxis_title="Temps", yaxis_title="x(t)", title="Comparaison de séries")
     return fig
 
-# ---- Export client factorisé (PNG / SVG) ----
+# ---- Export client (PNG / SVG) ----
 app.clientside_callback(
     """
     function(n_png, n_svg) {
         const ctx = window.dash_clientside && window.dash_clientside.callback_context;
         if (!ctx || (!n_png && !n_svg)) { return window.dash_clientside.no_update; }
 
-        // Détermine quel bouton a déclenché
         const trig = ctx.triggered && ctx.triggered[0] && ctx.triggered[0].prop_id || "";
-        let format = "png";
-        if (trig.indexOf("btn-export-svg") !== -1) format = "svg";
+        const format = trig.includes("btn-export-svg") ? "svg" : "png";
 
-        const graphs = document.querySelectorAll('.js-plotly-plot');
+        // Récupère tous les graphes valides présents sur la page
+        const graphs = Array.from(document.querySelectorAll('.js-plotly-plot'))
+            .filter(g => g._fullLayout && g._fullData && g._fullData.length > 0);
+
+        if (graphs.length === 0) {
+            alert("Aucun graphique détecté — générez d’abord une figure avant d’exporter.");
+            return window.dash_clientside.no_update;
+        }
+
         graphs.forEach((g, idx) => {
-            const title = (g._fullLayout && g._fullLayout.title && g._fullLayout.title.text) ? g._fullLayout.title.text : `figure_${idx+1}`;
+            const title = (g._fullLayout && g._fullLayout.title && g._fullLayout.title.text)
+                ? g._fullLayout.title.text
+                : `figure_${idx + 1}`;
             const fname = title.replace(/[^a-z0-9-_]+/gi, '_').toLowerCase();
+
             Plotly.downloadImage(g, {
                 format: format,
                 filename: fname,
                 width: g._fullLayout.width || 1200,
-                height: g._fullLayout.height || 700
-            });
+                height: g._fullLayout.height || 700,
+                scale: 2
+            }).catch(err => console.error("Erreur d’export :", err));
         });
+
         return Date.now();
     }
     """,
@@ -316,47 +344,3 @@ app.clientside_callback(
     Input("btn-export-svg", "n_clicks"),
     prevent_initial_call=True
 )
-
-@callback(Output("fft-tend-val", "children"), Input("fft-tend", "value"))
-def _fft_tend_lbl(v): return f"t_end (FFT) = {v:.0f}"
-
-@callback(Output("fft-npow-val", "children"), Input("fft-npow", "value"))
-def _fft_npow_lbl(v): return f"N = 2^{int(v)} points"
-
-@callback(
-    Output("fft-graph", "figure"),
-    Input("fft-tend", "value"),
-    Input("fft-npow", "value"),
-    State("m", "value"),
-    State("gamma", "value"),
-    State("k", "value"),
-    State("x0", "value"),
-    State("v0", "value"),
-)
-def _fft_plot(tend_fft, npow, m, gamma, k, x0, v0):
-    # Re-simule x(t) avec le t_end demandé pour la FFT
-    t, x, v = simulate_mro(m=m, gamma=gamma, k=k, x0=x0, v0=v0, t_end=tend_fft)
-    # FFT
-    n = int(2**int(npow))
-    # Interpolation/échantillonnage régulier sur la fenêtre
-    t_uniform = np.linspace(t[0], t[-1], n)
-    x_uniform = np.interp(t_uniform, t, x)
-    dt_s = (t_uniform[-1] - t_uniform[0]) / (n - 1 + 1e-12)
-    X = np.fft.rfft(x_uniform)
-    freqs = np.fft.rfftfreq(n, d=dt_s)
-    mag = np.abs(X)
-    # Pic dominant (hors f=0)
-    if len(mag) > 1:
-        idx_peak = int(np.argmax(mag[1:])) + 1
-        f_peak = freqs[idx_peak]
-        y_peak = mag[idx_peak]
-    else:
-        f_peak, y_peak = 0.0, 0.0
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=freqs, y=mag, mode="lines", name="|FFT(x)|"))
-    fig.update_layout(xaxis_title="Fréquence (a.u.)", yaxis_title="Amplitude spectrale", title="Spectre |FFT(x)|")
-    if y_peak > 0:
-        fig.add_vline(x=f_peak, line_dash="dash", annotation_text=f"f* ≈ {f_peak:.3g}", annotation_position="top")
-    return fig
-
-
