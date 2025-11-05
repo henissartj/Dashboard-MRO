@@ -1,0 +1,94 @@
+# Dashboard MRO – Modèle de Résonance Ontogénétique
+
+**Visualisation, exploration et expérimentation interactive** autour du Modèle de Résonance Ontogénétique (MRO) :  
+une hypothèse dynamique visant à modéliser la mémoire, la plasticité et l’émergence de forme dans les systèmes vivants et symboliques.
+
+👉 Démo : https://epheverisme.art  
+👉 Article TechRxiv : https://doi.org/10.22541/au.176175046.68446609/v1  
+👉 Auteur : Jules Henissart-Miquel (ORCID : https://orcid.org/0009-0007-1822-5741)
+
+---
+
+## ✨ Objectifs du projet
+
+Ce tableau de bord permet :
+
+- de **simuler** des oscillations amorties (MRO),
+- d’**explorer** l’influence des paramètres dynamiques,
+- de **visualiser** les trajectoires en espace des phases,
+- de **analyser** le spectre fréquentiel (FFT),
+- de **cartographier** (heatmap) la dynamique selon `(γ, k)`,
+- de **comparer** plusieurs configurations paramétriques,
+- d’**exporter** automatiquement des figures scientifiques (PNG/SVG/ZIP),
+- de **conduire** des tests reproductibles.
+
+Il sert autant à la recherche conceptuelle qu’à la pédagogie numérique.
+
+---
+
+## 🧠 Concepts théoriques mobilisés
+
+Le MRO propose un lien formel entre :
+
+| Phénomène | Signature dynamique |
+|----------|---------------------|
+| **Information** | Contraction dans l’espace des phases |
+| **Mémoire** | Déformation topologique progressive |
+| **Plasticité** | Modulation paramétrique lente |
+| **Ontogenèse** | Persistance structurelle de la résonance |
+| **Dissipation constructive** | Inscription temporelle non triviale |
+
+Le système illustre :
+- la zone morte (γ → 0, aucune écriture),
+- la zone dissipative (γ → ∞, extinction rapide),
+- la **bande vivante** où l’histoire apparaît.
+
+---
+
+## 🧩 Fonctionnalités
+
+### 🔭 Série temporelle `x(t)`
+Visualisation de la décroissance amortie et comportement global dans le temps.
+
+### 🌀 Espace des phases `(x, dx/dt)`
+Permet d’identifier :
+- attracteurs,
+- spirales convergentes,
+- stabilité orbitale.
+
+### 🔥 Heatmap `(γ, k)`
+Cartographie du maximum d’amplitude selon :
+- tension ontogénétique,
+- dissipation.
+
+### 📊 Comparaison multi-paramètres
+Ajout de presets et overlay de plusieurs séries.
+
+### 🔈 FFT
+Isolation de la fréquence dominante (signature spectrale).
+
+### 📦 Export scientifique
+- PNG HD,
+- SVG,
+- ZIP automatisé,
+- README exploratoire embarqué.
+
+### 🗒️ Post-it dynamiques (overlay)
+Pour prise de notes live (recherche expérimentale).
+
+---
+
+## 🧰 Stack technique
+
+- **Python 3.10+**
+- **Dash** (multipages)
+- **Plotly**
+- **NumPy / SciPy**
+- **Gunicorn + Nginx** (prod)
+- **Kaleido** (rendu offline)
+- Ubuntu Server (production)
+
+---
+
+## 📁 Structure du dépôt
+
