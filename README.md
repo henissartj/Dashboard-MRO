@@ -25,6 +25,8 @@
   <!-- ORCID -->
   <img alt="ORCID" src="https://img.shields.io/badge/ORCID-0009--0007--1822--5741-A6CE39?style=for-the-badge&logo=orcid">
 
+  <img alt="DOI" src="https://img.shields.io/badge/DOI-pending-lightgrey?style=for-the-badge">
+
 </p>
 
 # Dashboard MRO – Modèle de Résonance Ontogénétique
