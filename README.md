@@ -1,24 +1,25 @@
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-
 <p align="center">
 
   <!-- Version du dépôt -->
-  <img alt="GitHub release" src="https://img.shields.io/github/v/release/henissartj/Dashboard-MRO?style=for-the-badge">
+  <img alt="Latest Release" src="https://img.shields.io/github/v/release/henissartj/Dashboard-MRO?style=for-the-badge">
 
-  <!-- Statut de build (CI optionnelle plus bas) -->
+  <!-- Build (statique car pas de CI) -->
   <img alt="Build Status" src="https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge">
+
+  <!-- Licence -->
+  <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge">
 
   <!-- Technologies principales -->
   <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python">
-  <img alt="Dash" src="https://img.shields.io/badge/Dash-Plotly-05a3d1?style=for-the-badge&logo=plotly">
+  <img alt="Dash & Plotly" src="https://img.shields.io/badge/Dash-Plotly-05a3d1?style=for-the-badge&logo=plotly">
 
   <!-- Activité -->
-  <img alt="Commits last month" src="https://img.shields.io/github/commit-activity/m/henissartj/Dashboard-MRO?style=for-the-badge">
+  <img alt="Commit Activity" src="https://img.shields.io/github/commit-activity/m/henissartj/Dashboard-MRO?style=for-the-badge">
 
   <!-- Open Source -->
   <img alt="Open Source Love" src="https://img.shields.io/badge/Open%20Source-%E2%9D%A4-red?style=for-the-badge">
 
-  <!-- Stargazers (social proof) -->
+  <!-- Stargazers -->
   <img alt="Stars" src="https://img.shields.io/github/stars/henissartj/Dashboard-MRO?style=for-the-badge">
 
   <!-- ORCID -->
