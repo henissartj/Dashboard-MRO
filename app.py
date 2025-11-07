@@ -477,3 +477,6 @@ app.clientside_callback(
     Input("btn-export-svg", "n_clicks"),
     prevent_initial_call=True
 )
+
+if __name__ == "__main__":
+    app.run_server(host="0.0.0.0", port=int(os.getenv("PORT", 8050)), debug=False)
