@@ -4,6 +4,7 @@ from urllib.parse import urlencode, urlparse, parse_qs
 import dash
 from dash import dcc, html, Input, Output, State, callback
 from dash.exceptions import PreventUpdate
+import os
 
 import dash
 from dash import dcc, html, Input, Output, State, callback, dash_table
@@ -229,19 +230,32 @@ def update_core_plots(m, gamma, k, x0, v0, tend):
     State("k-step", "value"),
     State("tend", "value"),
 )
+
 def update_heatmap(n, gmin, gmax, gstep, kmin, kmax, kstep, tend):
-    if n == 0:
-        # Heatmap par défaut légère
+    if not n:
+        # Heatmap par défaut légère tant qu’aucun clic
         gammas = np.arange(0.0, 1.01, 0.1)
         ks = np.arange(0.0, 3.01, 0.2)
     else:
-        gammas = np.arange(float(gmin), float(gmax)+1e-9, float(gstep))
-        ks = np.arange(float(kmin), float(kmax)+1e-9, float(kstep))
-    Z = heatmap_max_amp(gammas, ks, m=1.0, x0=1.0, v0=0.0, t_end=float(tend), t_points=1000)
-    fig = px.imshow(Z, x=ks, y=gammas, aspect="auto", origin="lower",
-                    labels=dict(x="k", y="γ", color="max |x(t)|"),
-                    title="Max |x(t)| selon (γ, k)")
+        gammas = np.arange(float(gmin), float(gmax) + 1e-9, float(gstep))
+        ks = np.arange(float(kmin), float(kmax) + 1e-9, float(kstep))
+
+    Z = heatmap_max_amp(
+        gammas, ks,
+        m=1.0, x0=1.0, v0=0.0,
+        t_end=float(tend), t_points=1000
+    )
+
+    fig = px.imshow(
+        Z,
+        x=ks, y=gammas,
+        aspect="auto",
+        origin="lower",
+        labels=dict(x="k", y="γ", color="max |x(t)|"),
+        title="Max |x(t)| selon (γ, k)"
+    )
     return fig
+# ---------- Callback : Export ZIP ----------
 
 def _build_core_figs(m, gamma, k, x0, v0, tend, presets, heat_gmin, heat_gmax, heat_gstep, heat_kmin, heat_kmax, heat_kstep):
     # Série temporelle & phase

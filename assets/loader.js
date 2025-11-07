@@ -1,25 +1,38 @@
 (function () {
+    // Crée l'overlay
     const overlay = document.createElement('div');
     overlay.id = 'loader-overlay';
     overlay.innerHTML = `
         <img id="loader-logo" src="/assets/favicon.ico" alt="Logo">
         <div id="loader-text">Bienvenue dans le laboratoire</div>
+        <div id="loader-subtext">Chargement des visualisations...</div>
     `;
 
+    // Ajoute l'overlay au DOM dès que le HTML est prêt
     document.addEventListener('DOMContentLoaded', function () {
         document.body.appendChild(overlay);
     });
 
-    // Quand tout est prêt, on attend encore un peu avant de retirer le loader
-    window.addEventListener('load', function () {
+    // Fonction pour masquer le loader avec un petit fondu
+    function hideLoader(delay = 1000) {
         const loader = document.getElementById('loader-overlay');
         if (!loader) return;
-
-        // ⏱ délai en millisecondes
-        const DELAY = 2000; // = 2 secondes
         setTimeout(() => {
             loader.classList.add('fade-out');
             setTimeout(() => loader.remove(), 450);
-        }, DELAY);
+        }, delay);
+    }
+
+    // Attend que Dash ait tout rendu
+    document.addEventListener('dash-rendered', () => {
+        hideLoader(1000); // 1s après rendu pour la fluidité
+    });
+
+    // Sécurité : fallback après 5s si dash-rendered ne se déclenche pas
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            const loader = document.getElementById('loader-overlay');
+            if (loader) hideLoader(0);
+        }, 5000);
     });
 })();

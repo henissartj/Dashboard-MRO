@@ -1,28 +1,60 @@
 import dash
 from dash import dcc, html
 
-dash.register_page(__name__, path="/", name="MRO")
+dash.register_page(
+    __name__,
+    path="/",
+    title="MRO • Laboratoire Éphévérisme",
+    name="Accueil"
+)
 
 intro_md = """
 # Modèle de Résonance Ontogénétique (MRO)
 
-Visualisation interactive du modèle :
-- **Série temporelle** x(t)
-- **Espace des phases** (x, dx/dt)
-- **Heatmap** du maximum d'amplitude selon (γ, k)
-- **Comparaison multi-paramètres**
-- **Exports** PNG/SVG/ZIP
-- **Snapshots** partageables par lien
-
-Astuce : utilisez le zoom, la molette, le pan, double-clic pour réinitialiser.
+Cette interface permet d’explorer le MRO à travers :
+- **La série temporelle** de x(t)
+- **L’espace des phases** (x, dx/dt)
+- **Une heatmap** du maximum d'amplitude selon (γ, k)
+- **Des comparaisons multi-paramètres**
+- **Des exports PNG/SVG/ZIP** pour documenter vos analyses
 """
 
 layout = html.Div(
     style={"maxWidth": "1200px", "margin": "0 auto", "padding": "24px"},
     children=[
+        # ---- EN-TÊTE ----
+        html.Header(
+            style={
+                "display": "flex",
+                "alignItems": "center",
+                "justifyContent": "center",
+                "background": "#f2f2f2",
+                "padding": "20px 10px",
+                "borderBottom": "1px solid #ddd",
+                "marginBottom": "24px",
+            },
+            children=[
+                html.Img(
+                    src="/assets/logo.png",
+                    alt="Logo du laboratoire",
+                    style={"height": "60px", "marginRight": "20px"}
+                ),
+                html.H1(
+                    "Laboratoire Éphévériste — Modèle de Résonance Ontogénétique",
+                    style={
+                        "fontSize": "1.6rem",
+                        "fontWeight": "600",
+                        "color": "#1a2238",
+                        "margin": "0"
+                    }
+                ),
+            ],
+        ),
+
         # Pour encoder/décoder les paramètres dans l'URL
         dcc.Location(id="mro-url", refresh=False),
 
+        # Intro
         dcc.Markdown(intro_md),
 
         # --- Sliders principaux ---
@@ -30,7 +62,7 @@ layout = html.Div(
             style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "16px"},
             children=[
                 html.Div([
-                    html.Label("m (masse) ⓘ"),
+                    html.Label("m (masse)"),
                     dcc.Slider(
                         id="m", min=0.1, max=5, step=0.1, value=1.0,
                         tooltip={"placement": "bottom"},
@@ -38,7 +70,7 @@ layout = html.Div(
                     html.Div(id="m-val"),
                 ]),
                 html.Div([
-                    html.Label("γ (amortissement) ⓘ"),
+                    html.Label("γ (amortissement)"),
                     dcc.Slider(
                         id="gamma", min=0.0, max=2.0, step=0.01, value=0.15,
                         tooltip={"placement": "bottom"},
@@ -46,7 +78,7 @@ layout = html.Div(
                     html.Div(id="gamma-val"),
                 ]),
                 html.Div([
-                    html.Label("k (tension ontogénétique) ⓘ"),
+                    html.Label("k (tension ontogénétique)"),
                     dcc.Slider(
                         id="k", min=0.0, max=5.0, step=0.05, value=1.0,
                         tooltip={"placement": "bottom"},
@@ -54,7 +86,7 @@ layout = html.Div(
                     html.Div(id="k-val"),
                 ]),
                 html.Div([
-                    html.Label("x(0) ⓘ"),
+                    html.Label("x(0)"),
                     dcc.Slider(
                         id="x0", min=-2.0, max=2.0, step=0.05, value=1.0,
                         tooltip={"placement": "bottom"},
@@ -62,7 +94,7 @@ layout = html.Div(
                     html.Div(id="x0-val"),
                 ]),
                 html.Div([
-                    html.Label("v(0) = dx/dt(0) ⓘ"),
+                    html.Label("v(0) = dx/dt(0)"),
                     dcc.Slider(
                         id="v0", min=-2.0, max=2.0, step=0.05, value=0.0,
                         tooltip={"placement": "bottom"},
@@ -70,7 +102,7 @@ layout = html.Div(
                     html.Div(id="v0-val"),
                 ]),
                 html.Div([
-                    html.Label("Durée (t_end) ⓘ"),
+                    html.Label("Durée (t_end)"),
                     dcc.Slider(
                         id="tend", min=5, max=120, step=1, value=30,
                         tooltip={"placement": "bottom"},
@@ -108,74 +140,7 @@ layout = html.Div(
 
         html.Div(style={"height": "16px"}),
 
-        # --- Heatmap ---
-        html.Div([
-            html.H3("Heatmap du maximum d’amplitude selon (γ, k)"),
-            html.Div(
-                style={
-                    "display": "grid",
-                    "gridTemplateColumns": "1fr 1fr",
-                    "gap": "12px",
-                },
-                children=[
-                    html.Div([
-                        html.Label("γ min / γ max / pas"),
-                        dcc.Input(
-                            id="g-min", type="number",
-                            value=0.0, step=0.05,
-                            style={"width": "30%"},
-                        ),
-                        dcc.Input(
-                            id="g-max", type="number",
-                            value=1.0, step=0.05,
-                            style={"width": "30%"},
-                        ),
-                        dcc.Input(
-                            id="g-step", type="number",
-                            value=0.1, step=0.05,
-                            style={"width": "30%"},
-                        ),
-                    ]),
-                    html.Div([
-                        html.Label("k min / k max / pas"),
-                        dcc.Input(
-                            id="k-min", type="number",
-                            value=0.0, step=0.1,
-                            style={"width": "30%"},
-                        ),
-                        dcc.Input(
-                            id="k-max", type="number",
-                            value=3.0, step=0.1,
-                            style={"width": "30%"},
-                        ),
-                        dcc.Input(
-                            id="k-step", type="number",
-                            value=0.2, step=0.1,
-                            style={"width": "30%"},
-                        ),
-                    ]),
-                ],
-            ),
-            html.Div(
-                style={"marginTop": "8px"},
-                children=[
-                    html.Button(
-                        "Calculer la heatmap",
-                        id="btn-heat", n_clicks=0,
-                    )
-                ],
-            ),
-            dcc.Loading(
-                dcc.Graph(
-                    id="heatmap",
-                    config={"toImageButtonOptions": {"format": "svg"}},
-                )
-            ),
-        ]),
-
-        html.Div(style={"height": "16px"}),
-
-        # --- Multi-séries (optionnel si callbacks côté app.py) ---
+        # --- Multi-séries ---
         html.Div([
             html.H3("Comparaison multi-paramètres"),
             html.P("Ajoutez des presets et comparez les réponses temporelles."),
@@ -189,7 +154,18 @@ layout = html.Div(
                     dcc.Input(id="preset-m", type="number", placeholder="m", value=1.0, step=0.1),
                     dcc.Input(id="preset-g", type="number", placeholder="γ", value=0.15, step=0.01),
                     dcc.Input(id="preset-k", type="number", placeholder="k", value=1.0, step=0.05),
-                    html.Button("Ajouter preset", id="add-preset", n_clicks=0),
+                    html.Button(
+                        "Ajouter preset",
+                        id="add-preset",
+                        n_clicks=0,
+                        style={
+                            "padding": "6px 10px",
+                            "borderRadius": "4px",
+                            "border": "1px solid #ccc",
+                            "backgroundColor": "#ffffff",
+                            "cursor": "pointer",
+                        },
+                    ),
                 ],
             ),
             dcc.Store(id="presets-store", data=[]),
@@ -218,16 +194,37 @@ layout = html.Div(
                     "Exporter toutes les figures (PNG)",
                     id="btn-export-png",
                     n_clicks=0,
+                    style={
+                        "padding": "6px 10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #ccc",
+                        "backgroundColor": "#ffffff",
+                        "cursor": "pointer",
+                    },
                 ),
                 html.Button(
                     "Exporter toutes les figures (SVG)",
                     id="btn-export-svg",
                     n_clicks=0,
+                    style={
+                        "padding": "6px 10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #ccc",
+                        "backgroundColor": "#ffffff",
+                        "cursor": "pointer",
+                    },
                 ),
                 html.Button(
                     "Télécharger ZIP (PNG+SVG HD)",
                     id="btn-export-zip",
                     n_clicks=0,
+                    style={
+                        "padding": "6px 10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #ccc",
+                        "backgroundColor": "#ffffff",
+                        "cursor": "pointer",
+                    },
                 ),
                 dcc.Store(id="export-done"),
                 dcc.Download(id="download-zip"),
@@ -246,13 +243,22 @@ layout = html.Div(
                 "background": "#fafafa",
             },
             children=[
-                html.Div("Lien de snapshot (partage de cette configuration) :",
-                         style={"fontSize": "0.9rem", "marginBottom": "4px"}),
+                html.Div(
+                    "Lien de snapshot (partage de cette configuration) :",
+                    style={"fontSize": "0.9rem", "marginBottom": "4px"}
+                ),
                 html.Button(
                     "📎 Générer un lien",
                     id="share-link-btn",
                     n_clicks=0,
-                    style={"marginRight": "8px"},
+                    style={
+                        "padding": "4px 10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #ccc",
+                        "backgroundColor": "#ffffff",
+                        "cursor": "pointer",
+                        "marginBottom": "6px",
+                    },
                 ),
                 dcc.Input(
                     id="share-link-output",
@@ -273,8 +279,8 @@ layout = html.Div(
         dcc.Markdown(
             """
 ### Notes
-- Utiliser ce tableau de bord comme laboratoire : explorer, annoter, exporter.
-- Les snapshots permettent de partager des régimes précis du MRO.
+- Utilisez ce laboratoire comme outil d’exploration scientifique.
+- Les exports et snapshots facilitent la documentation et le partage de vos résultats.
             """
         ),
     ],
