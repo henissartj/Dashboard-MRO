@@ -1,5 +1,9 @@
 import numpy as np
 from scipy.integrate import solve_ivp
+from urllib.parse import urlencode, urlparse, parse_qs
+import dash
+from dash import dcc, html, Input, Output, State, callback
+from dash.exceptions import PreventUpdate
 
 import dash
 from dash import dcc, html, Input, Output, State, callback, dash_table
@@ -367,6 +371,69 @@ def update_multi(data, x0, v0, tend):
             fig.add_trace(go.Scatter(x=t, y=x, mode="lines", name=f"Preset {i+1}"))
     fig.update_layout(xaxis_title="Temps", yaxis_title="x(t)", title="Comparaison de séries")
     return fig
+
+# --- Snapshot : charger sliders depuis l'URL ?m=&g=&k=&x0=&v0=&t= ---
+@callback(
+    Output("m", "value"),
+    Output("gamma", "value"),
+    Output("k", "value"),
+    Output("x0", "value"),
+    Output("v0", "value"),
+    Output("tend", "value"),
+    Input("mro-url", "search"),
+    prevent_initial_call=False,
+)
+def load_params_from_url(search):
+    if not search:
+        # pas de query -> garder les valeurs par défaut définies dans le layout
+        raise PreventUpdate
+
+    qs = parse_qs(search.lstrip("?"))
+
+    def get(name, default, cast=float):
+        try:
+            return cast(qs.get(name, [default])[0])
+        except Exception:
+            return default
+
+    m = get("m", 1.0)
+    gamma = get("g", 0.15)
+    k = get("k", 1.0)
+    x0 = get("x0", 1.0)
+    v0 = get("v0", 0.0)
+    tend = get("t", 30.0, float)
+
+    return m, gamma, k, x0, v0, tend
+
+
+# --- Snapshot : générer un lien partageable ---
+@callback(
+    Output("share-link-output", "value"),
+    Input("share-link-btn", "n_clicks"),
+    State("m", "value"),
+    State("gamma", "value"),
+    State("k", "value"),
+    State("x0", "value"),
+    State("v0", "value"),
+    State("tend", "value"),
+    State("mro-url", "href"),
+    prevent_initial_call=True,
+)
+def generate_snapshot_link(n, m, gamma, k, x0, v0, tend, href):
+    if not n or not href:
+        raise PreventUpdate
+
+    base = href.split("?", 1)[0]
+    params = {
+        "m": round(m, 5),
+        "g": round(gamma, 5),
+        "k": round(k, 5),
+        "x0": round(x0, 5),
+        "v0": round(v0, 5),
+        "t": round(tend, 5),
+    }
+    url = base + "?" + urlencode(params)
+    return url
 
 # ---- Export client (PNG / SVG) ----
 app.clientside_callback(

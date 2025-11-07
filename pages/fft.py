@@ -1,229 +1,253 @@
+import numpy as np
+from scipy.integrate import solve_ivp
+
 import dash
 from dash import dcc, html, Input, Output, State, callback
 import plotly.graph_objects as go
-import numpy as np
-from scipy.integrate import solve_ivp
 
 dash.register_page(
     __name__,
     path="/fft",
     name="FFT avancée",
-    order=30,
 )
 
-# --------- Modèle MRO minimal ---------
+# --- Modèle local (indépendant) ---
 def MRO_equations(t, Y, m, gamma, k):
     x, dxdt = Y
-    dxdtt = -(gamma/m)*dxdt - (k/m)*x
-    return [dxdt, dxdtt]
+    d2x = -(gamma / m) * dxdt - (k / m) * x
+    return [dxdt, d2x]
 
-def simulate_mro(m=1.0, gamma=0.15, k=1.0, x0=1.0, v0=0.0,
-                 t_start=0.0, t_end=30.0, t_points=3000):
-    t_eval = np.linspace(t_start, t_end, t_points)
+def simulate_mro(m, gamma, k, x0, v0, t_end, t_points=4000):
+    t_eval = np.linspace(0, t_end, t_points)
     sol = solve_ivp(
         MRO_equations,
-        [t_start, t_end],
+        [0, t_end],
         [x0, v0],
         args=(m, gamma, k),
         t_eval=t_eval,
-        method='RK45'
+        method="RK45",
     )
-    t = sol.t
-    x = sol.y[0]
-    v = sol.y[1]
-    return t, x, v
+    return sol.t, sol.y[0]
 
-# --------- Helpers FFT ---------
-def window_hann(n):
-    return 0.5 - 0.5 * np.cos(2*np.pi*np.arange(n)/n)
 
-def find_peaks_simple(y, min_prominence=0.0, max_peaks=8):
-    idx = np.argsort(y)[::-1]
-    idx = idx[idx > 0]  # remove DC
-    if min_prominence > 0:
-        idx = [i for i in idx if y[i] >= min_prominence]
-    if len(idx) > max_peaks:
-        idx = idx[:max_peaks]
-    return np.array(idx, dtype=int)
-
-def spectral_metrics(freqs, mag, peak_idx):
-    f0 = freqs[peak_idx] if peak_idx is not None else 0.0
-    a0 = mag[peak_idx] if peak_idx is not None else 0.0
-
-    if peak_idx is not None and a0 > 0:
-        half = a0 / np.sqrt(2)
-        i_left = peak_idx
-        while i_left > 1 and mag[i_left] > half:
-            i_left -= 1
-        i_right = peak_idx
-        while i_right < len(mag)-1 and mag[i_right] > half:
-            i_right += 1
-        f_left = freqs[max(i_left, 0)]
-        f_right = freqs[min(i_right, len(freqs)-1)]
-        bw = max(f_right - f_left, 0.0)
-    else:
-        f_left = f_right = bw = 0.0
-
-    centroid = (freqs * mag).sum() / mag.sum() if mag.sum() > 0 else 0.0
-    return f0, a0, f_left, f_right, bw, centroid
-
-def compute_thd(freqs, mag, f0, nharm=5, tol=0.03):
-    if f0 <= 0:
-        return 0.0, []
-    a0 = mag[np.argmin(np.abs(freqs - f0))]
-    harmonics = []
-    thd_sum = 0.0
-    for n in range(2, nharm+1):
-        target = n * f0
-        idx = np.argmin(np.abs(freqs - target))
-        f_found = freqs[idx]
-        if abs(f_found - target) / target <= tol:
-            an = mag[idx]
-            harmonics.append((n, f_found, an))
-            thd_sum += an**2
-    thd = np.sqrt(thd_sum) / a0 if a0 > 0 else 0.0
-    return thd, harmonics
-
-# --------- Layout ---------
 layout = html.Div(
-    style={"maxWidth": "1200px", "margin": "0 auto", "padding": "24px"},
+    style={"maxWidth": "1100px", "margin": "0 auto", "padding": "24px"},
     children=[
-        html.H1("Analyse FFT avancée"),
-        html.P("Fondamental, harmoniques, THD, SNR, bande passante −3 dB, centroid spectral. "
-               "Fenêtre de Hann, rééchantillonnage régulier, zero-padding."),
-        html.Div(style={"display": "grid", "gridTemplateColumns": "repeat(3,1fr)", "gap": "12px"}, children=[
-            html.Div([
-                html.Label("m"),
-                dcc.Input(id="fft-m", type="number", value=1.0, step=0.1, style={"width": "100%"}),
-                html.Label("γ"),
-                dcc.Input(id="fft-gamma", type="number", value=0.15, step=0.01, style={"width": "100%"}),
-                html.Label("k"),
-                dcc.Input(id="fft-k", type="number", value=1.0, step=0.05, style={"width": "100%"}),
-            ]),
-            html.Div([
-                html.Label("x(0)"),
-                dcc.Input(id="fft-x0", type="number", value=1.0, step=0.05, style={"width": "100%"}),
-                html.Label("v(0)"),
-                dcc.Input(id="fft-v0", type="number", value=0.0, step=0.05, style={"width": "100%"}),
-                html.Label("t_end"),
-                dcc.Input(id="fft-tend", type="number", value=30, step=1, style={"width": "100%"}),
-            ]),
-            html.Div([
-                html.Label("Taille FFT : N = 2^p"),
-                dcc.Slider(id="fft-pow", min=9, max=16, step=1, value=13,
-                           tooltip={"placement": "bottom"}),
-                html.Div(id="fft-pow-val", style={"marginTop": "6px"}),
-                html.Label("NHarm (THD)"),
-                dcc.Slider(id="fft-nharm", min=3, max=10, step=1, value=5,
-                           tooltip={"placement": "bottom"}),
-                html.Div(id="fft-nharm-val", style={"marginTop": "6px"}),
-            ]),
-        ]),
+        html.H1("Analyse spectrale avancée (FFT) du MRO"),
+        dcc.Markdown(
+            """
+Cette page calcule la transformée de Fourier de x(t) pour une configuration donnée du MRO,
+et extrait automatiquement :
 
-        html.Div(style={"marginTop": "10px"}, children=[
-            html.Button("Calculer FFT avancée", id="btn-fft-adv", n_clicks=0),
-            html.Span(id="fft-warn", style={"marginLeft": "12px", "color": "#888"}),
-        ]),
+- La **fréquence dominante** f\*  
+- Un indicateur de **facteur de qualité (Q)**  
+- Le **contraste pic / bruit**, lié à la stabilité de la résonance  
+"""
+        ),
 
         html.Hr(),
 
-        dcc.Loading(dcc.Graph(id="fft-adv-graph",
-                              config={"toImageButtonOptions": {"format": "svg"}})),
+        html.Div(
+            style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "14px"},
+            children=[
+                html.Div([
+                    html.Label("m (masse)"),
+                    dcc.Slider(id="fft-m", min=0.1, max=5, step=0.1, value=1.0,
+                               tooltip={"placement": "bottom"}),
+                    html.Div(id="fft-m-val", style={"fontSize": "0.8rem"}),
+                ]),
+                html.Div([
+                    html.Label("γ (amortissement)"),
+                    dcc.Slider(id="fft-gamma", min=0.0, max=0.5, step=0.005, value=0.05,
+                               tooltip={"placement": "bottom"}),
+                    html.Div(id="fft-gamma-val", style={"fontSize": "0.8rem"}),
+                ]),
+                html.Div([
+                    html.Label("k (tension ontogénétique)"),
+                    dcc.Slider(id="fft-k", min=0.1, max=5.0, step=0.05, value=1.5,
+                               tooltip={"placement": "bottom"}),
+                    html.Div(id="fft-k-val", style={"fontSize": "0.8rem"}),
+                ]),
+                html.Div([
+                    html.Label("x(0)"),
+                    dcc.Slider(id="fft-x0", min=-2, max=2, step=0.05, value=1.0,
+                               tooltip={"placement": "bottom"}),
+                    html.Div(id="fft-x0-val", style={"fontSize": "0.8rem"}),
+                ]),
+                html.Div([
+                    html.Label("v(0) = dx/dt(0)"),
+                    dcc.Slider(id="fft-v0", min=-2, max=2, step=0.05, value=0.0,
+                               tooltip={"placement": "bottom"}),
+                    html.Div(id="fft-v0-val", style={"fontSize": "0.8rem"}),
+                ]),
+                html.Div([
+                    html.Label("Durée t_end"),
+                    dcc.Slider(id="fft-tend", min=5, max=80, step=1, value=30,
+                               tooltip={"placement": "bottom"}),
+                    html.Div(id="fft-tend-val", style={"fontSize": "0.8rem"}),
+                ]),
+                html.Div([
+                    html.Label("Résolution FFT (N = 2^p)"),
+                    dcc.Slider(id="fft-npow", min=8, max=16, step=1, value=13,
+                               tooltip={"placement": "bottom"}),
+                    html.Div(id="fft-npow-val", style={"fontSize": "0.8rem"}),
+                ]),
+            ],
+        ),
 
-        html.H3("Indicateurs spectraux"),
-        html.Div(id="fft-metrics"),
-    ]
+        html.Hr(),
+
+        html.Div([
+            html.H3("Spectre |FFT(x)|"),
+            dcc.Loading(
+                dcc.Graph(
+                    id="fft-graph",
+                    config={"toImageButtonOptions": {"format": "svg"}},
+                )
+            ),
+        ]),
+
+        html.Div(
+            id="fft-metrics",
+            style={
+                "marginTop": "16px",
+                "padding": "12px",
+                "border": "1px solid #eee",
+                "borderRadius": "8px",
+                "background": "#fafafa",
+                "fontSize": "0.9rem",
+            },
+        ),
+    ],
 )
 
-# --------- Callbacks ---------
-@callback(Output("fft-pow-val", "children"), Input("fft-pow", "value"))
-def _pow_lbl(p): return f"N = 2^{p} = {2**int(p)}"
+# --- Petits labels sliders ---
+@callback(Output("fft-m-val", "children"), Input("fft-m", "value"))
+def _lbl_m(v): return f"m = {v:.3f}"
 
-@callback(Output("fft-nharm-val", "children"), Input("fft-nharm", "value"))
-def _nharm_lbl(v): return f"Nombre d'harmoniques inclus dans THD : {int(v)}"
+@callback(Output("fft-gamma-val", "children"), Input("fft-gamma", "value"))
+def _lbl_g(v): return f"γ = {v:.3f}"
 
+@callback(Output("fft-k-val", "children"), Input("fft-k", "value"))
+def _lbl_k(v): return f"k = {v:.3f}"
+
+@callback(Output("fft-x0-val", "children"), Input("fft-x0", "value"))
+def _lbl_x0(v): return f"x(0) = {v:.3f}"
+
+@callback(Output("fft-v0-val", "children"), Input("fft-v0", "value"))
+def _lbl_v0(v): return f"v(0) = {v:.3f}"
+
+@callback(Output("fft-tend-val", "children"), Input("fft-tend", "value"))
+def _lbl_tend(v): return f"t_end = {v:.1f}"
+
+@callback(Output("fft-npow-val", "children"), Input("fft-npow", "value"))
+def _lbl_npow(v): return f"N = 2^{int(v)} points"
+
+
+# --- Callback principal FFT ---
 @callback(
-    Output("fft-adv-graph", "figure"),
+    Output("fft-graph", "figure"),
     Output("fft-metrics", "children"),
-    Output("fft-warn", "children"),
-    Input("btn-fft-adv", "n_clicks"),
-    State("fft-m", "value"),
-    State("fft-gamma", "value"),
-    State("fft-k", "value"),
-    State("fft-x0", "value"),
-    State("fft-v0", "value"),
-    State("fft-tend", "value"),
-    State("fft-pow", "value"),
-    State("fft-nharm", "value"),
-    prevent_initial_call=True
+    Input("fft-m", "value"),
+    Input("fft-gamma", "value"),
+    Input("fft-k", "value"),
+    Input("fft-x0", "value"),
+    Input("fft-v0", "value"),
+    Input("fft-tend", "value"),
+    Input("fft-npow", "value"),
 )
-def _fft_advanced(n, m, gamma, k, x0, v0, tend, p, nharm):
-    # Simulation
-    t, x, v = simulate_mro(m=float(m), gamma=float(gamma), k=float(k),
-                           x0=float(x0), v0=float(v0), t_end=float(tend))
+def _fft_analysis(m, gamma, k, x0, v0, t_end, npow):
+    # Simule x(t)
+    t, x = simulate_mro(m, gamma, k, x0, v0, t_end)
 
-    # N = 2^p (zero-padding si N > len)
-    N = int(2**int(p))
-    t_uniform = np.linspace(t[0], t[-1], N)
+    # Taille FFT
+    n = int(2 ** int(npow))
+    if n < 16:
+        n = 16
+
+    # Échantillonnage uniforme
+    t_uniform = np.linspace(t[0], t[-1], n)
     x_uniform = np.interp(t_uniform, t, x)
-
-    # Fenêtre Hann
-    w = window_hann(N)
-    xw = x_uniform * w
+    dt = (t_uniform[-1] - t_uniform[0]) / (n - 1 + 1e-12)
 
     # FFT
-    dt_s = (t_uniform[-1] - t_uniform[0]) / (N - 1 + 1e-12)
-    X = np.fft.rfft(xw)
-    freqs = np.fft.rfftfreq(N, d=dt_s)
+    X = np.fft.rfft(x_uniform)
+    freqs = np.fft.rfftfreq(n, d=dt)
     mag = np.abs(X)
 
-    # Pic fondamental (hors DC)
+    # Éviter le pic DC pour la recherche
     if len(mag) > 1:
-        idx_sorted = np.argsort(mag)[::-1]
-        idx_sorted = [i for i in idx_sorted if i > 0]
-        peak_idx = idx_sorted[0] if idx_sorted else None
+        idx_peak = int(np.argmax(mag[1:])) + 1
+        f_peak = float(freqs[idx_peak])
+        a_peak = float(mag[idx_peak])
     else:
-        peak_idx = None
+        f_peak, a_peak = 0.0, 0.0
 
-    f0, a0, f_left, f_right, bw, centroid = spectral_metrics(freqs, mag, peak_idx)
-
-    # THD
-    thd, harmonics = compute_thd(freqs, mag, f0=f0, nharm=int(nharm))
-
-    # SNR simple
-    if peak_idx is not None:
-        noise = np.mean(np.delete(mag, peak_idx))
-        snr = (a0 / (noise + 1e-12)) if noise > 0 else float("inf")
+    # Facteur de qualité (approx) : Q = f* / Δf (fenêtre autour du pic)
+    # Approche simple : largeur où mag > a_peak/2
+    if a_peak > 0:
+        half = a_peak / 2.0
+        above = mag >= half
+        indices = np.where(above)[0]
+        if len(indices) > 1:
+            f_min = freqs[indices[0]]
+            f_max = freqs[indices[-1]]
+            bw = max(f_max - f_min, 1e-12)
+            Q = float(f_peak / bw) if bw > 0 else float("inf")
+        else:
+            Q = float("inf")
     else:
-        snr = 0.0
+        Q = 0.0
 
-    # Graph
+    # Contraste pic / "bruit" (médiane)
+    if len(mag) > 4:
+        bg = float(np.median(mag[2:]))
+        contrast = float(a_peak / (bg + 1e-12)) if bg > 0 else float("inf")
+    else:
+        contrast = 0.0
+
+    # Figure
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=freqs, y=mag, mode="lines", name="|FFT(x)|"))
-    if peak_idx is not None:
-        fig.add_vline(x=f0, line_dash="dash",
-                      annotation_text=f"f0 ≈ {f0:.3g}", annotation_position="top")
-    peaks = find_peaks_simple(mag, max_peaks=5)
-    for i, pidx in enumerate(peaks):
-        fpi, api = freqs[pidx], mag[pidx]
-        fig.add_annotation(x=fpi, y=api, text=f"p{i+1}", showarrow=True, arrowhead=2)
-
     fig.update_layout(
-        title="Spectre |FFT(x)| (fenêtre Hann, rééchantillonnage régulier, zero-padding)",
-        xaxis_title="Fréquence (a.u.)",
+        xaxis_title="Fréquence (u.a.)",
         yaxis_title="Amplitude spectrale",
-        margin=dict(l=0, r=0, t=50, b=0)
+        title="Spectre de x(t)",
     )
+    if a_peak > 0:
+        fig.add_vline(
+            x=f_peak,
+            line_dash="dash",
+            annotation_text=f"f* ≈ {f_peak:.4f}",
+            annotation_position="top",
+        )
 
-    harm_txt = ", ".join([f"{n}f0 @ {ff:.3g}" for (n, ff, an) in harmonics]) if harmonics else "—"
-    warn = f"Δt = {dt_s:.3g}s ; N = {N} ; f0≈{f0:.4g} ; THD sur {int(nharm)} harm."
+    # Texte métriques
+    regime = []
+    if Q > 50 and contrast > 20:
+        regime.append("Résonance fortement structurée, pic stable (Q élevé).")
+    elif Q > 10:
+        regime.append("Résonance nette avec amortissement modéré.")
+    else:
+        regime.append("Spectre diffus, dissipation forte ou excitation peu sélective.")
 
-    metrics = html.Ul([
-        html.Li(f"Fondamental f0 ≈ {f0:.6g} (amplitude {a0:.6g})"),
-        html.Li(f"Bande passante −3 dB: [{f_left:.6g}, {f_right:.6g}] → BW ≈ {bw:.6g}"),
-        html.Li(f"Centroid spectral ≈ {centroid:.6g}"),
-        html.Li(f"THD ≈ {thd:.6g} (harmoniques: {harm_txt})"),
-        html.Li(f"SNR ≈ {snr:.6g} (estimateur simple)"),
+    if gamma < 1e-3:
+        regime.append("γ très faible : régime quasi-conservatif (peu réaliste biologiquement).")
+    elif 1e-3 <= gamma <= 0.1:
+        regime.append("γ dans une zone compatible avec une dissipation constructive.")
+    else:
+        regime.append("γ élevé : extinction rapide, mémoire oscillatoire courte.")
+
+    metrics = html.Div([
+        html.Strong(f"Fréquence dominante estimée f* ≈ {f_peak:.6f}"),
+        html.Br(),
+        html.Span(f"Facteur de qualité approximatif Q ≈ {Q:.2f}"),
+        html.Br(),
+        html.Span(f"Contraste pic / fond ≈ {contrast:.2f}"),
+        html.Br(),
+        html.Br(),
+        html.Div("Interprétation :"),
+        html.Ul([html.Li(m) for m in regime]),
     ])
 
-    return fig, metrics, warn
+    return fig, metrics
