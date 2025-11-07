@@ -69,6 +69,66 @@ app = dash.Dash(
 )
 server = app.server
 
+app.index_string = """
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Dashboard MRO — Modèle de Résonance Ontogénétique</title>
+
+        <!-- SEO et référencement -->
+        <meta name="description" content="Modèle de Résonance Ontogénétique (MRO) — simulateur scientifique et visuel interactif explorant la dissipation constructive et la mémoire dynamique.">
+        <meta name="author" content="Jules Henissart-Miquel">
+        <meta name="keywords" content="MRO, résonance ontogénétique, dissipation constructive, système dynamique, attracteur, plasticité, ontogenèse, éphévérisme, neuro-esthétique">
+        <meta name="robots" content="index, follow">
+
+        <!-- Open Graph pour les réseaux -->
+        <meta property="og:title" content="Dashboard MRO — Modèle de Résonance Ontogénétique">
+        <meta property="og:type" content="website">
+        <meta property="og:url" content="https://epheverisme.art">
+        <meta property="og:image" content="https://epheverisme.art/assets/logo.png">
+        <meta property="og:description" content="Exploration interactive des équations du MRO et de la dissipation constructive.">
+
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:title" content="Dashboard MRO">
+        <meta name="twitter:description" content="Exploration scientifique et esthétique du Modèle de Résonance Ontogénétique.">
+
+        <!-- Données structurées JSON-LD -->
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "Dataset",
+          "name": "Modèle de Résonance Ontogénétique (MRO)",
+          "description": "Simulateur scientifique du MRO développé par Jules Henissart-Miquel, explorant la dissipation constructive et la plasticité ontogénétique.",
+          "author": {
+            "@type": "Person",
+            "name": "Jules Henissart-Miquel",
+            "url": "https://epheverisme.art/jules",
+            "identifier": "https://orcid.org/0009-0007-1822-5741"
+          },
+          "license": "https://opensource.org/licenses/MIT",
+          "url": "https://epheverisme.art",
+          "citation": "10.22541/au.176175046.68446609/v1"
+        }
+        </script>
+
+        {%metas%}
+        {%favicon%}
+        {%css%}
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+"""
+
+
 intro_md = """
 # Modèle de Résonance Ontogénétique (MRO)
 
