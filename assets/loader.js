@@ -14,7 +14,7 @@
     });
 
     // Fonction pour masquer le loader avec un petit fondu
-    function hideLoader(delay = 1000) {
+    function hideLoader(delay = 500) {
         const loader = document.getElementById('loader-overlay');
         if (!loader) return;
         setTimeout(() => {
@@ -33,6 +33,6 @@
         setTimeout(() => {
             const loader = document.getElementById('loader-overlay');
             if (loader) hideLoader(0);
-        }, 5000);
+        }, 1000);
     });
 })();
