@@ -376,6 +376,20 @@ def show_v0(v):
 def show_tend(v):
     return f"t_end = {v:.0f}"
 
+# ===========================
+#   Callbacks : équations
+# ===========================
+
+@callback(
+    Output("equation-display", "children"),
+    Input("m", "value"),
+    Input("gamma", "value"),
+    Input("k", "value"),
+)
+def update_equation(m, gamma, k):
+    if m is None or gamma is None or k is None:
+        raise PreventUpdate
+    return f"Équation : {m:.2f}·d²x/dt² + {gamma:.2f}·dx/dt + {k:.2f}·x = 0"
 
 # ===========================
 #   Callbacks : figures
@@ -390,10 +404,13 @@ def show_tend(v):
     Input("x0", "value"),
     Input("v0", "value"),
     Input("tend", "value"),
+    State("ts-annotations", "data"),
+    State("ts-shapes", "data"),
 )
-def update_core_plots(m, gamma, k, x0, v0, tend):
+def update_core_plots(m, gamma, k, x0, v0, tend, annotations, shapes):
     t, x, v = simulate_mro(m=m, gamma=gamma, k=k, x0=x0, v0=v0, t_end=tend)
 
+    # --- Série temporelle ---
     fig_ts = go.Figure()
     fig_ts.add_trace(go.Scatter(x=t, y=x, mode="lines", name="x(t)"))
     fig_ts.update_layout(
@@ -402,6 +419,25 @@ def update_core_plots(m, gamma, k, x0, v0, tend):
         title="x(t)",
     )
 
+    # Annotations texte (directement sur le graphe)
+    if annotations:
+        for ann in annotations:
+            fig_ts.add_annotation(
+                x=ann["x"],
+                y=ann["y"],
+                text=ann["label"],
+                showarrow=True,
+                arrowhead=2,
+                ax=0,
+                ay=-25,
+                font={"size": 10},
+            )
+
+    # Formes dessinées (shapes)
+    if shapes:
+        fig_ts.update_layout(shapes=shapes)
+
+    # --- Espace des phases ---
     fig_ph = go.Figure()
     fig_ph.add_trace(go.Scatter(x=x, y=v, mode="lines", name="Trajectoire"))
     fig_ph.update_layout(
@@ -411,6 +447,83 @@ def update_core_plots(m, gamma, k, x0, v0, tend):
     )
 
     return fig_ts, fig_ph
+
+
+@callback(
+    Output("ts-annotations", "data"),
+    Output("annot-list", "children"),
+    Input("time-series", "clickData"),
+    State("annot-label", "value"),
+    State("ts-annotations", "data"),
+    prevent_initial_call=True,
+)
+def add_annotation(clickData, label, data):
+    # Pas de texte ou pas de clic => on ne fait rien
+    if not clickData or not label:
+        raise PreventUpdate
+
+    data = data or []
+
+    point = clickData["points"][0]
+    x = point.get("x")
+    y = point.get("y")
+    if x is None or y is None:
+        raise PreventUpdate
+
+    # Ajoute l'annotation
+    data.append({"x": float(x), "y": float(y), "label": label})
+
+    # Liste lisible sous le graphe
+    items = [
+        html.Li(f"{i+1}. t={ann['x']:.3f}, x={ann['y']:.3f} — {ann['label']}")
+        for i, ann in enumerate(data)
+    ]
+
+    return data, items
+
+@callback(
+    Output("ts-shapes", "data"),
+    Input("time-series", "relayoutData"),
+    State("ts-shapes", "data"),
+    prevent_initial_call=True,
+)
+def sync_drawn_shapes(relayoutData, current_shapes):
+    if not relayoutData:
+        raise PreventUpdate
+
+    # Cas 1 : Plotly envoie tout le tableau de shapes
+    if "shapes" in relayoutData:
+        return relayoutData["shapes"]
+
+    # Cas 2 : maj partielle type "shapes[0].x0", "shapes[1].path", etc.
+    # On reconstruit à partir de l'état actuel
+    shapes = list(current_shapes or [])
+
+    # Ajout / modif individuelle
+    # Exemple: {'shapes[0].x0': 1.2, 'shapes[0].x1': 2.3, ...}
+    edited = {}
+    for key, val in relayoutData.items():
+        if key.startswith("shapes["):
+            idx = int(key.split("[")[1].split("]")[0])
+            prop = key.split(".", 1)[1] if "." in key else None
+            if idx not in edited:
+                edited[idx] = {}
+            if prop:
+                edited[idx][prop] = val
+
+    for idx, updates in edited.items():
+        # Étend la liste si besoin
+        while len(shapes) <= idx:
+            shapes.append({})
+        shapes[idx].update(updates)
+
+    # Cas 3 : effacement via eraseshape -> relayoutData contient des clefs vides
+    # Si Plotly envoie 'shapes[2]': null, on peut filtrer:
+    shapes = [s for s in shapes if s]  # nettoie les shapes vides
+
+    return shapes or []
+
+
 
 
 @callback(

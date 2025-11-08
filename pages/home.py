@@ -4,7 +4,7 @@ from dash import dcc, html
 dash.register_page(
     __name__,
     path="/",
-    title="MRO • Laboratoire Éphévériste",
+    title="MRO • Laboratoire Éphévérisme",
     name="Accueil"
 )
 
@@ -22,16 +22,42 @@ Cette interface permet d’explorer le MRO à travers :
 layout = html.Div(
     style={"maxWidth": "1200px", "margin": "0 auto", "padding": "24px"},
     children=[
-        # Pour les snapshots via l'URL (callbacks dans app.py)
+        # Pour snapshots via l'URL (utilisé par app.py)
         dcc.Location(id="mro-url", refresh=False),
 
         # --- Intro ---
         dcc.Markdown(intro_md),
 
-        # Petit hint
+        # Hint
         html.Div(
             "Survolez les icônes ⓘ pour une explication des paramètres.",
-            style={"fontSize": "0.85rem", "color": "#6b7280", "marginTop": "4px", "marginBottom": "12px"},
+            style={
+                "fontSize": "0.85rem",
+                "color": "#6b7280",
+                "marginTop": "4px",
+                "marginBottom": "16px",
+            },
+        ),
+
+        # --- Équation synchronisée ---
+        html.Div(
+            [
+                html.Div("Équation instantanée", style={"fontWeight": 600}),
+                html.Div(
+                    id="equation-display",
+                    style={
+                        "marginTop": "4px",
+                        "padding": "8px 10px",
+                        "borderRadius": "6px",
+                        "backgroundColor": "#f9fafb",
+                        "border": "1px solid #e5e7eb",
+                        "fontFamily": "monospace",
+                        "fontSize": "0.9rem",
+                        "color": "#111827",
+                    },
+                ),
+            ],
+            style={"marginBottom": "18px"},
         ),
 
         # --- Sliders principaux ---
@@ -40,7 +66,6 @@ layout = html.Div(
                 "display": "grid",
                 "gridTemplateColumns": "1fr 1fr",
                 "gap": "16px",
-                "marginTop": "8px",
             },
             children=[
                 html.Div([
@@ -149,16 +174,67 @@ layout = html.Div(
 
         html.Hr(),
 
-        # --- x(t) ---
+        # --- x(t) + annotations & dessin ---
         html.Div([
             html.H3("Série temporelle x(t)"),
+            html.Div(
+                "Saisissez un texte, cliquez sur la courbe pour annoter, ou utilisez les outils de dessin (ligne, forme, crayon) dans la barre Plotly.",
+                style={"fontSize": "0.8rem", "color": "#6b7280", "marginBottom": "6px"},
+            ),
+
+            # Champ texte annotation
+            html.Div(
+                style={
+                    "display": "flex",
+                    "gap": "8px",
+                    "alignItems": "center",
+                    "marginBottom": "8px",
+                    "flexWrap": "wrap",
+                },
+                children=[
+                    dcc.Input(
+                        id="annot-label",
+                        type="text",
+                        placeholder="Texte de l’annotation",
+                        style={
+                            "width": "240px",
+                            "padding": "4px 6px",
+                            "fontSize": "0.85rem",
+                        },
+                    ),
+                    html.Div(
+                        "Puis cliquez sur un point de la courbe x(t).",
+                        style={"fontSize": "0.8rem", "color": "#6b7280"},
+                    ),
+                ],
+            ),
+
+            # Stores pour annotations et dessins
+            dcc.Store(id="ts-annotations", data=[]),
+            dcc.Store(id="ts-shapes", data=[]),
+
+            # Liste des annotations textuelles
+            html.Ul(id="annot-list", style={"fontSize": "0.8rem", "color": "#374151"}),
+
+            # Graph avec outils de dessin activés
             dcc.Loading(
                 dcc.Graph(
                     id="time-series",
-                    config={"toImageButtonOptions": {"format": "svg"}},
+                    config={
+                        "toImageButtonOptions": {"format": "svg"},
+                        "modeBarButtonsToAdd": [
+                            "drawline",
+                            "drawopenpath",
+                            "drawrect",
+                            "drawcircle",
+                            "eraseshape",
+                        ],
+                        "displaylogo": False,
+                    },
                 )
             ),
         ]),
+
 
         html.Div(style={"height": "16px"}),
 
@@ -312,7 +388,6 @@ layout = html.Div(
 
         html.Hr(),
 
-        # --- Notes ---
         dcc.Markdown(
             """
 ### Notes
