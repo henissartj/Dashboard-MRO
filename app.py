@@ -448,6 +448,7 @@ def update_core_plots(m, gamma, k, x0, v0, tend, annotations, shapes):
 
     return fig_ts, fig_ph
 
+# Annotations
 
 @callback(
     Output("ts-annotations", "data"),
@@ -480,6 +481,8 @@ def add_annotation(clickData, label, data):
     ]
 
     return data, items
+
+# Callback des dessins
 
 @callback(
     Output("ts-shapes", "data"),
