@@ -2,6 +2,7 @@ import os
 import io
 import zipfile
 import datetime as dt
+import json
 from urllib.parse import urlencode, parse_qs
 from flask import request, Response
 
@@ -468,17 +469,24 @@ def update_equation(m, gamma, k):
 @callback(
     Output("time-series", "figure"),
     Output("phase-space", "figure"),
+    Output("energy-graph", "figure"),
+    Output("acc-graph", "figure"),
     Input("m", "value"),
     Input("gamma", "value"),
     Input("k", "value"),
     Input("x0", "value"),
     Input("v0", "value"),
     Input("tend", "value"),
+    Input("opts", "value"),
     State("ts-annotations", "data"),
     State("ts-shapes", "data"),
 )
-def update_core_plots(m, gamma, k, x0, v0, tend, annotations, shapes):
+def update_core_plots(m, gamma, k, x0, v0, tend, opts, annotations, shapes):
     t, x, v = simulate_mro(m=m, gamma=gamma, k=k, x0=x0, v0=v0, t_end=tend)
+    a = -(gamma / m) * v - (k / m) * x
+    ek = 0.5 * m * (v ** 2)
+    ep = 0.5 * k * (x ** 2)
+    et = ek + ep
 
     # --- Série temporelle ---
     fig_ts = go.Figure()
@@ -515,8 +523,30 @@ def update_core_plots(m, gamma, k, x0, v0, tend, annotations, shapes):
         yaxis_title="dx/dt",
         title="Espace des phases",
     )
+    fig_e = go.Figure()
+    fig_e.add_trace(go.Scatter(x=t, y=ek, mode="lines", name="E_kin"))
+    fig_e.add_trace(go.Scatter(x=t, y=ep, mode="lines", name="E_pot"))
+    fig_e.add_trace(go.Scatter(x=t, y=et, mode="lines", name="E_tot"))
+    fig_e.update_layout(
+        xaxis_title="Temps",
+        yaxis_title="Énergie",
+        title="Énergie du système",
+    )
 
-    return fig_ts, fig_ph
+    fig_a = go.Figure()
+    fig_a.add_trace(go.Scatter(x=t, y=a, mode="lines", name="a(t)"))
+    fig_a.update_layout(
+        xaxis_title="Temps",
+        yaxis_title="Accélération",
+        title="a(t)",
+    )
+
+    if opts and ("grid" in opts):
+        for fig in (fig_ts, fig_ph, fig_e, fig_a):
+            fig.update_xaxes(showgrid=True)
+            fig.update_yaxes(showgrid=True)
+
+    return fig_ts, fig_ph, fig_e, fig_a
 
 # Annotations
 
@@ -622,6 +652,10 @@ def _build_core_figs(
     heat_kstep,
 ):
     t, x, v = simulate_mro(m=m, gamma=gamma, k=k, x0=x0, v0=v0, t_end=tend)
+    a = -(gamma / m) * v - (k / m) * x
+    ek = 0.5 * m * (v ** 2)
+    ep = 0.5 * k * (x ** 2)
+    et = ek + ep
 
     fig_ts = go.Figure()
     fig_ts.add_trace(go.Scatter(x=t, y=x, mode="lines", name="x(t)"))
@@ -637,6 +671,24 @@ def _build_core_figs(
         xaxis_title="x",
         yaxis_title="dx/dt",
         title="Espace des phases",
+    )
+
+    fig_e = go.Figure()
+    fig_e.add_trace(go.Scatter(x=t, y=ek, mode="lines", name="E_kin"))
+    fig_e.add_trace(go.Scatter(x=t, y=ep, mode="lines", name="E_pot"))
+    fig_e.add_trace(go.Scatter(x=t, y=et, mode="lines", name="E_tot"))
+    fig_e.update_layout(
+        xaxis_title="Temps",
+        yaxis_title="Énergie",
+        title="Énergie du système",
+    )
+
+    fig_a = go.Figure()
+    fig_a.add_trace(go.Scatter(x=t, y=a, mode="lines", name="a(t)"))
+    fig_a.update_layout(
+        xaxis_title="Temps",
+        yaxis_title="Accélération",
+        title="a(t)",
     )
 
     gammas = np.arange(float(heat_gmin), float(heat_gmax) + 1e-9, float(heat_gstep))
@@ -683,6 +735,8 @@ def _build_core_figs(
     return {
         "time_series": fig_ts,
         "phase_space": fig_ph,
+        "energy": fig_e,
+        "acc": fig_a,
         "heatmap": fig_heat,
         "multi_series": fig_multi,
     }
@@ -778,6 +832,8 @@ def export_zip(
         ts = dt.datetime.now().strftime("%Y%m%d_%H%M")
         _add_png_and_svg_to_zip(zf, figs["time_series"], f"time_series_{ts}")
         _add_png_and_svg_to_zip(zf, figs["phase_space"], f"phase_space_{ts}")
+        _add_png_and_svg_to_zip(zf, figs["energy"], f"energy_{ts}")
+        _add_png_and_svg_to_zip(zf, figs["acc"], f"acc_{ts}")
         _add_png_and_svg_to_zip(zf, figs["heatmap"], f"heatmap_{ts}")
         _add_png_and_svg_to_zip(zf, figs["multi_series"], f"multi_series_{ts}")
         zf.writestr(
@@ -793,6 +849,73 @@ def export_zip(
     buf.seek(0)
     filename = f"mro_exports_{dt.datetime.now().strftime('%Y%m%d_%H%M')}.zip"
     return dcc.send_bytes(buf.getvalue(), filename)
+
+
+# ===========================
+#   Export CSV / JSON
+# ===========================
+
+@callback(
+    Output("download-csv", "data"),
+    Input("btn-export-csv", "n_clicks"),
+    State("m", "value"),
+    State("gamma", "value"),
+    State("k", "value"),
+    State("x0", "value"),
+    State("v0", "value"),
+    State("tend", "value"),
+    prevent_initial_call=True,
+)
+def export_csv(n, m, gamma, k, x0, v0, tend):
+    if not n:
+        return dash.no_update
+    t, x, v = simulate_mro(m=m, gamma=gamma, k=k, x0=x0, v0=v0, t_end=tend)
+    a = -(gamma / m) * v - (k / m) * x
+    ek = 0.5 * m * (v ** 2)
+    ep = 0.5 * k * (x ** 2)
+    et = ek + ep
+    sio = io.StringIO()
+    sio.write("t,x,v,a,E_kin,E_pot,E_tot\n")
+    for i in range(len(t)):
+        sio.write(f"{t[i]},{x[i]},{v[i]},{a[i]},{ek[i]},{ep[i]},{et[i]}\n")
+    sio.seek(0)
+    fname = f"mro_data_{dt.datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+    return dcc.send_string(sio.getvalue(), filename=fname)
+
+
+@callback(
+    Output("download-json", "data"),
+    Input("btn-export-json", "n_clicks"),
+    State("m", "value"),
+    State("gamma", "value"),
+    State("k", "value"),
+    State("x0", "value"),
+    State("v0", "value"),
+    State("tend", "value"),
+    prevent_initial_call=True,
+)
+def export_json(n, m, gamma, k, x0, v0, tend):
+    if not n:
+        return dash.no_update
+    t, x, v = simulate_mro(m=m, gamma=gamma, k=k, x0=x0, v0=v0, t_end=tend)
+    a = -(gamma / m) * v - (k / m) * x
+    ek = 0.5 * m * (v ** 2)
+    ep = 0.5 * k * (x ** 2)
+    et = ek + ep
+    payload = {
+        "params": {"m": m, "gamma": gamma, "k": k, "x0": x0, "v0": v0, "t_end": tend},
+        "series": {
+            "t": list(map(float, t)),
+            "x": list(map(float, x)),
+            "v": list(map(float, v)),
+            "a": list(map(float, a)),
+            "E_kin": list(map(float, ek)),
+            "E_pot": list(map(float, ep)),
+            "E_tot": list(map(float, et)),
+        },
+    }
+    fname = f"mro_data_{dt.datetime.now().strftime('%Y%m%d_%H%M')}.json"
+    return dcc.send_string(json.dumps(payload), filename=fname)
 
 
 # ===========================

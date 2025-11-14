@@ -251,6 +251,47 @@ layout = html.Div(
 
         html.Div(style={"height": "16px"}),
 
+        # --- Options UI ---
+        html.Div([
+            html.H3("Options d’affichage"),
+            dcc.Checklist(
+                id="opts",
+                options=[
+                    {"label": "Afficher la grille", "value": "grid"},
+                ],
+                value=[],
+                inline=True,
+            ),
+        ]),
+
+        html.Div(style={"height": "16px"}),
+
+        # --- Énergie ---
+        html.Div([
+            html.H3("Énergie (E_kin, E_pot, E_tot)"),
+            dcc.Loading(
+                dcc.Graph(
+                    id="energy-graph",
+                    config={"toImageButtonOptions": {"format": "svg"}},
+                )
+            ),
+        ]),
+
+        html.Div(style={"height": "16px"}),
+
+        # --- Accélération ---
+        html.Div([
+            html.H3("Accélération a(t)"),
+            dcc.Loading(
+                dcc.Graph(
+                    id="acc-graph",
+                    config={"toImageButtonOptions": {"format": "svg"}},
+                )
+            ),
+        ]),
+
+        html.Div(style={"height": "16px"}),
+
         # --- Multi-séries ---
         html.Div([
             html.H3("Comparaison multi-paramètres"),
@@ -327,6 +368,30 @@ layout = html.Div(
                     },
                 ),
                 html.Button(
+                    "Exporter données (CSV)",
+                    id="btn-export-csv",
+                    n_clicks=0,
+                    style={
+                        "padding": "6px 10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #ccc",
+                        "backgroundColor": "#ffffff",
+                        "cursor": "pointer",
+                    },
+                ),
+                html.Button(
+                    "Exporter données (JSON)",
+                    id="btn-export-json",
+                    n_clicks=0,
+                    style={
+                        "padding": "6px 10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #ccc",
+                        "backgroundColor": "#ffffff",
+                        "cursor": "pointer",
+                    },
+                ),
+                html.Button(
                     "Télécharger ZIP (PNG+SVG HD)",
                     id="btn-export-zip",
                     n_clicks=0,
@@ -340,6 +405,8 @@ layout = html.Div(
                 ),
                 dcc.Store(id="export-done"),
                 dcc.Download(id="download-zip"),
+                dcc.Download(id="download-csv"),
+                dcc.Download(id="download-json"),
             ],
         ),
 
