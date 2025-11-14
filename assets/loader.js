@@ -28,7 +28,7 @@
         hideLoader(1000); // 1s après rendu pour la fluidité
     });
 
-    // Sécurité : fallback après 5s si dash-rendered ne se déclenche pas
+    // Sécurité : fallback rapide après ~1s si dash-rendered ne se déclenche pas
     window.addEventListener('load', () => {
         setTimeout(() => {
             const loader = document.getElementById('loader-overlay');

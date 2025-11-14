@@ -3,6 +3,7 @@ import io
 import zipfile
 import datetime as dt
 from urllib.parse import urlencode, parse_qs
+from flask import request, Response
 
 import numpy as np
 from scipy.integrate import solve_ivp
@@ -123,6 +124,61 @@ app = dash.Dash(
 
 server = app.server
 
+# ===========================
+#   Static SEO files at root
+# ===========================
+
+@server.route("/robots.txt")
+def _robots_txt():
+    # Serve the robots file from assets
+    p = os.path.join(os.path.dirname(__file__), "assets", "robots.txt")
+    if not os.path.exists(p):
+        return "User-agent: *\nDisallow:", 200, {"Content-Type": "text/plain"}
+    with open(p, "rb") as f:
+        content = f.read()
+    return content, 200, {"Content-Type": "text/plain"}
+
+
+@server.route("/sitemap.xml")
+def _sitemap_xml():
+    try:
+        base = request.url_root.rstrip("/")
+        # Collect all registered Dash pages
+        paths = sorted({page["path"] for page in dash.page_registry.values()})
+        # Ensure root is present
+        if "/" not in paths:
+            paths = ["/"] + paths
+        today = dt.date.today().isoformat()
+        urls = [
+            f"  <url>\n    <loc>{base}{path}</loc>\n    <lastmod>{today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>{ '1.0' if path == '/' else '0.6' }</priority>\n  </url>"
+            for path in paths
+        ]
+        xml = (
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
+            + "\n".join(urls)
+            + "\n</urlset>\n"
+        )
+        return Response(xml, mimetype="application/xml")
+    except Exception:
+        # Fallback to static file if available
+        p = os.path.join(os.path.dirname(__file__), "assets", "sitemap.xml")
+        if os.path.exists(p):
+            with open(p, "rb") as f:
+                content = f.read()
+            return content, 200, {"Content-Type": "application/xml"}
+        return "", 404, {"Content-Type": "application/xml"}
+
+
+@server.route("/favicon.ico")
+def _favicon():
+    p = os.path.join(os.path.dirname(__file__), "assets", "favicon.ico")
+    if not os.path.exists(p):
+        return "", 404, {"Content-Type": "image/x-icon"}
+    with open(p, "rb") as f:
+        content = f.read()
+    return content, 200, {"Content-Type": "image/x-icon"}
+
 
 # ===========================
 #   index_string (SEO)
@@ -130,7 +186,7 @@ server = app.server
 
 app.index_string = """
 <!DOCTYPE html>
-<html>
+<html lang="fr">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -141,6 +197,9 @@ app.index_string = """
         <meta name="author" content="Jules Henissart-Miquel">
         <meta name="keywords" content="MRO, résonance ontogénétique, dissipation constructive, système dynamique, attracteur, plasticité, ontogenèse, éphévérisme, neuro-esthétique">
         <meta name="robots" content="index, follow">
+
+        <!-- Canonical (set by script below) -->
+        <link id="canonical-link" rel="canonical" href="https://epheverisme.art/">
 
         <!-- Open Graph -->
         <meta property="og:title" content="Dashboard MRO — Modèle de Résonance Ontogénétique">
@@ -176,6 +235,17 @@ app.index_string = """
         {%metas%}
         {%favicon%}
         {%css%}
+
+        <!-- Canonical updater -->
+        <script>
+        (function(){
+          try {
+            var canon = document.getElementById('canonical-link');
+            var href = window.location.origin + (window.location.pathname || '/');
+            if (canon && href) canon.setAttribute('href', href);
+          } catch (e) {}
+        })();
+        </script>
     </head>
     <body>
         {%app_entry%}
@@ -185,7 +255,7 @@ app.index_string = """
             {%renderer%}
         </footer>
     </body>
-</html>
+    </html>
 """
 
 
@@ -529,45 +599,7 @@ def sync_drawn_shapes(relayoutData, current_shapes):
 
 
 
-@callback(
-    Output("heatmap", "figure"),
-    Input("btn-heat", "n_clicks"),
-    State("g-min", "value"),
-    State("g-max", "value"),
-    State("g-step", "value"),
-    State("k-min", "value"),
-    State("k-max", "value"),
-    State("k-step", "value"),
-    State("tend", "value"),
-)
-def update_heatmap(n, gmin, gmax, gstep, kmin, kmax, kstep, tend):
-    if not n:
-        gammas = np.arange(0.0, 1.01, 0.1)
-        ks = np.arange(0.0, 3.01, 0.2)
-    else:
-        gammas = np.arange(float(gmin), float(gmax) + 1e-9, float(gstep))
-        ks = np.arange(float(kmin), float(kmax) + 1e-9, float(kstep))
-
-    Z = heatmap_max_amp(
-        gammas,
-        ks,
-        m=1.0,
-        x0=1.0,
-        v0=0.0,
-        t_end=float(tend),
-        t_points=1000,
-    )
-
-    fig = px.imshow(
-        Z,
-        x=ks,
-        y=gammas,
-        aspect="auto",
-        origin="lower",
-        labels=dict(x="k", y="γ", color="max |x(t)|"),
-        title="Max |x(t)| selon (γ, k)",
-    )
-    return fig
+# (Supprimé) Callback heatmap 2D orphelin — géré dans pages/heatmap3d.py
 
 
 # ===========================
@@ -778,8 +810,19 @@ def export_zip(
     prevent_initial_call=True,
 )
 def add_preset(n, m, g, k, data):
+    if not n:
+        raise PreventUpdate
+
     data = data or []
-    data.append({"m": float(m), "gamma": float(g), "k": float(k)})
+    try:
+        m = float(m)
+        g = float(g)
+        k = float(k)
+    except Exception:
+        # Ignore invalid inputs
+        raise PreventUpdate
+
+    data.append({"m": m, "gamma": g, "k": k})
 
     chips = [
         html.Span(
@@ -807,24 +850,35 @@ def add_preset(n, m, g, k, data):
 )
 def update_multi(data, x0, v0, tend):
     fig = go.Figure()
-    if data:
-        for i, d in enumerate(data):
-            t, x, v = simulate_mro(
-                m=d["m"],
-                gamma=d["gamma"],
-                k=d["k"],
-                x0=x0,
-                v0=v0,
-                t_end=tend,
-            )
-            fig.add_trace(
-                go.Scatter(x=t, y=x, mode="lines", name=f"Preset {i+1}")
-            )
+    # Affiche au moins une grille vide pour UX
     fig.update_layout(
         xaxis_title="Temps",
         yaxis_title="x(t)",
         title="Comparaison de séries",
     )
+
+    if not data:
+        return fig
+
+    # Boucle sur presets
+    for i, d in enumerate(data):
+        try:
+            t, x, v = simulate_mro(
+                m=float(d.get("m", 1.0)),
+                gamma=float(d.get("gamma", 0.15)),
+                k=float(d.get("k", 1.0)),
+                x0=float(x0),
+                v0=float(v0),
+                t_end=float(tend),
+            )
+        except Exception:
+            # Si un preset est invalide, on continue
+            continue
+
+        fig.add_trace(
+            go.Scatter(x=t, y=x, mode="lines", name=f"Preset {i+1}")
+        )
+
     return fig
 
 
