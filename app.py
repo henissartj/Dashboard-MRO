@@ -91,6 +91,9 @@ app = dash.Dash(
     external_stylesheets=[
         "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
     ],
+    assets_folder=os.path.join(os.path.dirname(__file__), "assets"),
+    assets_url_path="assets",
+    serve_locally=True,
     meta_tags=[
         {"name": "viewport", "content": "width=device-width, initial-scale=1"},
         {
@@ -180,6 +183,17 @@ def _favicon():
         content = f.read()
     return content, 200, {"Content-Type": "image/x-icon"}
 
+# Static assets (explicit, fallback)
+from flask import send_from_directory
+
+@server.route('/assets/<path:filename>')
+def _assets(filename):
+    assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
+    try:
+        return send_from_directory(assets_dir, filename)
+    except Exception:
+        return "", 404
+
 
 # ===========================
 #   index_string (SEO)
@@ -258,6 +272,100 @@ app.index_string = """
     </body>
     </html>
 """
+
+# ===========================
+#   Plotly theme (scientific, lab-like)
+# ===========================
+
+pio.templates["mro_lab"] = go.layout.Template(
+    layout=go.Layout(
+        font=dict(family="system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif", size=14, color="#111827"),
+        paper_bgcolor="#f7f7f8",
+        plot_bgcolor="#ffffff",
+        xaxis=dict(gridcolor="#e5e7eb", zerolinecolor="#e5e7eb", linecolor="#9ca3af", ticks="outside"),
+        yaxis=dict(gridcolor="#e5e7eb", zerolinecolor="#e5e7eb", linecolor="#9ca3af", ticks="outside"),
+        colorway=[
+            "#0d6efd",  # primary
+            "#16a085",
+            "#8e44ad",
+            "#e67e22",
+            "#2c3e50",
+            "#d35400",
+        ],
+        legend=dict(bgcolor="#ffffff", bordercolor="#e5e7eb", borderwidth=1),
+        margin=dict(l=60, r=30, t=50, b=60),
+    )
+)
+pio.templates.default = "mro_lab"
+
+
+# ===========================
+#   Global layout with navbar/footer
+# ===========================
+
+def _navbar():
+    # Build navigation links from registered pages
+    pages = list(dash.page_registry.values())
+    # Sort by explicit order if available, else by name
+    def _order(p):
+        v = p.get("order", None)
+        try:
+            return int(v) if v is not None else 50
+        except (TypeError, ValueError):
+            return 50
+    # Stable sort by order, then by name/path for consistency
+    pages = sorted(pages, key=lambda p: ( _order(p), (p.get("name") or p.get("path") or "") ))
+
+    links = [
+        dcc.Link(
+            p.get("name", p["path"]).strip() or p["path"],
+            href=p["path"],
+            className="nav-link",
+        )
+        for p in pages
+    ]
+
+    brand = dcc.Link(
+        "Laboratoire MRO",
+        href="/",
+        className="nav-brand",
+    )
+
+    return html.Nav(
+        [
+            html.Div([brand], className="nav-left"),
+            html.Div(links, className="nav-right"),
+        ],
+        className="navbar",
+    )
+
+
+def _footer():
+    return html.Footer(
+        [
+            html.Div("© Laboratoire Éphévérisme — MRO", className="footer-text"),
+        ],
+        className="site-footer",
+    )
+
+
+app.layout = html.Div(
+    [
+        dcc.Location(id="router"),
+        _navbar(),
+        html.Main(dash.page_container, className="page-container"),
+        _footer(),
+    ],
+    className="site-wrapper",
+)
+
+
+# ===========================
+#   Dev server (local run)
+# ===========================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "8050"))
+    app.run(host="0.0.0.0", port=port, debug=True)
 
 
 # ===========================
@@ -1123,7 +1231,7 @@ app.clientside_callback(
 # ===========================
 
 if __name__ == "__main__":
-    app.run_server(
+    app.run(
         host="0.0.0.0",
         port=int(os.getenv("PORT", 8050)),
         debug=False,

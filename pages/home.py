@@ -9,14 +9,10 @@ dash.register_page(
 )
 
 intro_md = """
-# Modèle de Résonance Ontogénétique (MRO)
+# MRO — Modèle de Résonance Ontogénétique
 
-Cette interface permet d’explorer le MRO à travers :
-- **La série temporelle** de x(t)
-- **L’espace des phases** (x, dx/dt)
-- **Une heatmap** du maximum d'amplitude selon (γ, k)
-- **Des comparaisons multi-paramètres**
-- **Des exports PNG/SVG/ZIP** pour documenter vos analyses.
+Bienvenue dans le laboratoire interactif du MRO. Ajustez les paramètres,
+visualisez les dynamiques et exportez vos figures.
 """
 
 layout = html.Div(
@@ -25,19 +21,7 @@ layout = html.Div(
         # Pour snapshots via l'URL (utilisé par app.py)
         dcc.Location(id="mro-url", refresh=False),
 
-        # --- Intro ---
         dcc.Markdown(intro_md),
-
-        # Hint
-        html.Div(
-            "Survolez les icônes ⓘ pour une explication des paramètres.",
-            style={
-                "fontSize": "0.85rem",
-                "color": "#6b7280",
-                "marginTop": "4px",
-                "marginBottom": "16px",
-            },
-        ),
 
         # --- Équation synchronisée ---
         html.Div(
@@ -455,12 +439,6 @@ layout = html.Div(
 
         html.Hr(),
 
-        dcc.Markdown(
-            """
-### Notes
-- Utilisez ce laboratoire comme outil d’exploration scientifique.
-- Les exports et snapshots facilitent la documentation et le partage de vos résultats.
-            """
-        ),
+        # Fin de page
     ],
 )

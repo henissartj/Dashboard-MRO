@@ -3,12 +3,12 @@ body {
     background-color: #f2f2f2;
 }
 
-/* Overlay plein écran pendant le chargement */
+/* Overlay plein écran pendant le chargement (désactivé) */
 #loader-overlay {
     position: fixed;
     inset: 0;
     background-color: #1a2238; /* bleu nuit élégant */
-    display: flex;
+    display: none; /* Désactivé pour éviter l’écran noir */
     flex-direction: column;
     align-items: center;
     justify-content: center;
