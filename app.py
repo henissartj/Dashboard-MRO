@@ -247,20 +247,49 @@ app.index_string = """
         }
         </script>
 
+        <!-- JSON-LD Organization -->
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          "name": "Laboratoire Éphévériste",
+          "url": "https://epheverisme.art",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://epheverisme.art/assets/logo.png"
+          },
+          "sameAs": [
+            "https://orcid.org/0009-0007-1822-5741",
+            "https://github.com/henissartj/Dashboard-MRO",
+            "https://github.com/henissartj",
+            "https://www.linkedin.com/in/henissartmiqueljules/",
+            "https://scholar.google.com/citations?user=_20OPpsAAAAJ&hl=fr"
+          ]
+        }
+        </script>
+
+        <!-- JSON-LD WebSite + SearchAction -->
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          "url": "https://epheverisme.art",
+          "name": "Laboratoire Éphévériste — MRO",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://epheverisme.art/search?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        }
+        </script>
+
         {%metas%}
         {%favicon%}
         {%css%}
 
-        <!-- Canonical updater -->
-        <script>
-        (function(){
-          try {
-            var canon = document.getElementById('canonical-link');
-            var href = window.location.origin + (window.location.pathname || '/');
-            if (canon && href) canon.setAttribute('href', href);
-          } catch (e) {}
-        })();
-        </script>
+        <!-- Canonical et Breadcrumbs sont désormais gérés côté serveur via Dash -->
+
+        <!-- Suppression de l’injection client WebPage/BreadcrumbList (géré côté serveur) -->
     </head>
     <body>
         {%app_entry%}
@@ -480,6 +509,9 @@ app.layout = html.Div(
                 "margin": "0 auto",
             },
         ),
+        # Conteneurs cachés pour JSON-LD et meta dynamiques
+        html.Div(id="structured-jsonld", style={"display": "none"}),
+        html.Div(id="dynamic-meta", style={"display": "none"}),
     ],
 )
 
@@ -520,6 +552,127 @@ def highlight_active(pathname):
         s("/repository"),
         s("/credits"),
     ]
+
+
+# ===========================
+#   JSON-LD & Meta dynamiques (côté "serveur")
+# ===========================
+
+@callback(
+    Output("structured-jsonld", "children"),
+    Output("dynamic-meta", "children"),
+    Input("url", "pathname"),
+)
+def inject_structured_data(pathname):
+    # Base & canonical
+    try:
+        base = request.url_root.rstrip("/")
+    except Exception:
+        base = "https://epheverisme.art"
+    path = pathname or "/"
+    canonical = base + (path if path != "/" else "/")
+
+    # Titres / descriptions par page
+    titles = {
+        "/": "Simulations MRO",
+        "/docs": "Explications",
+        "/fft": "FFT",
+        "/heatmap3d": "Heatmap 3D",
+        "/experiences": "Tests & Expériences",
+        "/epheverisme": "Éphévérisme",
+        "/jules": "Auteur",
+        "/repository": "Code source (GitHub)",
+        "/credits": "Crédits",
+        "/search": "Recherche",
+    }
+    descs = {
+        "/": "Visualisations interactives du Modèle de Résonance Ontogénétique",
+        "/docs": "Explications du MRO et guide de lecture",
+        "/fft": "Analyse fréquentielle des signaux MRO",
+        "/heatmap3d": "Heatmap 3D des paramètres (m, γ, k)",
+        "/experiences": "Tests et expériences externes du MRO",
+        "/epheverisme": "Présentation de l’éphévérisme",
+        "/jules": "Page auteur : Jules Henissart‑Miquel",
+        "/repository": "Dépôt GitHub du projet",
+        "/credits": "Crédits et mentions",
+        "/search": "Recherche des pages du site",
+    }
+    title = titles.get(path, "Laboratoire Éphévériste — MRO")
+    desc = descs.get(path, "Explorations MRO")
+
+    # Breadcrumbs
+    segments = [seg for seg in path.split("/") if seg]
+    crumbs = [{"@type": "ListItem", "position": 1, "name": "Accueil", "item": base + "/"}]
+    acc = ""
+    labels = {
+        "docs": "Explications",
+        "fft": "FFT",
+        "heatmap3d": "Heatmap 3D",
+        "experiences": "Tests & Expériences",
+        "epheverisme": "Éphévérisme",
+        "jules": "Auteur",
+        "repository": "Code source",
+        "credits": "Crédits",
+        "search": "Recherche",
+    }
+    for i, seg in enumerate(segments):
+        acc += "/" + seg
+        crumbs.append({
+            "@type": "ListItem",
+            "position": i + 2,
+            "name": labels.get(seg, seg),
+            "item": base + acc,
+        })
+
+    # JSON-LD payload de base
+    payload = [
+        {
+            "@context": "https://schema.org",
+            "@type": "WebPage",
+            "url": canonical,
+            "name": title,
+            "description": desc,
+        },
+        {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": crumbs,
+        },
+    ]
+
+    # JSON-LD Person pour /jules
+    if path == "/jules":
+        payload.append({
+            "@context": "https://schema.org",
+            "@type": "Person",
+            "name": "Jules Henissart‑Miquel",
+            "url": base + "/jules",
+            "sameAs": [
+                "https://orcid.org/0009-0007-1822-5741",
+                "https://github.com/henissartj",
+                "https://www.linkedin.com/in/henissartmiqueljules/",
+                "https://scholar.google.com/citations?user=_20OPpsAAAAJ&hl=fr"
+            ]
+        })
+
+    # Éléments à injecter dans le DOM
+    jsonld = html.Script(json.dumps(payload), type="application/ld+json")
+    metas = [
+        html.Link(rel="canonical", href=canonical),
+        # Dash html.Meta ne supporte pas l'attribut "property" ;
+        # on encode OG via name et un script assets convertira en property dans <head>.
+        html.Meta(name="og:title", content=title),
+        html.Meta(name="og:description", content=desc),
+        html.Meta(name="og:url", content=canonical),
+        html.Meta(name="og:type", content="website"),
+        html.Meta(name="og:image", content=base + "/assets/og-image.png"),
+        # Twitter utilise déjà name=*
+        html.Meta(name="twitter:card", content="summary_large_image"),
+        html.Meta(name="twitter:title", content=title),
+        html.Meta(name="twitter:description", content=desc),
+        html.Meta(name="twitter:image", content=base + "/assets/og-image.png"),
+    ]
+    return jsonld, metas
 
 
 # ===========================
