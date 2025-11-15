@@ -27,19 +27,33 @@ L'équation différentielle (homogène) utilisée ici est l’oscillateur amorti
 - La **heatmap** (γ, k) indique où l’amplitude maximale reste forte/faible.
 - La **FFT** révèle les fréquences dominantes résiduelles.
 
-## Analogie (masse–ressort–freins)
-- \(k\) est le ressort (tension de rappel)
-- \(\gamma\) est le frein (dissipation)
-- \(m\) est l’inertie (lenteur au changement)
-
-## Conseils d’exploration
-- Jouez avec \( \gamma \) pour voir la transition oscillant → non-oscillant.
-- Comparez plusieurs réglages avec “Comparaison multi-paramètres”.
-- Observez l’effet de \(t_{\text{end}}\) sur la FFT (résolution spectrale).
+## Schémas explicatifs (statiques)
+Les deux schémas suivants illustrent le flux du modèle et la typologie des régimes.
 
 """
 
 layout = html.Div([
     dcc.Markdown(md, mathjax=True),
-], style={"maxWidth": "900px", "margin": "0 auto", "padding": "24px"})
+    html.Div(style={"height": "16px"}),
+    dcc.Markdown(r"""
+## Sans schémas — explication textuelle
 
+### Flux du modèle MRO
+- Les paramètres d’entrée (m, γ, k) définissent l’inertie, la dissipation et la tension du système.
+- L’oscillateur amorti transforme ces paramètres en une dynamique temporelle x(t).
+- On lit ensuite trois sorties complémentaires :
+  1. x(t) pour la stabilité et la mémoire dynamique,
+  2. l’espace des phases (x, dx/dt) pour la trajectoire vers l’équilibre,
+  3. la FFT pour repérer les fréquences résiduelles.
+
+### Typologie des régimes
+- Sous-amorti (γ² < 4mk) : oscillations décroissantes avant stabilisation.
+- Critique (γ² = 4mk) : retour le plus rapide sans oscillation.
+- Sur-amorti (γ² > 4mk) : retour monotone, plus lent.
+
+### Conseils de lecture
+- Commencer par x(t) pour situer la dynamique générale.
+- Regarder l’espace des phases pour comprendre la forme de la trajectoire.
+- Utiliser la FFT si vous cherchez une empreinte fréquentielle.
+""", mathjax=True),
+], style={"maxWidth": "900px", "margin": "0 auto", "padding": "24px"})

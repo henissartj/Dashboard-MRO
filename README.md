@@ -62,6 +62,36 @@ Ce tableau de bord permet de :
 
 ---
 
+## Schémas explicatifs
+
+### Schéma du modèle MRO (flux)
+
+```mermaid
+flowchart LR
+    subgraph Paramètres
+      m["m (masse)"]
+      gamma["γ (amortissement)"]
+      k["k (tension)"]
+    end
+    m --> O
+    gamma --> O
+    k --> O
+    O["Oscillateur amorti (MRO)"] --> XT["x(t)"]
+    O --> PS["Espace des phases (x, dx/dt)"]
+    O --> FFT["FFT (spectre)"]
+```
+
+### Régimes dynamiques
+
+```mermaid
+flowchart TB
+    A["Sous-amorti"] -->|γ^2 < 4 m k| B["Oscillations décroissantes"]
+    C["Critique"] -->|γ^2 = 4 m k| D["Retour le plus rapide sans oscillation"]
+    E["Sur-amorti"] -->|γ^2 > 4 m k| F["Retour lent, sans oscillation"]
+```
+
+---
+
 ## Installation (développement local)
 
 ```bash
