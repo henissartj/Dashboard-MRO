@@ -287,7 +287,7 @@ app.index_string = """
           "@context": "https://schema.org",
           "@type": "WebSite",
           "url": "https://epheverisme.art",
-          "name": "Laboratoire Éphévériste — MRO",
+          "name": "Laboratoire Éphévériste",
           "potentialAction": {
             "@type": "SearchAction",
             "target": "https://epheverisme.art/search?q={search_term_string}",
@@ -644,15 +644,53 @@ def inject_structured_data(pathname):
     payload = [
         {
             "@context": "https://schema.org",
+            "@type": "WebSite",
+            "url": base + "/",
+            "name": "Laboratoire Éphévériste — MRO",
+            "potentialAction": {
+                "@type": "SearchAction",
+                "target": base + "/search?q={search_term_string}",
+                "query-input": "required name=search_term_string",
+            },
+        },
+        {
+            "@context": "https://schema.org",
             "@type": "WebPage",
             "url": canonical,
             "name": title,
             "description": desc,
+            "isPartOf": {"@type": "WebSite", "url": base + "/"},
         },
         {
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             "itemListElement": crumbs,
+        },
+        {
+            "@context": "https://schema.org",
+            "@type": "SiteNavigationElement",
+            "name": [
+                "Simulations MRO",
+                "FFT",
+                "Explications",
+                "Heatmap 3D",
+                "Tests & Expériences",
+                "Éphévérisme",
+                "Auteur",
+                "Code source (GitHub)",
+                "Crédits"
+            ],
+            "url": [
+                base + "/",
+                base + "/fft",
+                base + "/docs",
+                base + "/heatmap3d",
+                base + "/experiences",
+                base + "/epheverisme",
+                base + "/jules",
+                base + "/repository",
+                base + "/credits"
+            ],
         },
     ]
 
