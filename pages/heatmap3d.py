@@ -52,14 +52,28 @@ layout = html.Div(
         html.Div(style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "16px"}, children=[
             html.Div(children=[
                 html.Label("m (masse)"),
-                dcc.Slider(id="hm-m", min=0.1, max=5.0, step=0.1, value=1.0,
-                           tooltip={"placement": "bottom"}),
+                dcc.Slider(
+                    id="hm-m",
+                    min=0.1,
+                    max=5.0,
+                    step=0.1,
+                    value=1.0,
+                    updatemode="mouseup",
+                    tooltip={"placement": "bottom"},
+                ),
                 html.Div(id="hm-m-val"),
             ]),
             html.Div(children=[
                 html.Label("Durée t_end"),
-                dcc.Slider(id="hm-tend", min=5, max=120, step=1, value=30,
-                           tooltip={"placement": "bottom"}),
+                dcc.Slider(
+                    id="hm-tend",
+                    min=5,
+                    max=120,
+                    step=1,
+                    value=30,
+                    updatemode="mouseup",
+                    tooltip={"placement": "bottom"},
+                ),
                 html.Div(id="hm-tend-val"),
             ]),
         ]),
