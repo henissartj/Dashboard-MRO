@@ -50,3 +50,14 @@ body {
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
 .card-title { font-weight: 600; margin-bottom: 6px; }
 .card-muted { color: var(--muted); font-size: 0.9rem; }
+
+/* Sliders Dash (rc-slider) — masquer marks/ticks pour éviter le spam numérique */
+.rc-slider-mark,
+.rc-slider-mark-text,
+.rc-slider-step,
+.rc-slider-dot {
+  display: none !important;
+}
+.rc-slider {
+  margin-bottom: 6px;
+}

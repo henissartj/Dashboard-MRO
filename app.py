@@ -148,7 +148,11 @@ def _sitemap_xml():
     try:
         base = request.url_root.rstrip("/")
         # Collect all registered Dash pages
-        paths = sorted({page["path"] for page in dash.page_registry.values()})
+        paths = sorted({
+            page["path"]
+            for page in dash.page_registry.values()
+            if page.get("path") not in {"/casino"}
+        })
         # Ensure root is present
         if "/" not in paths:
             paths = ["/"] + paths
@@ -193,6 +197,15 @@ def _assets(filename):
         return send_from_directory(assets_dir, filename)
     except Exception:
         return "", 404
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8050)
+    args = parser.parse_args()
+
+    app.run(debug=True, host="0.0.0.0", port=args.port)
 
 
 # ===========================
@@ -584,6 +597,7 @@ def inject_structured_data(pathname):
         "/repository": "Code source (GitHub)",
         "/credits": "Crédits",
         "/search": "Recherche",
+        "/pharmasim": "PharmaSim",
     }
     descs = {
         "/": "Visualisations interactives du Modèle de Résonance Ontogénétique",
@@ -596,6 +610,7 @@ def inject_structured_data(pathname):
         "/repository": "Dépôt GitHub du projet",
         "/credits": "Crédits et mentions",
         "/search": "Recherche des pages du site",
+        "/pharmasim": "Simulation PK/PD (recherche, noindex)",
     }
     title = titles.get(path, "Laboratoire Éphévériste — MRO")
     desc = descs.get(path, "Explorations MRO")
@@ -614,6 +629,7 @@ def inject_structured_data(pathname):
         "repository": "Code source",
         "credits": "Crédits",
         "search": "Recherche",
+        "pharmasim": "PharmaSim",
     }
     for i, seg in enumerate(segments):
         acc += "/" + seg
@@ -672,6 +688,10 @@ def inject_structured_data(pathname):
         html.Meta(name="twitter:description", content=desc),
         html.Meta(name="twitter:image", content=base + "/assets/og-image.png"),
     ]
+
+    # Noindex pour PharmaSim
+    if path == "/pharmasim":
+        metas.append(html.Meta(name="robots", content="noindex"))
     return jsonld, metas
 
 
@@ -848,44 +868,12 @@ def add_annotation(clickData, label, data):
 @callback(
     Output("ts-shapes", "data"),
     Input("time-series", "relayoutData"),
-    State("ts-shapes", "data"),
     prevent_initial_call=True,
 )
-def sync_drawn_shapes(relayoutData, current_shapes):
-    if not relayoutData:
-        raise PreventUpdate
-
-    # Cas 1 : Plotly envoie tout le tableau de shapes
-    if "shapes" in relayoutData:
+def sync_drawn_shapes(relayoutData):
+    if relayoutData and "shapes" in relayoutData:
         return relayoutData["shapes"]
-
-    # Cas 2 : maj partielle type "shapes[0].x0", "shapes[1].path", etc.
-    # On reconstruit à partir de l'état actuel
-    shapes = list(current_shapes or [])
-
-    # Ajout / modif individuelle
-    # Exemple: {'shapes[0].x0': 1.2, 'shapes[0].x1': 2.3, ...}
-    edited = {}
-    for key, val in relayoutData.items():
-        if key.startswith("shapes["):
-            idx = int(key.split("[")[1].split("]")[0])
-            prop = key.split(".", 1)[1] if "." in key else None
-            if idx not in edited:
-                edited[idx] = {}
-            if prop:
-                edited[idx][prop] = val
-
-    for idx, updates in edited.items():
-        # Étend la liste si besoin
-        while len(shapes) <= idx:
-            shapes.append({})
-        shapes[idx].update(updates)
-
-    # Cas 3 : effacement via eraseshape -> relayoutData contient des clefs vides
-    # Si Plotly envoie 'shapes[2]': null, on peut filtrer:
-    shapes = [s for s in shapes if s]  # nettoie les shapes vides
-
-    return shapes or []
+    raise PreventUpdate
 
 
 
