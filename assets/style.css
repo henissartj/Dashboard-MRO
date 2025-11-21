@@ -61,3 +61,22 @@ body {
 .rc-slider {
   margin-bottom: 6px;
 }
+
+/* --- Lang toggle --- */
+.lang-toggle { display: flex; align-items: center; gap: 8px; }
+.lang-btn {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px 10px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.lang-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* --- RTL support (simple) --- */
+.rtl .navbar,
+.rtl .page-container,
+.rtl .site-footer { direction: rtl; text-align: right; }
+.rtl .nav-right { display: flex; flex-direction: row-reverse; gap: 16px; }

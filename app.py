@@ -463,6 +463,8 @@ app.layout = html.Div(
     style={"backgroundColor": "#f5f5f5", "minHeight": "100vh"},
     children=[
         dcc.Location(id="url", refresh=False),
+        # Store global pour la langue (persisté localement)
+        dcc.Store(id="lang-store", storage_type="local", data={"lang": "fr"}),
 
         # --- NAVBAR ---
         html.Nav(
@@ -481,10 +483,12 @@ app.layout = html.Div(
                             children=[
                                 html.Div(
                                     "Laboratoire Éphévériste",
+                                    id="brand-title",
                                     style={"fontSize": "1rem", "fontWeight": 600},
                                 ),
                                 html.Div(
                                     "Modèle de Résonance Ontogénétique (MRO)",
+                                    id="brand-subtitle",
                                     style={
                                         "fontSize": "0.72rem",
                                         "color": "#6b7280",
@@ -508,6 +512,13 @@ app.layout = html.Div(
                         dcc.Link("Auteur", href="/jules", id="nav-jules", style=NAV_LINK_STYLE),
                         dcc.Link("GitHub", href="/repository", id="nav-git", style=NAV_LINK_STYLE),
                         dcc.Link("Crédits", href="/credits", id="nav-credits", style=NAV_LINK_STYLE),
+                        html.Div(
+                            className="lang-toggle",
+                            children=[
+                                html.Button("FR", id="btn-fr", className="lang-btn"),
+                                html.Button("العربية", id="btn-ar", className="lang-btn"),
+                            ],
+                        ),
                     ],
                 ),
             ],
@@ -568,6 +579,105 @@ def highlight_active(pathname):
 
 
 # ===========================
+#   Bascule de langue FR/AR
+# ===========================
+
+# Store langue via boutons
+@callback(
+    Output("lang-store", "data"),
+    Output("btn-fr", "className"),
+    Output("btn-ar", "className"),
+    Input("btn-fr", "n_clicks"),
+    Input("btn-ar", "n_clicks"),
+    State("lang-store", "data"),
+)
+def set_lang(n_fr, n_ar, data):
+    data = data or {"lang": "fr"}
+    fr = data.get("lang", "fr") == "fr"
+    # Déterminer le dernier bouton cliqué
+    ctx = dash.callback_context
+    if ctx.triggered:
+        trig = ctx.triggered[0]["prop_id"].split(".")[0]
+        if trig == "btn-ar":
+            data["lang"] = "ar"
+        elif trig == "btn-fr":
+            data["lang"] = "fr"
+    fr_active = "lang-btn" + (" active" if data["lang"] == "fr" else "")
+    ar_active = "lang-btn" + (" active" if data["lang"] == "ar" else "")
+    return data, fr_active, ar_active
+
+
+# Labels de navigation selon langue
+@callback(
+    Output("nav-home", "children"),
+    Output("nav-fft", "children"),
+    Output("nav-docs", "children"),
+    Output("nav-hm3d", "children"),
+    Output("nav-exp", "children"),
+    Output("nav-eph", "children"),
+    Output("nav-jules", "children"),
+    Output("nav-git", "children"),
+    Output("nav-credits", "children"),
+    Input("lang-store", "data"),
+)
+def translate_nav(data):
+    lang = (data or {}).get("lang", "fr")
+    if lang == "ar":
+        return (
+            "محاكاة MRO",
+            "تحليل فوري (FFT)",
+            "شروح",
+            "خريطة حرارية ثلاثية الأبعاد",
+            "تجارب واختبارات",
+            "الإفهفيرية",
+            "المؤلف",
+            "GitHub",
+            "شكر وتقدير",
+        )
+    else:
+        return (
+            "Simulations MRO",
+            "FFT",
+            "Explications",
+            "Heatmap 3D",
+            "Tests & Expériences",
+            "Éphévérisme",
+            "Auteur",
+            "GitHub",
+            "Crédits",
+        )
+
+
+# Direction RTL + attr lang sur body côté client
+app.clientside_callback(
+    """
+    function(data) {
+        const lang = (data && data.lang) || 'fr';
+        const body = document.body;
+        if (!body) return window.dash_clientside.no_update;
+        body.setAttribute('lang', lang === 'ar' ? 'ar' : 'fr');
+        body.classList.toggle('rtl', lang === 'ar');
+        return Date.now();
+    }
+    """,
+    Output("dynamic-meta", "data"),
+    Input("lang-store", "data"),
+)
+
+# Brand FR/AR
+@callback(
+    Output("brand-title", "children"),
+    Output("brand-subtitle", "children"),
+    Input("lang-store", "data"),
+)
+def translate_brand(data):
+    lang = (data or {}).get("lang", "fr")
+    if lang == "ar":
+        return "مختبر الإفهفيرية", "نموذج الرنين التكوني (MRO)"
+    return "Laboratoire Éphévériste", "Modèle de Résonance Ontogénétique (MRO)"
+
+
+# ===========================
 #   JSON-LD & Meta dynamiques (côté "serveur")
 # ===========================
 
@@ -575,8 +685,9 @@ def highlight_active(pathname):
     Output("structured-jsonld", "children"),
     Output("dynamic-meta", "children"),
     Input("url", "pathname"),
+    Input("lang-store", "data"),
 )
-def inject_structured_data(pathname):
+def inject_structured_data(pathname, lang_data):
     # Base & canonical
     try:
         base = request.url_root.rstrip("/")
@@ -586,7 +697,8 @@ def inject_structured_data(pathname):
     canonical = base + (path if path != "/" else "/")
 
     # Titres / descriptions par page
-    titles = {
+    lang = (lang_data or {}).get("lang", "fr")
+    titles_fr = {
         "/": "Simulations MRO",
         "/docs": "Explications",
         "/fft": "FFT",
@@ -599,7 +711,7 @@ def inject_structured_data(pathname):
         "/search": "Recherche",
         "/pharmasim": "PharmaSim",
     }
-    descs = {
+    descs_fr = {
         "/": "Visualisations interactives du Modèle de Résonance Ontogénétique",
         "/docs": "Explications du MRO et guide de lecture",
         "/fft": "Analyse fréquentielle des signaux MRO",
@@ -612,25 +724,68 @@ def inject_structured_data(pathname):
         "/search": "Recherche des pages du site",
         "/pharmasim": "Simulation PK/PD (recherche, noindex)",
     }
-    title = titles.get(path, "Laboratoire Éphévériste — MRO")
-    desc = descs.get(path, "Explorations MRO")
+    titles_ar = {
+        "/": "محاكاة MRO",
+        "/docs": "شروح",
+        "/fft": "تحليل فوري (FFT)",
+        "/heatmap3d": "خريطة حرارية ثلاثية الأبعاد",
+        "/experiences": "تجارب واختبارات",
+        "/epheverisme": "الإفهفيرية",
+        "/jules": "المؤلف",
+        "/repository": "المصدر (GitHub)",
+        "/credits": "شكر وتقدير",
+        "/search": "بحث",
+        "/pharmasim": "PharmaSim",
+    }
+    descs_ar = {
+        "/": "تصورات تفاعلية لنموذج الرنين التكوني",
+        "/docs": "شروح النموذج ودليل القراءة",
+        "/fft": "تحليل ترددي لإشارات النموذج",
+        "/heatmap3d": "خريطة حرارية ثلاثية الأبعاد للمعاملات (m, γ, k)",
+        "/experiences": "تجارب واختبارات خارجية",
+        "/epheverisme": "عرض الإفهفيرية",
+        "/jules": "صفحة المؤلف: Jules Henissart‑Miquel",
+        "/repository": "مستودع المشروع على GitHub",
+        "/credits": "شكر وتقدير",
+        "/search": "بحث صفحات الموقع",
+        "/pharmasim": "محاكاة PK/PD (بحث، عدم الفهرسة)",
+    }
+    titles = titles_ar if lang == "ar" else titles_fr
+    descs = descs_ar if lang == "ar" else descs_fr
+    title = titles.get(path, "Laboratoire Éphévériste — MRO" if lang != "ar" else "مختبر الإفهفيرية — MRO")
+    desc = descs.get(path, "Explorations MRO" if lang != "ar" else "استكشافات MRO")
 
     # Breadcrumbs
     segments = [seg for seg in path.split("/") if seg]
     crumbs = [{"@type": "ListItem", "position": 1, "name": "Accueil", "item": base + "/"}]
     acc = ""
-    labels = {
-        "docs": "Explications",
-        "fft": "FFT",
-        "heatmap3d": "Heatmap 3D",
-        "experiences": "Tests & Expériences",
-        "epheverisme": "Éphévérisme",
-        "jules": "Auteur",
-        "repository": "Code source",
-        "credits": "Crédits",
-        "search": "Recherche",
-        "pharmasim": "PharmaSim",
-    }
+    labels = (
+        {
+            "docs": "شروح",
+            "fft": "تحليل فوري (FFT)",
+            "heatmap3d": "خريطة حرارية ثلاثية الأبعاد",
+            "experiences": "تجارب واختبارات",
+            "epheverisme": "الإفهفيرية",
+            "jules": "المؤلف",
+            "repository": "المصدر",
+            "credits": "شكر وتقدير",
+            "search": "بحث",
+            "pharmasim": "PharmaSim",
+        }
+        if lang == "ar"
+        else {
+            "docs": "Explications",
+            "fft": "FFT",
+            "heatmap3d": "Heatmap 3D",
+            "experiences": "Tests & Expériences",
+            "epheverisme": "Éphévérisme",
+            "jules": "Auteur",
+            "repository": "Code source",
+            "credits": "Crédits",
+            "search": "Recherche",
+            "pharmasim": "PharmaSim",
+        }
+    )
     for i, seg in enumerate(segments):
         acc += "/" + seg
         crumbs.append({
@@ -669,17 +824,31 @@ def inject_structured_data(pathname):
         {
             "@context": "https://schema.org",
             "@type": "SiteNavigationElement",
-            "name": [
-                "Simulations MRO",
-                "FFT",
-                "Explications",
-                "Heatmap 3D",
-                "Tests & Expériences",
-                "Éphévérisme",
-                "Auteur",
-                "Code source (GitHub)",
-                "Crédits"
-            ],
+            "name": (
+                [
+                    "محاكاة MRO",
+                    "تحليل فوري (FFT)",
+                    "شروح",
+                    "خريطة حرارية ثلاثية الأبعاد",
+                    "تجارب واختبارات",
+                    "الإفهفيرية",
+                    "المؤلف",
+                    "المصدر (GitHub)",
+                    "شكر وتقدير",
+                ]
+                if lang == "ar"
+                else [
+                    "Simulations MRO",
+                    "FFT",
+                    "Explications",
+                    "Heatmap 3D",
+                    "Tests & Expériences",
+                    "Éphévérisme",
+                    "Auteur",
+                    "Code source (GitHub)",
+                    "Crédits",
+                ]
+            ),
             "url": [
                 base + "/",
                 base + "/fft",
@@ -689,7 +858,7 @@ def inject_structured_data(pathname):
                 base + "/epheverisme",
                 base + "/jules",
                 base + "/repository",
-                base + "/credits"
+                base + "/credits",
             ],
         },
     ]
