@@ -44,6 +44,89 @@ layout = html.Div(
             style={"marginBottom": "18px"},
         ),
 
+        # --- Actions rapides (exports + snapshot) en haut de page ---
+        html.Div(
+            style={
+                "position": "sticky",
+                "top": 0,
+                "zIndex": 900,
+                "background": "#fff",
+                "padding": "8px 0",
+                "borderBottom": "1px solid #eee",
+                "marginBottom": "12px",
+                "display": "flex",
+                "flexWrap": "wrap",
+                "gap": "8px",
+                "alignItems": "center",
+            },
+            children=[
+                html.Button(
+                    "Exporter toutes les figures (PNG)",
+                    id="btn-export-png",
+                    n_clicks=0,
+                    style={
+                        "padding": "6px 10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #ccc",
+                        "backgroundColor": "#ffffff",
+                        "cursor": "pointer",
+                    },
+                ),
+                html.Button(
+                    "Exporter toutes les figures (SVG)",
+                    id="btn-export-svg",
+                    n_clicks=0,
+                    style={
+                        "padding": "6px 10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #ccc",
+                        "backgroundColor": "#ffffff",
+                        "cursor": "pointer",
+                    },
+                ),
+                html.Button(
+                    "Exporter données (CSV)",
+                    id="btn-export-csv",
+                    n_clicks=0,
+                    style={
+                        "padding": "6px 10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #ccc",
+                        "backgroundColor": "#ffffff",
+                        "cursor": "pointer",
+                    },
+                ),
+                html.Button(
+                    "Exporter données (JSON)",
+                    id="btn-export-json",
+                    n_clicks=0,
+                    style={
+                        "padding": "6px 10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #ccc",
+                        "backgroundColor": "#ffffff",
+                        "cursor": "pointer",
+                    },
+                ),
+                html.Button(
+                    "Télécharger ZIP (PNG+SVG HD)",
+                    id="btn-export-zip",
+                    n_clicks=0,
+                    style={
+                        "padding": "6px 10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #ccc",
+                        "backgroundColor": "#ffffff",
+                        "cursor": "pointer",
+                    },
+                ),
+                dcc.Store(id="export-done"),
+                dcc.Download(id="download-zip"),
+                dcc.Download(id="download-csv"),
+                dcc.Download(id="download-json"),
+            ],
+        ),
+
         # --- Sliders principaux ---
         html.Div(
             style={
@@ -52,6 +135,21 @@ layout = html.Div(
                 "gap": "16px",
             },
             children=[
+                html.Div([
+                    html.Button(
+                        "Réinitialiser les sliders",
+                        id="reset-sliders",
+                        n_clicks=0,
+                        style={
+                            "padding": "6px 10px",
+                            "borderRadius": "4px",
+                            "border": "1px solid #ccc",
+                            "backgroundColor": "#ffffff",
+                            "cursor": "pointer",
+                            "marginBottom": "8px",
+                        },
+                    ),
+                ]),
                 html.Div([
                     html.Label([
                         "m (masse) ",
@@ -329,8 +427,8 @@ layout = html.Div(
                     ),
                 ],
             ),
-            # Stockage local pour conserver les presets côté navigateur
-            dcc.Store(id="presets-store", data=[], storage_type="local"),
+            # Stockage en mémoire seulement (pas de pré-remplissage, pas de persistance)
+            dcc.Store(id="presets-store", data=[], storage_type="memory"),
             html.Div(id="presets-list"),
             dcc.Loading(
                 dcc.Graph(
@@ -341,85 +439,6 @@ layout = html.Div(
         ]),
 
         html.Hr(),
-
-        # --- Exports + snapshot ---
-        html.Div(
-            style={
-                "marginTop": "8px",
-                "display": "flex",
-                "flexWrap": "wrap",
-                "gap": "8px",
-                "alignItems": "center",
-            },
-            children=[
-                html.Button(
-                    "Exporter toutes les figures (PNG)",
-                    id="btn-export-png",
-                    n_clicks=0,
-                    style={
-                        "padding": "6px 10px",
-                        "borderRadius": "4px",
-                        "border": "1px solid #ccc",
-                        "backgroundColor": "#ffffff",
-                        "cursor": "pointer",
-                    },
-                ),
-                html.Button(
-                    "Exporter toutes les figures (SVG)",
-                    id="btn-export-svg",
-                    n_clicks=0,
-                    style={
-                        "padding": "6px 10px",
-                        "borderRadius": "4px",
-                        "border": "1px solid #ccc",
-                        "backgroundColor": "#ffffff",
-                        "cursor": "pointer",
-                    },
-                ),
-                html.Button(
-                    "Exporter données (CSV)",
-                    id="btn-export-csv",
-                    n_clicks=0,
-                    style={
-                        "padding": "6px 10px",
-                        "borderRadius": "4px",
-                        "border": "1px solid #ccc",
-                        "backgroundColor": "#ffffff",
-                        "cursor": "pointer",
-                    },
-                ),
-                html.Button(
-                    "Exporter données (JSON)",
-                    id="btn-export-json",
-                    n_clicks=0,
-                    style={
-                        "padding": "6px 10px",
-                        "borderRadius": "4px",
-                        "border": "1px solid #ccc",
-                        "backgroundColor": "#ffffff",
-                        "cursor": "pointer",
-                    },
-                ),
-                html.Button(
-                    "Télécharger ZIP (PNG+SVG HD)",
-                    id="btn-export-zip",
-                    n_clicks=0,
-                    style={
-                        "padding": "6px 10px",
-                        "borderRadius": "4px",
-                        "border": "1px solid #ccc",
-                        "backgroundColor": "#ffffff",
-                        "cursor": "pointer",
-                    },
-                ),
-                dcc.Store(id="export-done"),
-                dcc.Download(id="download-zip"),
-                dcc.Download(id="download-csv"),
-                dcc.Download(id="download-json"),
-            ],
-        ),
-
-        html.Div(style={"height": "8px"}),
 
         # --- Snapshot partageable ---
         html.Div(

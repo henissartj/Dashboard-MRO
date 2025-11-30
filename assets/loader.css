@@ -3,6 +3,8 @@ body {
     background-color: #f2f2f2;
 }
 
+/* Styles par défaut, le panneau latéral a été retiré */
+
 /* Overlay plein écran pendant le chargement (désactivé) */
 #loader-overlay {
     position: fixed;

@@ -5,6 +5,7 @@ import datetime as dt
 import json
 from urllib.parse import urlencode, parse_qs
 from flask import request, Response
+from werkzeug.exceptions import NotFound
 
 import numpy as np
 from scipy.integrate import solve_ivp
@@ -22,22 +23,22 @@ import plotly.io as pio
 #   Modèle MRO
 # ===========================
 
-def MRO_equations(t, Y, m, gamma, k):
+def MRO_equations(t: float, Y: list, m: float, gamma: float, k: float) -> list:
     x, dxdt = Y
     dxdtt = -(gamma / m) * dxdt - (k / m) * x
     return [dxdt, dxdtt]
 
 
 def simulate_mro(
-    m=1.0,
-    gamma=0.15,
-    k=1.0,
-    x0=1.0,
-    v0=0.0,
-    t_start=0.0,
-    t_end=30.0,
-    t_points=3000,
-):
+    m: float = 1.0,
+    gamma: float = 0.15,
+    k: float = 1.0,
+    x0: float = 1.0,
+    v0: float = 0.0,
+    t_start: float = 0.0,
+    t_end: float = 30.0,
+    t_points: int = 3000,
+) -> tuple:
     t_eval = np.linspace(t_start, t_end, t_points)
     sol = solve_ivp(
         MRO_equations,
@@ -51,6 +52,32 @@ def simulate_mro(
     x = sol.y[0]
     v = sol.y[1]
     return t, x, v
+
+def compute_mro_series(
+    m: float,
+    gamma: float,
+    k: float,
+    x0: float,
+    v0: float,
+    t_end: float,
+    t_start: float = 0.0,
+    t_points: int = 3000,
+) -> tuple:
+    t, x, v = simulate_mro(
+        m=m,
+        gamma=gamma,
+        k=k,
+        x0=x0,
+        v0=v0,
+        t_start=t_start,
+        t_end=t_end,
+        t_points=t_points,
+    )
+    a = -(gamma / m) * v - (k / m) * x
+    ek = 0.5 * m * (v ** 2)
+    ep = 0.5 * k * (x ** 2)
+    et = ek + ep
+    return t, x, v, a, ek, ep, et
 
 
 def heatmap_max_amp(
@@ -126,6 +153,8 @@ app = dash.Dash(
     ],
 )
 
+app.config.update_title = "Chargement"
+
 server = app.server
 
 # ===========================
@@ -195,17 +224,10 @@ def _assets(filename):
     assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
     try:
         return send_from_directory(assets_dir, filename)
-    except Exception:
+    except NotFound:
         return "", 404
 
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8050)
-    args = parser.parse_args()
-
-    app.run(debug=True, host="0.0.0.0", port=args.port)
+ 
 
 
 # ===========================
@@ -402,12 +424,7 @@ app.layout = html.Div(
 )
 
 
-# ===========================
-#   Dev server (local run)
-# ===========================
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "8050"))
-    app.run(host="0.0.0.0", port=port, debug=True)
+ 
 
 
 # ===========================
@@ -801,11 +818,15 @@ def update_equation(m, gamma, k):
     State("ts-shapes", "data"),
 )
 def update_core_plots(m, gamma, k, x0, v0, tend, opts, annotations, shapes):
-    t, x, v = simulate_mro(m=m, gamma=gamma, k=k, x0=x0, v0=v0, t_end=tend)
-    a = -(gamma / m) * v - (k / m) * x
-    ek = 0.5 * m * (v ** 2)
-    ep = 0.5 * k * (x ** 2)
-    et = ek + ep
+    t, x, v, a, ek, ep, et = compute_mro_series(
+        m=m,
+        gamma=gamma,
+        k=k,
+        x0=x0,
+        v0=v0,
+        t_end=tend,
+        t_points=3000,
+    )
 
     # --- Série temporelle ---
     fig_ts = go.Figure()
@@ -938,11 +959,15 @@ def _build_core_figs(
     heat_kmax,
     heat_kstep,
 ):
-    t, x, v = simulate_mro(m=m, gamma=gamma, k=k, x0=x0, v0=v0, t_end=tend)
-    a = -(gamma / m) * v - (k / m) * x
-    ek = 0.5 * m * (v ** 2)
-    ep = 0.5 * k * (x ** 2)
-    et = ek + ep
+    t, x, v, a, ek, ep, et = compute_mro_series(
+        m=m,
+        gamma=gamma,
+        k=k,
+        x0=x0,
+        v0=v0,
+        t_end=tend,
+        t_points=3000,
+    )
 
     fig_ts = go.Figure()
     fig_ts.add_trace(go.Scatter(x=t, y=x, mode="lines", name="x(t)"))
@@ -1156,11 +1181,15 @@ def export_zip(
 def export_csv(n, m, gamma, k, x0, v0, tend):
     if not n:
         return dash.no_update
-    t, x, v = simulate_mro(m=m, gamma=gamma, k=k, x0=x0, v0=v0, t_end=tend)
-    a = -(gamma / m) * v - (k / m) * x
-    ek = 0.5 * m * (v ** 2)
-    ep = 0.5 * k * (x ** 2)
-    et = ek + ep
+    t, x, v, a, ek, ep, et = compute_mro_series(
+        m=m,
+        gamma=gamma,
+        k=k,
+        x0=x0,
+        v0=v0,
+        t_end=tend,
+        t_points=3000,
+    )
     sio = io.StringIO()
     sio.write("t,x,v,a,E_kin,E_pot,E_tot\n")
     for i in range(len(t)):
@@ -1184,11 +1213,15 @@ def export_csv(n, m, gamma, k, x0, v0, tend):
 def export_json(n, m, gamma, k, x0, v0, tend):
     if not n:
         return dash.no_update
-    t, x, v = simulate_mro(m=m, gamma=gamma, k=k, x0=x0, v0=v0, t_end=tend)
-    a = -(gamma / m) * v - (k / m) * x
-    ek = 0.5 * m * (v ** 2)
-    ep = 0.5 * k * (x ** 2)
-    et = ek + ep
+    t, x, v, a, ek, ep, et = compute_mro_series(
+        m=m,
+        gamma=gamma,
+        k=k,
+        x0=x0,
+        v0=v0,
+        t_end=tend,
+        t_points=3000,
+    )
     payload = {
         "params": {"m": m, "gamma": gamma, "k": k, "x0": x0, "v0": v0, "t_end": tend},
         "series": {
@@ -1273,13 +1306,14 @@ def update_multi(data, x0, v0, tend):
     # Boucle sur presets
     for i, d in enumerate(data):
         try:
-            t, x, v = simulate_mro(
+            t, x, v, a, ek, ep, et = compute_mro_series(
                 m=float(d.get("m", 1.0)),
                 gamma=float(d.get("gamma", 0.15)),
                 k=float(d.get("k", 1.0)),
                 x0=float(x0),
                 v0=float(v0),
                 t_end=float(tend),
+                t_points=3000,
             )
         except Exception:
             # Si un preset est invalide, on continue
@@ -1304,9 +1338,12 @@ def update_multi(data, x0, v0, tend):
     Output("v0", "value"),
     Output("tend", "value"),
     Input("mro-url", "search"),
+    Input("reset-sliders", "n_clicks"),
     prevent_initial_call=False,
 )
-def load_params_from_url(search):
+def load_params_from_url(search, n_reset):
+    if n_reset and n_reset > 0:
+        return 1.0, 0.15, 1.0, 1.0, 0.0, 30.0
     if not search:
         raise PreventUpdate
 
@@ -1404,14 +1441,21 @@ app.clientside_callback(
     prevent_initial_call=True,
 )
 
+ 
+
 
 # ===========================
 #   Run
 # ===========================
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", 8050)))
+    parser.add_argument("--debug", action="store_true")
+    args = parser.parse_args()
     app.run(
         host="0.0.0.0",
-        port=int(os.getenv("PORT", 8050)),
-        debug=False,
+        port=args.port,
+        debug=bool(args.debug),
     )

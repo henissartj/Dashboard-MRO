@@ -35,4 +35,6 @@
       }
     }
   } catch(e){}
+
+  // Auto-scroll retiré (comportement jugé intrusif)
 })();
