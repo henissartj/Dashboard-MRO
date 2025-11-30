@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://epheverisme.art/sitemap.xml
