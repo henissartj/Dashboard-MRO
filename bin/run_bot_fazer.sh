@@ -15,4 +15,4 @@ export DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-${DISCORD_TOKEN:-}}"
 cd "${APP_DIR}"
 source "${VENV_ACTIVATE}"
 
-exec python -u bot/bot_de_fazer.py
+exec python -u -m bot.bot_de_fazer

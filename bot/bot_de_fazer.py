@@ -2,18 +2,20 @@ import os
 import random
 import difflib
 import discord
+from discord import app_commands
 from dotenv import load_dotenv, dotenv_values
 from discord.ext import commands
 
 # ------- CONFIG -------
 BOT_NAME = "Bot de Fazer"
-PREFIX = "+"
+PRIMARY_PREFIX = "+"
+PREFIXES = ["+", "$"]
 INTENTS = discord.Intents.default()
 INTENTS.members = True
 INTENTS.message_content = True
 
 load_dotenv()
-bot = commands.Bot(command_prefix=PREFIX, intents=INTENTS)
+bot = commands.Bot(command_prefix=PREFIXES, intents=INTENTS, help_command=commands.DefaultHelpCommand(no_category='Commandes'))
 
 BLOCKED_TARGET_ID = 1429920996080488601
 LOVE_ALLOWED_USER_ID = 1443339902623154207
@@ -44,6 +46,17 @@ async def on_ready():
     await bot.change_presence(
         activity=discord.Game(name="au quartier tu connais frero en bien")
     )
+    try:
+        await bot.load_extension("bot.cogs.economy")
+        print("Cog économie chargé.")
+    except Exception as e:
+        print(f"Échec chargement économie: {e}")
+
+    try:
+        await bot.tree.sync()
+        print("Slash commands synchronisées.")
+    except Exception as e:
+        print(f"Échec sync slash: {e}")
 
 
 @bot.event
@@ -66,18 +79,19 @@ async def on_message(message: discord.Message):
 async def on_command_error(ctx: commands.Context, error: Exception):
     if isinstance(error, commands.CommandNotFound):
         raw = ctx.message.content
-        tried = raw[len(PREFIX):].split()[0] if raw.startswith(PREFIX) else raw.split()[0]
+        pref = next((p for p in PREFIXES if raw.startswith(p)), "")
+        tried = raw[len(pref):].split()[0] if pref else raw.split()[0]
         names = [c.name for c in bot.commands]
         suggestion = difflib.get_close_matches(tried, names, n=1, cutoff=0.6)
         msg = f"Wsh {ctx.author.mention}, la commande `{tried}` n’existe pas."
         if suggestion:
-            msg += f" Tu voulais dire `{PREFIX}{suggestion[0]}` ?"
+            msg += f" Tu voulais dire `{PRIMARY_PREFIX}{suggestion[0]}` ?"
         else:
             msg += f" Tu crois t un dev t un tasty crousty."
         await ctx.send(msg)
         return
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"T’as oublié des paramètres, {ctx.author.mention}. Remets propre : `{PREFIX}{ctx.command.name}`.")
+        await ctx.send(f"T’as oublié des paramètres, {ctx.author.mention}. Remets propre : `{PRIMARY_PREFIX}{ctx.command.name}`.")
         return
     if isinstance(error, commands.BadArgument):
         await ctx.send("Argu chelou détecté. Mets des valeurs carrées tu me deuh.")
@@ -100,6 +114,11 @@ async def ping(ctx: commands.Context):
         f"Pong {ctx.author.mention} ! T’es vif à {latency_ms} ms, "
         f"t’es une fibre optique mon frero bsaha 💥"
     )
+
+@bot.tree.command(name="ping", description="Tester la latence du bot")
+async def ping_slash(interaction: discord.Interaction):
+    latency_ms = round(bot.latency * 1000)
+    await interaction.response.send_message(f"Pong ! {latency_ms} ms", ephemeral=True)
 
 
 @bot.command(name="avatar")
