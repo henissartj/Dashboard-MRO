@@ -1,0 +1,17 @@
+[Unit]
+Description=Bot Discord "Bot de Fazer"
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/mro_dash
+ExecStart=/opt/mro_dash/bin/run_bot_fazer.sh
+Restart=always
+RestartSec=5
+User=app
+Group=app
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
