@@ -15,7 +15,7 @@ INTENTS.members = True
 INTENTS.message_content = True
 
 load_dotenv()
-bot = commands.Bot(command_prefix=PREFIXES, intents=INTENTS, help_command=commands.DefaultHelpCommand(no_category='Commandes'))
+bot = commands.Bot(command_prefix=PREFIXES, intents=INTENTS, help_command=None)
 
 BLOCKED_TARGET_ID = 1429920996080488601
 LOVE_ALLOWED_USER_ID = 1443339902623154207
@@ -118,7 +118,7 @@ async def ping(ctx: commands.Context):
 @bot.tree.command(name="ping", description="Tester la latence du bot")
 async def ping_slash(interaction: discord.Interaction):
     latency_ms = round(bot.latency * 1000)
-    await interaction.response.send_message(f"Pong ! {latency_ms} ms", ephemeral=True)
+    await interaction.response.send_message(f"Pong ! {latency_ms} ms")
 
 
 @bot.command(name="avatar")
@@ -156,6 +156,51 @@ async def serverinfo(ctx: commands.Context):
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
     await ctx.send(embed=embed)
+
+
+class HelpView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.page = 1
+
+    def _page1(self):
+        emb = discord.Embed(title="Aide (1/2)", color=discord.Color.blurple(), description="Commandes principales")
+        emb.add_field(name="+balance / /balance", value="Afficher poche et banque", inline=False)
+        emb.add_field(name="+khedma / /khedma", value="Travail: +100 (CD 5m côté +)", inline=False)
+        emb.add_field(name="+coin_flip / /coinflip", value="Pile/Face avec mise", inline=False)
+        emb.add_field(name="+slots / /slots", value="Machines à sous avec payouts ajustés", inline=False)
+        emb.add_field(name="+dice / /dice", value="Dé pair/impair ou chiffre (edge maison)", inline=False)
+        emb.add_field(name="+scoot / /scoot", value="Course scoot avec pari et boutons", inline=False)
+        return emb
+
+    def _page2(self):
+        emb = discord.Embed(title="Aide (2/2)", color=discord.Color.teal(), description="Banque, admin et bourse")
+        emb.add_field(name="+add_money", value="Crédit admin (boutons Accepter/Refuser)", inline=False)
+        emb.add_field(name="+tax / /tax", value="Taxer une transaction (owner)", inline=False)
+        emb.add_field(name="+entreprise / /entreprise", value="Créer (coût 100000 en banque)", inline=False)
+        emb.add_field(name="+investir / /investir", value="Acheter des parts", inline=False)
+        emb.add_field(name="+entreprises / /entreprises", value="Lister", inline=False)
+        emb.add_field(name="+portefeuille / /portefeuille", value="Voir vos parts", inline=False)
+        return emb
+
+    @discord.ui.button(label="Page 1", style=discord.ButtonStyle.primary)
+    async def page1(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(embed=self._page1())
+
+    @discord.ui.button(label="Page 2", style=discord.ButtonStyle.secondary)
+    async def page2(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(embed=self._page2())
+
+
+@bot.command(name="help")
+async def help_cmd(ctx: commands.Context):
+    view = HelpView()
+    await ctx.send(embed=view._page1(), view=view)
+
+@bot.tree.command(name="help", description="Aide en deux pages")
+async def help_slash(interaction: discord.Interaction):
+    view = HelpView()
+    await interaction.response.send_message(embed=view._page1(), view=view)
 
 
 @bot.command(name="say")

@@ -1046,6 +1046,66 @@ class AdminTransactionView(discord.ui.View):
                 await cur.execute("UPDATE transactions SET status='refused' WHERE id=%s", (txid,))
         await interaction.response.send_message("Refusée.", ephemeral=True)
 
+class InvestModal(discord.ui.Modal, title="Investir"):
+    def __init__(self, cog: "Economy", ctx: commands.Context | None, name: str):
+        super().__init__()
+        self.cog = cog
+        self.ctx = ctx
+        self.name = name
+        self.amount_input = discord.ui.TextInput(label="Montant", placeholder="Ex: 1000", required=True)
+        self.add_item(self.amount_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            amount = int(str(self.amount_input.value).strip())
+        except Exception:
+            return await interaction.response.send_message("Montant invalide.", ephemeral=True)
+        if amount <= 0:
+            return await interaction.response.send_message("Montant invalide.", ephemeral=True)
+        await self.cog._connect(); await self.cog._ensure_user(interaction.user.id)
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT id, price, total_shares FROM enterprises WHERE name=%s", (self.name,))
+                row = await cur.fetchone()
+                if not row:
+                    return await interaction.response.send_message("Entreprise introuvable.", ephemeral=True)
+                eid, price, total = row
+                shares = amount // price
+                if shares <= 0:
+                    return await interaction.response.send_message("Montant trop faible pour une part.", ephemeral=True)
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (interaction.user.id,))
+                bal = (await cur.fetchone())[0]
+                cost = shares * price
+                if bal < cost:
+                    return await interaction.response.send_message("Pas assez en poche.", ephemeral=True)
+                await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (cost, interaction.user.id))
+                await cur.execute("INSERT INTO investments(enterprise_id, user_id, shares) VALUES(%s,%s,%s) ON DUPLICATE KEY UPDATE shares=shares+VALUES(shares)", (eid, interaction.user.id, shares))
+                await cur.execute("UPDATE enterprises SET total_shares=total_shares+%s, funds=funds+%s WHERE id=%s", (shares, cost, eid))
+        ctx_like = self.ctx or type("_SlashCtx", (), {"author": interaction.user, "guild": interaction.guild})()
+        cur = self.cog._currency_emoji(ctx_like)
+        emb = self.cog._bank_embed(ctx_like, title="Investissement", description=f"Achat de {shares} parts de {self.name} pour {cost} {cur}", color=discord.Color.gold(), actor=interaction.user)
+        await interaction.response.send_message(embed=emb)
+
+class EnterprisesView(discord.ui.View):
+    def __init__(self, cog: "Economy", ctx: commands.Context | None, rows: list[tuple[str, int, int]]):
+        super().__init__(timeout=180)
+        self.cog = cog
+        self.ctx = ctx
+        self.selected_name: str | None = None
+        options = [discord.SelectOption(label=f"{n} — {p}", value=n) for n, p, s in rows][:25]
+        self.select = discord.ui.Select(placeholder="Choisis une entreprise", options=options)
+        async def _cb(interaction: discord.Interaction):
+            self.selected_name = self.select.values[0]
+            await interaction.response.edit_message(view=self)
+        self.select.callback = _cb
+        self.add_item(self.select)
+
+    @discord.ui.button(label="Investir", style=discord.ButtonStyle.success)
+    async def investir_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.selected_name:
+            return await interaction.response.send_message("Choisis une entreprise.", ephemeral=True)
+        await interaction.response.send_modal(InvestModal(self.cog, self.ctx, self.selected_name))
+
     @commands.command(name="scoot", help="Defie en course scoot: +scoot @membre montant. Pari symétrique.") 
     async def scoot(self, ctx: commands.Context, member: discord.Member, amount: int):
         await self._connect(); await self._ensure_user(ctx.author.id); await self._ensure_user(member.id)
@@ -1124,7 +1184,7 @@ class AdminTransactionView(discord.ui.View):
                 rows = await cur.fetchall()
         desc = "\n".join([f"{n} — prix {p} • parts {s}" for n, p, s in rows]) or "Aucune."
         emb = self._bank_embed(ctx, title="Entreprises", description=desc, color=discord.Color.blurple())
-        await ctx.send(embed=emb)
+        await ctx.send(embed=emb, view=EnterprisesView(self, ctx, rows))
 
     @commands.command(name="portefeuille", help="Vos parts par entreprise")
     async def portefeuille(self, ctx: commands.Context):
@@ -1183,7 +1243,7 @@ async def setup(bot: commands.Bot):
         ctx = _SlashCtx(interaction)
         cur = cog._currency_emoji(ctx)
         emb = cog._bank_embed(ctx, title=f"Solde de {member.display_name}", color=discord.Color.gold(), fields=[("Poche", f"{bal} {cur}", True), ("Banque", f"{bank} {cur}", True)], actor=member)
-        await interaction.response.send_message(embed=emb, ephemeral=True)
+        await interaction.response.send_message(embed=emb)
     
     @tree.command(name="khedma", description="Travail et gagne 100 (CD géré côté +)")
     async def khedma_slash(interaction: discord.Interaction):
@@ -1195,7 +1255,7 @@ async def setup(bot: commands.Bot):
         ctx = _SlashCtx(interaction)
         cur = cog._currency_emoji(ctx)
         emb = cog._bank_embed(ctx, title="Khedma", description=f"+100 {cur}", color=discord.Color.green(), actor=interaction.user)
-        await interaction.response.send_message(embed=emb, ephemeral=True)
+        await interaction.response.send_message(embed=emb)
 
     @tree.command(name="scoot", description="Course scoot avec pari symétrique")
     async def scoot_slash(interaction: discord.Interaction, membre: discord.Member, montant: int):
@@ -1379,7 +1439,8 @@ async def setup(bot: commands.Bot):
                 await cur.execute("SELECT name, price, total_shares FROM enterprises ORDER BY price DESC")
                 rows = await cur.fetchall()
         desc = "\n".join([f"{n} — prix {p} • parts {s}" for n, p, s in rows]) or "Aucune."
-        await interaction.response.send_message(desc, ephemeral=True)
+        emb = cog._bank_embed(_SlashCtx(interaction), title="Entreprises", description=desc, color=discord.Color.blurple())
+        await interaction.response.send_message(embed=emb, view=EnterprisesView(cog, _SlashCtx(interaction), rows))
 
     @tree.command(name="portefeuille", description="Vos parts par entreprise")
     async def portefeuille_slash(interaction: discord.Interaction):
@@ -1390,7 +1451,7 @@ async def setup(bot: commands.Bot):
                 await cur.execute("SELECT e.name, i.shares FROM investments i JOIN enterprises e ON i.enterprise_id=e.id WHERE i.user_id=%s ORDER BY e.name", (interaction.user.id,))
                 rows = await cur.fetchall()
         desc = "\n".join([f"{n} — {s} parts" for n, s in rows]) or "Aucune part."
-        await interaction.response.send_message(desc, ephemeral=True)
+        await interaction.response.send_message(desc)
 
     @tree.command(name="tax", description="Taxer une transaction (owner)")
     async def tax_slash(interaction: discord.Interaction, txid: str):
@@ -1419,7 +1480,7 @@ async def setup(bot: commands.Bot):
                 await cur.execute(f"UPDATE users SET {col}={col}-%s WHERE user_id=%s", (tax_real, target_id))
                 await cur.execute("UPDATE users SET bank=bank+%s WHERE user_id=%s", (tax_real, interaction.user.id))
                 await cur.execute("UPDATE transactions SET taxed=1 WHERE id=%s", (txid,))
-        await interaction.response.send_message(f"Taxe appliquée: {tax_real}", ephemeral=True)
+        await interaction.response.send_message(f"Taxe appliquée: {tax_real}")
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
         try:
