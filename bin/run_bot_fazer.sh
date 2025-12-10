@@ -4,13 +4,9 @@ set -euo pipefail
 APP_DIR="/opt/mro_dash"
 VENV_ACTIVATE="${APP_DIR}/.venv/bin/activate"
 
-if [[ -f /home/app/bot-discord/.env ]]; then
+if [[ -f /etc/default/bot-fazer ]]; then
   set -a
-  source /home/app/bot-discord/.env
-  set +a
-elif [[ -f "${APP_DIR}/.env" ]]; then
-  set -a
-  source "${APP_DIR}/.env"
+  source /etc/default/bot-fazer
   set +a
 fi
 

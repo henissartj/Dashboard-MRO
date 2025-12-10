@@ -11,6 +11,7 @@ Restart=always
 RestartSec=5
 User=app
 Group=app
+EnvironmentFile=/etc/default/bot-fazer
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
