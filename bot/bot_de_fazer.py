@@ -87,7 +87,7 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         if suggestion:
             msg += f" Tu voulais dire `{PRIMARY_PREFIX}{suggestion[0]}` ?"
         else:
-            msg += f" Tu crois t un dev t un tasty crousty."
+            msg += " Tu crois t un dev t un tasty crousty."
         await ctx.send(msg)
         return
     if isinstance(error, commands.MissingRequiredArgument):
@@ -103,6 +103,19 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         await ctx.send("Doucement le spam respire un peu fils.")
         return
     await ctx.send("Y’a eu un bug. Pas toi (j’espère). Réessaye.")
+
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: Exception):
+    if isinstance(error, app_commands.CommandOnCooldown):
+        try:
+            await interaction.response.send_message("Doucement le spam respire un peu fils.")
+        except Exception:
+            pass
+        return
+    try:
+        await interaction.response.send_message("Y’a eu un bug. Réessaye.")
+    except Exception:
+        pass
 
 
 # ------- COMMANDES DE BASE -------
@@ -166,20 +179,33 @@ class HelpView(discord.ui.View):
     def _page1(self):
         emb = discord.Embed(title="Aide (1/2)", color=discord.Color.blurple(), description="Commandes principales")
         emb.add_field(name="+balance / /balance", value="Afficher poche et banque", inline=False)
-        emb.add_field(name="+khedma / /khedma", value="Travail: +100 (CD 5m côté +)", inline=False)
+        emb.add_field(name="+deposit / /deposit", value="Déposer à la banque", inline=False)
+        emb.add_field(name="+withdraw / /withdraw", value="Retirer de la banque", inline=False)
+        emb.add_field(name="+shop / /shop", value="Voir le shop", inline=False)
+        emb.add_field(name="+buy / /buy", value="Acheter un item", inline=False)
+        emb.add_field(name="+sell / /sell", value="Vendre un item", inline=False)
+        emb.add_field(name="+inventory / /inventory", value="Voir l’inventaire", inline=False)
+        emb.add_field(name="+send / /send", value="Envoyer de l’argent", inline=False)
+        emb.add_field(name="+leaderboard / /leaderboard", value="Top banque", inline=False)
+        emb.add_field(name="+daily / /daily", value="Crédit quotidien", inline=False)
+        emb.add_field(name="+weekly / /weekly", value="Crédit hebdomadaire", inline=False)
+        emb.add_field(name="+monthly / /monthly", value="Crédit mensuel", inline=False)
+        emb.add_field(name="+khedma / /khedma", value="Travail: +100 (CD 5m)", inline=False)
         emb.add_field(name="+coin_flip / /coinflip", value="Pile/Face avec mise", inline=False)
-        emb.add_field(name="+slots / /slots", value="Machines à sous avec payouts ajustés", inline=False)
-        emb.add_field(name="+dice / /dice", value="Dé pair/impair ou chiffre (edge maison)", inline=False)
+        emb.add_field(name="+slots / /slots", value="Machines à sous", inline=False)
+        emb.add_field(name="+dice / /dice", value="Dé pair/impair ou chiffre", inline=False)
         emb.add_field(name="+scoot / /scoot", value="Course scoot avec pari et boutons", inline=False)
         return emb
 
     def _page2(self):
-        emb = discord.Embed(title="Aide (2/2)", color=discord.Color.teal(), description="Banque, admin et bourse")
-        emb.add_field(name="+add_money", value="Crédit admin (boutons Accepter/Refuser)", inline=False)
+        emb = discord.Embed(title="Aide (2/2)", color=discord.Color.teal(), description="Admin et bourse")
+        emb.add_field(name="+add_money / /add_money", value="Crédit admin (Accepter/Refuser)", inline=False)
+        emb.add_field(name="+remove_money / /remove_money", value="Débit admin", inline=False)
+        emb.add_field(name="+reset_user / /reset_user", value="Reset complet utilisateur", inline=False)
         emb.add_field(name="+tax / /tax", value="Taxer une transaction (owner)", inline=False)
         emb.add_field(name="+entreprise / /entreprise", value="Créer (coût 100000 en banque)", inline=False)
         emb.add_field(name="+investir / /investir", value="Acheter des parts", inline=False)
-        emb.add_field(name="+entreprises / /entreprises", value="Lister", inline=False)
+        emb.add_field(name="+entreprises / /entreprises", value="Lister et investir", inline=False)
         emb.add_field(name="+portefeuille / /portefeuille", value="Voir vos parts", inline=False)
         return emb
 
@@ -224,6 +250,19 @@ async def clear(ctx: commands.Context, amount: int = 5):
 async def invite(ctx: commands.Context, max_age: int = 86400):
     invite = await ctx.channel.create_invite(max_age=max_age, max_uses=100)
     await ctx.send(f"🔗 **OEE LA TÉLÉ** : {invite.url}\nValable {max_age//3600}h, 100 uses max.")
+
+
+# ------- ADMIN UTILS -------
+
+@bot.command(name="reload")
+@commands.is_owner()
+async def reload_cmd(ctx: commands.Context):
+    try:
+        await bot.reload_extension("bot.cogs.economy")
+        await bot.tree.sync()
+        await ctx.send("Cog économie rechargé et slash synchronisés.")
+    except Exception as e:
+        await ctx.send(f"Échec reload: {e}")
 
 
 
@@ -396,9 +435,17 @@ asyncio.run(test_discord())
 # ------- LANCEMENT DU BOT -------
 
 def main():
-    token = os.getenv("DISCORD_BOT_TOKEN") or dotenv_values().get("DISCORD_BOT_TOKEN")
+    env_path = os.getenv("DOTENV_PATH", "/home/app/bot-discord/.env")
+    try:
+        env_vals = dotenv_values(env_path)
+    except Exception:
+        env_vals = dotenv_values()
+    # Priorité au .env explicite
+    token = env_vals.get("DISCORD_TOKEN") or env_vals.get("DISCORD_BOT_TOKEN") or os.getenv("DISCORD_TOKEN") or os.getenv("DISCORD_BOT_TOKEN")
+    if token:
+        token = token.strip()
     if not token:
-        raise RuntimeError("Variable d’environnement DISCORD_BOT_TOKEN manquante.")
+        raise RuntimeError("Variable d’environnement DISCORD_BOT_TOKEN/DISCORD_TOKEN manquante.")
     bot.run(token)
 
 
