@@ -70,7 +70,7 @@ pip install -q --upgrade pip setuptools wheel
 
 # Dépendances
 if [[ -f "${REQ_FILE}" ]]; then
-  log "Installation requirements.txt…"
+log "Installation requirements.txt…"
   pip install -q -r "${REQ_FILE}"
 else
   warn "requirements.txt absent, install minimal…"
@@ -85,6 +85,8 @@ python -m py_compile app.py pages/*.py 2>/dev/null || true
 log "Restart service ${SERVICE_NAME}…"
 sudo systemctl daemon-reload || true
 sudo systemctl restart "${SERVICE_NAME}"
+
+# (Bot Discord géré hors dépôt via botfazer; aucun service créé ici)
 
 # Health local
 log "Health-check local ${HEALTH_LOCAL_URL}…"

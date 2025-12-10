@@ -1,20 +1,4 @@
-# Python
+/.venv/
 __pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.so
-
-# Environnements / secrets
-.venv/
+*.pyc
 .env
-*.sqlite3
-
-# OS / divers
-.DS_Store
-*.log
-*.zip
-
-# Dash/Plotly artefacts éventuels
-*.png
-*.svg
