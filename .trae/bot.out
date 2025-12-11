@@ -1,0 +1,17 @@
+nohup: ignoring input
+✅ Discord OK: 200
+[2025-12-11 00:43:11] [INFO    ] discord.client: logging in using static token
+[2025-12-11 00:43:12] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: e63e02596377cf038a31532aa811ada1).
+Bot de Fazer#4289 est connecté.
+/opt/mro_dash/.venv/lib/python3.12/site-packages/aiomysql/cursors.py:239: Warning: Table 'users' already exists
+  await self._query(query)
+/opt/mro_dash/.venv/lib/python3.12/site-packages/aiomysql/cursors.py:239: Warning: Table 'inventory' already exists
+  await self._query(query)
+/opt/mro_dash/.venv/lib/python3.12/site-packages/aiomysql/cursors.py:239: Warning: Table 'shop' already exists
+  await self._query(query)
+/opt/mro_dash/.venv/lib/python3.12/site-packages/aiomysql/cursors.py:239: Warning: Table 'transactions' already exists
+  await self._query(query)
+/opt/mro_dash/.venv/lib/python3.12/site-packages/aiomysql/cursors.py:239: Warning: 'VALUES function' is deprecated and will be removed in a future release. Please use an alias (INSERT INTO ... VALUES (...) AS alias) and replace VALUES(col) in the ON DUPLICATE KEY UPDATE clause with alias.col instead
+  await self._query(query)
+Cog économie chargé.
+Slash commands synchronisées.

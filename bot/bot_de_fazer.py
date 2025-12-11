@@ -58,6 +58,40 @@ async def on_ready():
     except Exception as e:
         print(f"Échec sync slash: {e}")
 
+    try:
+        import asyncio as _asyncio
+        from importlib import import_module as _import_module
+        async def _autoreload():
+            import os as _os, sys as _sys
+            base = _os.path.dirname(__file__)
+            files = []
+            for root, _dirs, names in _os.walk(base):
+                for n in names:
+                    if n.endswith(".py"):
+                        files.append(_os.path.join(root, n))
+            mt = {f: _os.stat(f).st_mtime for f in files}
+            while True:
+                await _asyncio.sleep(2)
+                changed = None
+                for f in files:
+                    try:
+                        m = _os.stat(f).st_mtime
+                    except Exception:
+                        continue
+                    if m != mt.get(f):
+                        changed = f
+                        break
+                if changed:
+                    try:
+                        print(f"[autoreload] modification détectée: {changed} → restart")
+                    except Exception:
+                        pass
+                    _sys.execv(_sys.executable, [_sys.executable, "-u", "-m", "bot.bot_de_fazer"])
+                    return
+        _asyncio.create_task(_autoreload())
+    except Exception:
+        pass
+
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -194,6 +228,9 @@ class HelpView(discord.ui.View):
         emb.add_field(name="+coin_flip / /coinflip", value="Pile/Face avec mise", inline=False)
         emb.add_field(name="+slots / /slots", value="Machines à sous", inline=False)
         emb.add_field(name="+dice / /dice", value="Dé pair/impair ou chiffre", inline=False)
+        emb.add_field(name="+risk / /risk", value="Bande de Risque (1–100)", inline=False)
+        emb.add_field(name="+ladder / /ladder", value="Échelle Push Your Luck", inline=False)
+        # système de bourse retiré
         emb.add_field(name="+scoot / /scoot", value="Course scoot avec pari et boutons", inline=False)
         return emb
 
@@ -203,10 +240,7 @@ class HelpView(discord.ui.View):
         emb.add_field(name="+remove_money / /remove_money", value="Débit admin", inline=False)
         emb.add_field(name="+reset_user / /reset_user", value="Reset complet utilisateur", inline=False)
         emb.add_field(name="+tax / /tax", value="Taxer une transaction (owner)", inline=False)
-        emb.add_field(name="+entreprise / /entreprise", value="Créer (coût 100000 en banque)", inline=False)
-        emb.add_field(name="+investir / /investir", value="Acheter des parts", inline=False)
-        emb.add_field(name="+entreprises / /entreprises", value="Lister et investir", inline=False)
-        emb.add_field(name="+portefeuille / /portefeuille", value="Voir vos parts", inline=False)
+        # système d’entreprises retiré
         return emb
 
     @discord.ui.button(label="Page 1", style=discord.ButtonStyle.primary)
