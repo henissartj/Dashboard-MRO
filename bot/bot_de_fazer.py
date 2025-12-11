@@ -134,6 +134,11 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         await ctx.send("T’as pas les perms pour ça mon fils. Appelle le staff.")
         return
     if isinstance(error, commands.CommandOnCooldown):
+        try:
+            if ctx.author.guild_permissions.administrator:
+                return
+        except Exception:
+            pass
         await ctx.send("Doucement le spam respire un peu fils.")
         return
     await ctx.send("Y’a eu un bug. Pas toi (j’espère). Réessaye.")
@@ -141,6 +146,11 @@ async def on_command_error(ctx: commands.Context, error: Exception):
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: Exception):
     if isinstance(error, app_commands.CommandOnCooldown):
+        try:
+            if interaction.user.guild_permissions.administrator:
+                return
+        except Exception:
+            pass
         try:
             await interaction.response.send_message("Doucement le spam respire un peu fils.")
         except Exception:
@@ -426,10 +436,14 @@ async def testvaillant(ctx: commands.Context, member: discord.Member):
 async def tweet(ctx: commands.Context, *, texte: str):
     handle = f"@{ctx.author.name.lower()}"
     embed = discord.Embed(description=texte, color=discord.Color(0x1DA1F2))
-    embed.title = "Twitter"
-    embed.set_thumbnail(url="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Logo_of_Twitter.svg/1200px-Logo_of_Twitter.svg.png")
+    embed.title = "Tweet"
     avatar_url = ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url
     embed.set_author(name=f"{ctx.author.display_name} • {handle}", icon_url=avatar_url)
+    embed.set_footer(text="Twitter", icon_url=TWITTER_LOGO_URL)
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
     message = await ctx.send(embed=embed)
     for emoji in ["💬", "🔁", "❤️"]:
         try:

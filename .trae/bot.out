@@ -15,3 +15,23 @@ Bot de Fazer#4289 est connecté.
   await self._query(query)
 Cog économie chargé.
 Slash commands synchronisées.
+[autoreload] modification détectée: /opt/mro_dash/bot/cogs/economy.py → restart
+Task exception was never retrieved
+future: <Task finished name='Task-16' coro=<on_ready.<locals>._autoreload() done, defined at /opt/mro_dash/bot/bot_de_fazer.py:64> exception=AttributeError("module 'sys' has no attribute 'execv'")>
+Traceback (most recent call last):
+  File "/opt/mro_dash/bot/bot_de_fazer.py", line 89, in _autoreload
+    _sys.execv(_sys.executable, [_sys.executable, "-u", "-m", "bot.bot_de_fazer"])
+    ^^^^^^^^^^
+AttributeError: module 'sys' has no attribute 'execv'
+[2025-12-11 01:56:50] [INFO    ] discord.gateway: Shard ID None has successfully RESUMED session e63e02596377cf038a31532aa811ada1.
+[2025-12-11 03:05:54] [INFO    ] discord.gateway: Shard ID None has successfully RESUMED session e63e02596377cf038a31532aa811ada1.
+[2025-12-11 06:59:48] [INFO    ] discord.gateway: Shard ID None has successfully RESUMED session e63e02596377cf038a31532aa811ada1.
+/opt/mro_dash/.venv/lib/python3.12/site-packages/aiomysql/cursors.py:239: Warning: Duplicate entry '1443339902623154207' for key 'users.PRIMARY'
+  await self._query(query)
+/opt/mro_dash/.venv/lib/python3.12/site-packages/aiomysql/cursors.py:239: Warning: Duplicate entry '1428836220208812115' for key 'users.PRIMARY'
+  await self._query(query)
+/opt/mro_dash/.venv/lib/python3.12/site-packages/aiomysql/cursors.py:239: Warning: Duplicate entry '1208365653824765953' for key 'users.PRIMARY'
+  await self._query(query)
+[2025-12-11 07:31:50] [INFO    ] discord.gateway: Shard ID None has successfully RESUMED session e63e02596377cf038a31532aa811ada1.
+[2025-12-11 07:32:16] [INFO    ] discord.gateway: Shard ID None has successfully RESUMED session e63e02596377cf038a31532aa811ada1.
+[2025-12-11 08:00:55] [INFO    ] discord.gateway: Shard ID None has successfully RESUMED session e63e02596377cf038a31532aa811ada1.
