@@ -1494,7 +1494,7 @@ class MinesView(discord.ui.View):
             btn = discord.ui.Button(label="❓", style=discord.ButtonStyle.secondary, row=i // 5)
             async def _cb(interaction: discord.Interaction, idx=i, b=btn):
                 if interaction.user.id != self.session_owner_id:
-                    return await interaction.response.send_message("Seul l’initiateur peut jouer.")
+                    return await interaction.response.send_message("Seul l’initiateur peut jouer.", ephemeral=True)
                 s = self.cog._mines_sessions.get(self.session_owner_id)
                 if not s or s.get("ended"):
                     return await interaction.response.send_message("Partie terminée.")
@@ -1567,10 +1567,10 @@ class MinesCashView(discord.ui.View):
     @discord.ui.button(label="Encaisser", style=discord.ButtonStyle.success)
     async def cash(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.session_owner_id:
-            return await interaction.response.send_message("Seul l’initiateur peut encaisser.")
+            return await interaction.response.send_message("Seul l’initiateur peut encaisser.", ephemeral=True)
         s = self.cog._mines_sessions.get(self.session_owner_id)
         if not s or s.get("ended"):
-            return await interaction.response.send_message("Partie terminée.")
+            return await interaction.response.send_message("Partie terminée.", ephemeral=True)
         try:
             await interaction.response.defer()
         except Exception:
@@ -1614,10 +1614,10 @@ class MinesCashView(discord.ui.View):
     @discord.ui.button(label="Annuler", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.session_owner_id:
-            return await interaction.response.send_message("Seul l’initiateur peut annuler.")
+            return await interaction.response.send_message("Seul l’initiateur peut annuler.", ephemeral=True)
         s = self.cog._mines_sessions.get(self.session_owner_id)
         if not s or s.get("ended"):
-            return await interaction.response.send_message("Partie terminée.")
+            return await interaction.response.send_message("Partie terminée.", ephemeral=True)
         try:
             await interaction.response.defer()
         except Exception:
@@ -1682,7 +1682,7 @@ class CoinFlipView(discord.ui.View):
     @discord.ui.button(label="Jouer", style=discord.ButtonStyle.success)
     async def play(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.ctx.author.id:
-            return await interaction.response.send_message("Seul l’initiateur peut jouer.")
+            return await interaction.response.send_message("Seul l’initiateur peut jouer.", ephemeral=True)
         if not self.side:
             return await interaction.response.send_message("Choisis Pile ou Face.")
         ctx = self.ctx
@@ -1739,7 +1739,7 @@ class ScootRaceView(discord.ui.View):
     @discord.ui.button(label="Accepter", style=discord.ButtonStyle.success)
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.target.id:
-            return await interaction.response.send_message("Seule la personne ping peut répondre.")
+            return await interaction.response.send_message("Seule la personne ping peut répondre.", ephemeral=True)
         await self.cog._ensure_user(self.ctx.author.id); await self.cog._ensure_user(self.target.id)
         try:
             await interaction.response.defer()
@@ -1779,7 +1779,7 @@ class ScootRaceView(discord.ui.View):
     @discord.ui.button(label="Refuser", style=discord.ButtonStyle.danger)
     async def refuse(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.target.id:
-            return await interaction.response.send_message("Seule la personne ping peut répondre.")
+            return await interaction.response.send_message("Seule la personne ping peut répondre.", ephemeral=True)
         try:
             await interaction.response.defer()
         except Exception:
@@ -2040,7 +2040,7 @@ class LadderView(discord.ui.View):
     @discord.ui.button(label="Encaisser", style=discord.ButtonStyle.primary)
     async def cash(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.ctx.author.id:
-            return await interaction.response.send_message("Seul l’initiateur peut encaisser.")
+            return await interaction.response.send_message("Seul l’initiateur peut encaisser.", ephemeral=True)
         await self.cog._ensure_user(self.ctx.author.id)
         payout = max(1, int(self.base_amt * self.mult * 0.95))
         txid = None
@@ -2078,7 +2078,7 @@ class LadderView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.ctx.author.id:
-            await interaction.response.send_message("Seul l’initiateur peut interagir.")
+            await interaction.response.send_message("Seul l’initiateur peut interagir.", ephemeral=True)
             return False
         return True
 
@@ -2114,7 +2114,7 @@ class AdminTransactionView(discord.ui.View):
     @discord.ui.button(label="Accepter", style=discord.ButtonStyle.success)
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != 1443339902623154207:
-            return await interaction.response.send_message("Non autorisé.")
+            return await interaction.response.send_message("Non autorisé.", ephemeral=True)
         await self.cog._connect()
         txid = self.txid
         async with self.cog.pool.acquire() as conn:
@@ -2143,7 +2143,7 @@ class AdminTransactionView(discord.ui.View):
     @discord.ui.button(label="Refuser", style=discord.ButtonStyle.danger)
     async def refuse_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != 1443339902623154207:
-            return await interaction.response.send_message("Non autorisé.")
+            return await interaction.response.send_message("Non autorisé.", ephemeral=True)
         await self.cog._connect()
         txid = self.txid
         async with self.cog.pool.acquire() as conn:
@@ -2203,6 +2203,12 @@ class AdminTransactionView(discord.ui.View):
         cur_emoji = self._currency_emoji(ctx)
         emb = self._bank_embed(ctx, title="Khedma", description=f"+{self._fmt_amount(100)} {cur_emoji}", color=discord.Color.green(), actor=ctx.author)
         await ctx.send(embed=emb)
+
+    # Alias goût local
+    @commands.command(name="khadma", aliases=["khadema", "khdma", "khedma2"])  
+    @commands.dynamic_cooldown(lambda ctx: None if getattr(ctx.author, "guild_permissions", None) and ctx.author.guild_permissions.administrator else commands.Cooldown(1, 5*60), commands.BucketType.user)
+    async def khadma(self, ctx: commands.Context):
+        await self.khedma(ctx)
 
     # système d’entreprise retiré
     async def entreprise(self, ctx: commands.Context, name: str):
@@ -2873,6 +2879,10 @@ async def setup(bot: commands.Bot):
         cog: Economy = bot.get_cog("Economy")
         await cog._connect(); await cog._ensure_user(interaction.user.id)
         try:
+            await interaction.response.defer(thinking=True)
+        except Exception:
+            pass
+        try:
             if interaction.user.guild_permissions.administrator:
                 pass
             else:
@@ -2887,7 +2897,11 @@ async def setup(bot: commands.Bot):
         cur = cog._currency_emoji(ctx)
         # Utilisation de _fmt_amount
         emb = cog._bank_embed(ctx, title="Khedma", description=f"+{cog._fmt_amount(100)} {cur}", color=discord.Color.green(), actor=interaction.user)
-        await interaction.response.send_message(embed=emb)
+        try:
+            await interaction.followup.send(embed=emb)
+        except Exception:
+            # Fallback si pas de defer
+            await interaction.response.send_message(embed=emb)
 
     @tree.command(name="scoot", description="Course scoot avec pari symétrique")
     @app_commands.checks.cooldown(1, 5)

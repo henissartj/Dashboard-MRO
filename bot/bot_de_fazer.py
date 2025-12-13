@@ -35,7 +35,35 @@ MARSEILLE_ADLIBS = [
     "wsh le secteur",
     "ça dit quoi la mif",
     "celui qui est pas content je le monte en l'air",
-    "validé par tasty crousty et graya deluxe"
+    "validé par tasty crousty et graya deluxe",
+    "le secteur il parle chinois ou quoi aujourd’hui",
+    "smr tu parles trop mgl"
+]
+
+FAZER_GENERAL_SPAM_LINES = [
+    "Fazer ce tdb il a tenté de trouver du taf mais mm Pôle Emploi l’a ghost",
+    "Fazer il a pas le permis, il fait du code en trottinette électrique",
+    "Fazer il fait des bots qui crashent plus vite que sa batterie",
+    "Fazer il a deux passions : rater le code et rater sa vie",
+    "Le mec a autant de diplômes qu’un câble HDMI",
+    "Fazer il vit dans le cloud, mais c’est des nuages de galère",
+    "Il a voulu investir en crypto mais il a fini en crypté mdr",
+    "Fazer il fait des bots économiques alors qu’il a -8€ sur son compte",
+    "Même ChatGPT veut pas lui parler à Fazer",
+    "Fazer il a codé son avenir en Python mais l’interpréteur a crash",
+    "Le gars il a pas de permis, pas de love, pas d’argent, mais il a la wifi du voisin",
+    "Quand tu dis \"Fazer\" ton PC il cherche directement les erreurs",
+    "Fazer il fait semblant de débug mais il supprime le fichier",
+    "Un jour Fazer a voulu monter une start-up, bah wallah elle a même pas start",
+    "Fazer c’est le genre de blatrou à rager sur un bug qu’il a lui-même écrit à 4h du mat",
+    "Le mec dit qu’il a la dalle mais il parle pas de manger, il parle de la vie"
+]
+
+# Réponses agressives (utilisées uniquement dans la chaîne de réponses)
+AGGRESSIVE_REPLIES = [
+    "vasy ferme ta gueule aller la",
+    "aller ftg",
+    "nachav"
 ]
 
 
@@ -92,6 +120,21 @@ async def on_ready():
     except Exception:
         pass
 
+    try:
+        import asyncio as _asyncio
+        import random as _random
+        async def _general_spam():
+            while True:
+                await _asyncio.sleep(5 * 60 * 60)
+                try:
+                    channel = bot.get_channel(ANNOUNCE_CHANNEL_ID) or await bot.fetch_channel(ANNOUNCE_CHANNEL_ID)
+                    await channel.send(_random.choice(FAZER_GENERAL_SPAM_LINES))
+                except Exception:
+                    pass
+        _asyncio.create_task(_general_spam())
+    except Exception:
+        pass
+
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -100,11 +143,28 @@ async def on_message(message: discord.Message):
 
     content_lower = message.content.lower()
 
+    ref = message.reference
+    if ref and (getattr(ref, "resolved", None) or getattr(ref, "message_id", None)):
+        try:
+            replied_msg = getattr(ref, "resolved", None) or await message.channel.fetch_message(ref.message_id)
+        except Exception:
+            replied_msg = None
+        if replied_msg and replied_msg.author == bot.user:
+            phrases = VAILLANT_REPLIES + MARSEILLE_ADLIBS + AGGRESSIVE_REPLIES
+            if replied_msg.content in phrases:
+                try:
+                    await message.channel.send(random.choice(phrases))
+                except Exception:
+                    pass
+                await bot.process_commands(message)
+                return
+
     # Si quelqu’un dit merci → réponse custom
     if "merci" in content_lower or "mrc" in content_lower or "thanks" in content_lower:
         reply = random.choice(VAILLANT_REPLIES)
         adlib = random.choice(MARSEILLE_ADLIBS)
-        await message.channel.send(f"{reply}, {adlib} 🤌")
+        chosen = random.choice([reply, adlib])
+        await message.channel.send(chosen)
 
     await bot.process_commands(message)
 
