@@ -128,7 +128,10 @@ async def on_ready():
                 await _asyncio.sleep(5 * 60 * 60)
                 try:
                     channel = bot.get_channel(ANNOUNCE_CHANNEL_ID) or await bot.fetch_channel(ANNOUNCE_CHANNEL_ID)
-                    await channel.send(_random.choice(FAZER_GENERAL_SPAM_LINES))
+                    # Mixte Fazer (moins) et Secteur (plus)
+                    # On multiplie MARSEILLE_ADLIBS pour augmenter la proba de tomber dessus
+                    pool = MARSEILLE_ADLIBS * 5 + FAZER_GENERAL_SPAM_LINES
+                    await channel.send(_random.choice(pool))
                 except Exception:
                     pass
         _asyncio.create_task(_general_spam())
@@ -196,10 +199,22 @@ async def on_command_error(ctx: commands.Context, error: Exception):
     if isinstance(error, commands.CommandOnCooldown):
         try:
             if ctx.author.guild_permissions.administrator:
-                return
+                # On laisse passer pour les admins si la commande le permet
+                # Mais si l'erreur a pop, c'est que la commande a checké le cooldown.
+                # Cependant +khedma a un dynamic cooldown qui retourne None pour les admins.
+                # Donc si on est là, c'est que c'est une autre commande ou que le dynamic n'a pas marché.
+                # On affiche quand même le message pour être sûr.
+                pass
         except Exception:
             pass
-        await ctx.send("Doucement le spam respire un peu fils.")
+        cd = int(error.retry_after)
+        m = cd // 60
+        s = cd % 60
+        if m > 0:
+            msg = f"Doucement le spam respire un peu fils. Reviens dans {m}m {s}s."
+        else:
+            msg = f"Doucement le spam respire un peu fils. Reviens dans {s}s."
+        await ctx.send(msg)
         return
     await ctx.send("Y’a eu un bug. Pas toi (j’espère). Réessaye.")
 
@@ -207,17 +222,27 @@ async def on_command_error(ctx: commands.Context, error: Exception):
 async def on_app_command_error(interaction: discord.Interaction, error: Exception):
     if isinstance(error, app_commands.CommandOnCooldown):
         try:
-            if interaction.user.guild_permissions.administrator:
-                return
-        except Exception:
-            pass
-        try:
-            await interaction.response.send_message("Doucement le spam respire un peu fils.")
+            # Même logique : on affiche le temps restant
+            cd = int(error.retry_after)
+            m = cd // 60
+            s = cd % 60
+            if m > 0:
+                msg = f"Doucement le spam respire un peu fils. Reviens dans {m}m {s}s."
+            else:
+                msg = f"Doucement le spam respire un peu fils. Reviens dans {s}s."
+            
+            if interaction.response.is_done():
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await interaction.response.send_message(msg, ephemeral=True)
         except Exception:
             pass
         return
     try:
-        await interaction.response.send_message("Y’a eu un bug. Réessaye.")
+        if interaction.response.is_done():
+            await interaction.followup.send("Y’a eu un bug. Réessaye.", ephemeral=True)
+        else:
+            await interaction.response.send_message("Y’a eu un bug. Réessaye.", ephemeral=True)
     except Exception:
         pass
 

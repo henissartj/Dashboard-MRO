@@ -52,6 +52,12 @@ DDL = [
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """,
+    """
+    CREATE TABLE IF NOT EXISTS settings (
+        setting_key VARCHAR(64) PRIMARY KEY,
+        setting_value VARCHAR(255)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
 ]
 
 # Nouvelle fonction utilitaire pour le formatage abrégé et complet
@@ -117,6 +123,7 @@ class Economy(commands.Cog):
         # Cache pour les sessions de blackjack
         self._blackjack_sessions: dict[int, 'BlackjackGame'] = {}
         self._roulette_sessions: dict[int, dict] = {}
+        self.logs_enabled = True # Default
 
     async def _connect(self):
         if self.pool:
@@ -132,6 +139,15 @@ class Economy(commands.Cog):
             async with conn.cursor() as cur:
                 for sql in DDL:
                     await cur.execute(sql)
+                # Load settings
+                await cur.execute("SELECT setting_value FROM settings WHERE setting_key='logs_enabled'")
+                row = await cur.fetchone()
+                if row:
+                    self.logs_enabled = (row[0] == "1")
+                else:
+                    # Insert default
+                    await cur.execute("INSERT INTO settings(setting_key, setting_value) VALUES('logs_enabled', '1')")
+                    self.logs_enabled = True
 
     def _currency_emoji(self, ctx: commands.Context) -> str:
         try:
@@ -256,6 +272,28 @@ class Economy(commands.Cog):
                 await cur.execute("INSERT IGNORE INTO users(user_id) VALUES(%s)", (uid,))
 
     # Bank commands
+    @commands.command(name="toggle_logs")
+    @commands.has_permissions(administrator=True)
+    async def toggle_logs(self, ctx: commands.Context, mode: str):
+        """Active ou désactive les logs d'argent dans la base de données (on/off)."""
+        await self._connect()
+        if mode.lower() == "on":
+            val = "1"
+            self.logs_enabled = True
+            msg = "Logs d'argent activés."
+        elif mode.lower() == "off":
+            val = "0"
+            self.logs_enabled = False
+            msg = "Logs d'argent désactivés."
+        else:
+            return await ctx.send("Usage: +toggle_logs <on/off>")
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("INSERT INTO settings(setting_key, setting_value) VALUES('logs_enabled', %s) ON DUPLICATE KEY UPDATE setting_value=%s", (val, val))
+        
+        await ctx.send(msg)
+
     @commands.command(name="balance", aliases=["bal"]) 
     async def balance(self, ctx: commands.Context, member: discord.Member | None = None):
         await self._connect(); member = member or ctx.author; await self._ensure_user(member.id)
@@ -614,10 +652,11 @@ class Economy(commands.Cog):
         txid = self._txn_id()
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(
-                    "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                    (txid, "credit", ctx.author.id, member.id, amount, col, "pending"),
-                )
+                if self.logs_enabled:
+                    await cur.execute(
+                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                        (txid, "credit", ctx.author.id, member.id, amount, col, "pending"),
+                    )
         cur = self._currency_emoji(ctx)
         emb = self._bank_embed(
             ctx,
@@ -766,10 +805,11 @@ class Economy(commands.Cog):
                 if flip == side:
                     await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (amt, ctx.author.id))
                     txid = self._txn_id()
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", ctx.author.id, ctx.author.id, amt, "balance", "won"),
-                    )
+                    if self.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", ctx.author.id, ctx.author.id, amt, "balance", "won"),
+                        )
                     desc = f"Coin flip: {flip}. Gagné +{self._fmt_amount(amt)} {self._currency_emoji(ctx)}"
                     color = discord.Color.green()
                 else:
@@ -894,10 +934,11 @@ class Economy(commands.Cog):
                 if win > 0:
                     await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win, ctx.author.id))
                     txid = self._txn_id()
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
-                    )
+                    if self.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
+                        )
                     desc = f"Slots {' | '.join(r)} — Gagné +{self._fmt_amount(win)} {self._currency_emoji(ctx)}"
                     color = discord.Color.green()
                 else:
@@ -960,10 +1001,11 @@ class Economy(commands.Cog):
                 if win > 0:
                     await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win, ctx.author.id))
                     txid = self._txn_id()
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
-                    )
+                    if self.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
+                        )
                 else:
                     await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (-win, ctx.author.id))
                 desc = f"Dé {roll} — {'Gagné +' + self._fmt_amount(win) if win>0 else 'Perdu ' + self._fmt_amount(abs(win))} {self._currency_emoji(ctx)}"
@@ -1060,7 +1102,8 @@ class Economy(commands.Cog):
                 if win_amt > 0:
                     await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win_amt, ctx.author.id))
                     txid = self._txn_id()
-                    await cur.execute("INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)", (txid, "win", ctx.author.id, ctx.author.id, win_amt, "balance", "won"))
+                    if self.logs_enabled:
+                        await cur.execute("INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)", (txid, "win", ctx.author.id, ctx.author.id, win_amt, "balance", "won"))
                 else:
                     await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (-win_amt, ctx.author.id))
         async with self.pool.acquire() as conn:
@@ -1318,10 +1361,11 @@ class BlackjackGame:
                     
                     if gain_net > 0:
                         txid = cog._txn_id()
-                        await cur.execute(
-                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                            (txid, "win", user_id, user_id, gain_net, "balance", "won"),
-                        )
+                        if cog.logs_enabled:
+                            await cur.execute(
+                                "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                                (txid, "win", user_id, user_id, gain_net, "balance", "won"),
+                            )
                     
                 # Récupérer le nouveau solde
                 await cur.execute("SELECT balance FROM users WHERE user_id=%s", (user_id,))
@@ -1582,10 +1626,11 @@ class MinesCashView(discord.ui.View):
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (payout, self.session_owner_id))
                 txid = self.cog._txn_id()
-                await cur.execute(
-                    "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                    (txid, "win", self.session_owner_id, self.session_owner_id, payout, "balance", "won"),
-                )
+                if self.cog.logs_enabled:
+                    await cur.execute(
+                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                        (txid, "win", self.session_owner_id, self.session_owner_id, payout, "balance", "won"),
+                    )
         self.cog._mines_sessions[self.session_owner_id]["ended"] = True
         cur_emoji = self.cog._currency_emoji(self.ctx)
         async with self.cog.pool.acquire() as conn:
@@ -1703,10 +1748,11 @@ class CoinFlipView(discord.ui.View):
                 if flip == self.side:
                     await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (self.amount, ctx.author.id))
                     txid = self.cog._txn_id()
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", ctx.author.id, ctx.author.id, self.amount, "balance", "won"),
-                    )
+                    if self.cog.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", ctx.author.id, ctx.author.id, self.amount, "balance", "won"),
+                        )
                     desc = f"Coin flip: {flip}. Gagné +{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(ctx)}"
                     color = discord.Color.green()
                 else:
@@ -1763,10 +1809,11 @@ class ScootRaceView(discord.ui.View):
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (gain, winner.id))
                 txid = self.cog._txn_id()
-                await cur.execute(
-                    "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                    (txid, "win", winner.id, winner.id, gain, "balance", "won"),
-                )
+                if self.cog.logs_enabled:
+                    await cur.execute(
+                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                        (txid, "win", winner.id, winner.id, gain, "balance", "won"),
+                    )
         cur_emoji = self.cog._currency_emoji(self.ctx)
         # Utilisation de _fmt_amount
         desc = f"Course Scoot • Mise: {self.cog._fmt_amount(self.amount)} {cur_emoji} chacun\nGagnant: {winner.mention} (+{self.cog._fmt_amount(gain)} {cur_emoji})"
@@ -1836,10 +1883,11 @@ class SlotsView(discord.ui.View):
                 if win > 0:
                     await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win, ctx.author.id))
                     txid = self.cog._txn_id()
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
-                    )
+                    if self.cog.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
+                        )
                     desc = f"Slots {' | '.join(r)} — Gagné +{self.cog._fmt_amount(win)} {self.cog._currency_emoji(ctx)}"
                     color = discord.Color.green()
                 else:
@@ -1933,10 +1981,11 @@ class DiceView(discord.ui.View):
                 if win >= 0:
                     await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win, ctx.author.id))
                     txid = self.cog._txn_id()
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
-                    )
+                    if self.cog.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
+                        )
                     desc = f"Dé {roll} — Gagné +{self.cog._fmt_amount(win)} {self.cog._currency_emoji(ctx)}"
                     color = discord.Color.green()
                 else:
@@ -2048,7 +2097,8 @@ class LadderView(discord.ui.View):
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (payout, self.ctx.author.id))
                 txid = self.cog._txn_id()
-                await cur.execute("INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)", (txid, "win", self.ctx.author.id, self.ctx.author.id, payout, "balance", "won"))
+                if self.cog.logs_enabled:
+                    await cur.execute("INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)", (txid, "win", self.ctx.author.id, self.ctx.author.id, payout, "balance", "won"))
         async with self.cog.pool.acquire() as conn:
             async with conn.cursor() as cur2:
                 await cur2.execute("SELECT balance FROM users WHERE user_id=%s", (self.ctx.author.id,))
@@ -2359,10 +2409,11 @@ class AdminTransactionView(discord.ui.View):
                     self._last_prices[eid] = new_price
                     await cur.execute("UPDATE users SET bank=bank+%s WHERE user_id=%s", (bonus, owner_id))
                     txid = secrets.token_hex(4)
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", owner_id, owner_id, bonus, "bank", "won"),
-                    )
+                    if self.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", owner_id, owner_id, bonus, "bank", "won"),
+                        )
                     prev = price
                     delta = new_price - prev
                     pct = (delta / prev * 100.0) if prev > 0 else 0.0
@@ -2839,10 +2890,11 @@ async def setup(bot: commands.Bot):
         txid = cog._txn_id()
         async with cog.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(
-                    "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                    (txid, "credit", interaction.user.id, member.id, amount, col, "pending"),
-                )
+                if cog.logs_enabled:
+                    await cur.execute(
+                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                        (txid, "credit", interaction.user.id, member.id, amount, col, "pending"),
+                    )
         cur_emoji = cog._currency_emoji(_SlashCtx(interaction))
         # Utilisation de _fmt_amount
         emb = cog._bank_embed(_SlashCtx(interaction), title="Crédit admin (en attente)", color=discord.Color.orange(), fields=[("Cible", member.mention, True), ("Montant", f"+{cog._fmt_amount(amount)} {cur_emoji}", True), ("Compte", col, True)], txn_id=txid)
@@ -2876,12 +2928,12 @@ async def setup(bot: commands.Bot):
     @tree.command(name="khedma", description="Travail et gagne 100 (CD géré côté +)")
     @app_commands.checks.cooldown(1, 5*60)
     async def khedma_slash(interaction: discord.Interaction):
-        cog: Economy = bot.get_cog("Economy")
-        await cog._connect(); await cog._ensure_user(interaction.user.id)
         try:
             await interaction.response.defer(thinking=True)
         except Exception:
             pass
+        cog: Economy = bot.get_cog("Economy")
+        await cog._connect(); await cog._ensure_user(interaction.user.id)
         try:
             if interaction.user.guild_permissions.administrator:
                 pass
@@ -2959,10 +3011,11 @@ async def setup(bot: commands.Bot):
                 if flip == s:
                     await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (amt, interaction.user.id))
                     txid = cog._txn_id()
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", interaction.user.id, interaction.user.id, amt, "balance", "won"),
-                    )
+                    if cog.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", interaction.user.id, interaction.user.id, amt, "balance", "won"),
+                        )
                 else:
                     await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (amt, interaction.user.id))
         ctx = _SlashCtx(interaction)
@@ -3018,10 +3071,11 @@ async def setup(bot: commands.Bot):
                 if win > 0:
                     await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win, interaction.user.id))
                     txid = cog._txn_id()
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", interaction.user.id, interaction.user.id, win, "balance", "won"),
-                    )
+                    if cog.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", interaction.user.id, interaction.user.id, win, "balance", "won"),
+                        )
                 else:
                     await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (amt, interaction.user.id))
         ctx = _SlashCtx(interaction)
@@ -3073,10 +3127,11 @@ async def setup(bot: commands.Bot):
                 if win > 0:
                     await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win, interaction.user.id))
                     txid = cog._txn_id()
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", interaction.user.id, interaction.user.id, win, "balance", "won"),
-                    )
+                    if cog.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", interaction.user.id, interaction.user.id, win, "balance", "won"),
+                        )
                 else:
                     await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (-win, interaction.user.id))
         ctx = _SlashCtx(interaction)
@@ -3381,7 +3436,8 @@ async def setup(bot: commands.Bot):
                 if win_amt > 0:
                     await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win_amt, interaction.user.id))
                     txid = cog._txn_id()
-                    await cur.execute("INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)", (txid, "win", interaction.user.id, interaction.user.id, win_amt, "balance", "won"))
+                    if cog.logs_enabled:
+                        await cur.execute("INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)", (txid, "win", interaction.user.id, interaction.user.id, win_amt, "balance", "won"))
                 else:
                     await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (-win_amt, interaction.user.id))
         async with cog.pool.acquire() as conn:
