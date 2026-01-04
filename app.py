@@ -480,8 +480,11 @@ app.layout = html.Div(
 def highlight_active(pathname):
     base = NAV_LINK_STYLE
     active = {**NAV_LINK_STYLE, **NAV_LINK_ACTIVE}
+    hidden = {**NAV_LINK_STYLE, "display": "none"}
 
-    def s(path):
+    def s(path, hide_on_casino=False):
+        if pathname == "/casino" and hide_on_casino:
+            return hidden
         return active if pathname == path else base
 
     return [
@@ -491,9 +494,9 @@ def highlight_active(pathname):
         s("/heatmap3d"),
         s("/experiences"),
         s("/epheverisme"),
-        s("/jules"),
-        s("/repository"),
-        s("/credits"),
+        s("/jules", hide_on_casino=True),
+        s("/repository", hide_on_casino=True),
+        s("/credits", hide_on_casino=True),
     ]
 
 

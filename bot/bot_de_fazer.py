@@ -74,6 +74,12 @@ async def on_ready():
     await bot.change_presence(
         activity=discord.Game(name="au quartier tu connais frero en bien")
     )
+    
+    # Force removal of default help just in case
+    if bot.help_command:
+        bot.help_command = None
+    bot.remove_command("help")
+
     try:
         await bot.load_extension("bot.cogs.economy")
         print("Cog économie chargé.")
@@ -81,10 +87,44 @@ async def on_ready():
         print(f"Échec chargement économie: {e}")
 
     try:
+        await bot.load_extension("bot.cogs.help")
+        print("Cog help chargé.")
+    except Exception as e:
+        print(f"Échec chargement help: {e}")
+
+    try:
         await bot.tree.sync()
         print("Slash commands synchronisées.")
     except Exception as e:
         print(f"Échec sync slash: {e}")
+
+@bot.event
+async def on_command_error(ctx, error):
+    """Global Error Handler"""
+    if hasattr(ctx.command, 'on_error'):
+        return
+
+    ignored = (commands.CommandNotFound, )
+    error = getattr(error, 'original', error)
+
+    if isinstance(error, ignored):
+        return
+
+    if isinstance(error, commands.DisabledCommand):
+        await ctx.send(f'{ctx.command} has been disabled.')
+    elif isinstance(error, commands.NoPrivateMessage):
+        try:
+            await ctx.author.send(f'{ctx.command} can not be used in Private Messages.')
+        except discord.HTTPException:
+            pass
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Tu n'as pas les permissions nécessaires.")
+    elif isinstance(error, commands.BotMissingPermissions):
+        await ctx.send("❌ Je n'ai pas les permissions nécessaires pour faire ça.")
+    elif isinstance(error, commands.CommandOnCooldown):
+        await ctx.send(f"⏳ Doucement ! Réessaie dans {error.retry_after:.2f}s.")
+    else:
+        print(f'Ignoring exception in command {ctx.command}: {error}')
 
     try:
         import asyncio as _asyncio
@@ -114,7 +154,7 @@ async def on_ready():
                         print(f"[autoreload] modification détectée: {changed} → restart")
                     except Exception:
                         pass
-                    _sys.execv(_sys.executable, [_sys.executable, "-u", "-m", "bot.bot_de_fazer"])
+                    _os.execv(_sys.executable, [_sys.executable, "-u", "-m", "bot.bot_de_fazer"])
                     return
         _asyncio.create_task(_autoreload())
     except Exception:
@@ -123,18 +163,19 @@ async def on_ready():
     try:
         import asyncio as _asyncio
         import random as _random
-        async def _general_spam():
-            while True:
-                await _asyncio.sleep(5 * 60 * 60)
-                try:
-                    channel = bot.get_channel(ANNOUNCE_CHANNEL_ID) or await bot.fetch_channel(ANNOUNCE_CHANNEL_ID)
-                    # Mixte Fazer (moins) et Secteur (plus)
-                    # On multiplie MARSEILLE_ADLIBS pour augmenter la proba de tomber dessus
-                    pool = MARSEILLE_ADLIBS * 5 + FAZER_GENERAL_SPAM_LINES
-                    await channel.send(_random.choice(pool))
-                except Exception:
-                    pass
-        _asyncio.create_task(_general_spam())
+        # Désactivation du spam général (anti-spam retiré)
+        # async def _general_spam():
+        #     while True:
+        #         await _asyncio.sleep(5 * 60 * 60)
+        #         try:
+        #             channel = bot.get_channel(ANNOUNCE_CHANNEL_ID) or await bot.fetch_channel(ANNOUNCE_CHANNEL_ID)
+        #             # Mixte Fazer (moins) et Secteur (plus)
+        #             # On multiplie MARSEILLE_ADLIBS pour augmenter la proba de tomber dessus
+        #             pool = MARSEILLE_ADLIBS * 5 + FAZER_GENERAL_SPAM_LINES
+        #             await channel.send(_random.choice(pool))
+        #         except Exception:
+        #             pass
+        # _asyncio.create_task(_general_spam())
     except Exception:
         pass
 
@@ -144,6 +185,8 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
+    print(f"[DEBUG] Message: '{message.content}' from {message.author} (len={len(message.content)})")
+    
     content_lower = message.content.lower()
 
     ref = message.reference
@@ -169,7 +212,11 @@ async def on_message(message: discord.Message):
         chosen = random.choice([reply, adlib])
         await message.channel.send(chosen)
 
-    await bot.process_commands(message)
+    try:
+        print(f"[DEBUG] Processing commands for message: {message.content}")
+        await bot.process_commands(message)
+    except Exception as e:
+        print(f"[ERROR] process_commands failed: {e}")
 
 
 @bot.event
@@ -198,23 +245,22 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         return
     if isinstance(error, commands.CommandOnCooldown):
         try:
-            if ctx.author.guild_permissions.administrator:
-                # On laisse passer pour les admins si la commande le permet
-                # Mais si l'erreur a pop, c'est que la commande a checké le cooldown.
-                # Cependant +khedma a un dynamic cooldown qui retourne None pour les admins.
-                # Donc si on est là, c'est que c'est une autre commande ou que le dynamic n'a pas marché.
-                # On affiche quand même le message pour être sûr.
-                pass
+            # Désactivation de l'anti-spam (cooldown bypass pour tout le monde pour l'instant)
+            # if ctx.author.guild_permissions.administrator:
+            #     pass
+            await ctx.reinvoke() # Tente de relancer la commande sans cooldown
+            return
         except Exception:
             pass
-        cd = int(error.retry_after)
-        m = cd // 60
-        s = cd % 60
-        if m > 0:
-            msg = f"Doucement le spam respire un peu fils. Reviens dans {m}m {s}s."
-        else:
-            msg = f"Doucement le spam respire un peu fils. Reviens dans {s}s."
-        await ctx.send(msg)
+        # Si le reinvoke échoue ou si on veut quand même afficher le message (commenté pour "retirer l'anti-spam")
+        # cd = int(error.retry_after)
+        # m = cd // 60
+        # s = cd % 60
+        # if m > 0:
+        #     msg = f"Doucement le spam respire un peu fils. Reviens dans {m}m {s}s."
+        # else:
+        #     msg = f"Doucement le spam respire un peu fils. Reviens dans {s}s."
+        # await ctx.send(msg)
         return
     await ctx.send("Y’a eu un bug. Pas toi (j’espère). Réessaye.")
 
@@ -222,19 +268,20 @@ async def on_command_error(ctx: commands.Context, error: Exception):
 async def on_app_command_error(interaction: discord.Interaction, error: Exception):
     if isinstance(error, app_commands.CommandOnCooldown):
         try:
-            # Même logique : on affiche le temps restant
-            cd = int(error.retry_after)
-            m = cd // 60
-            s = cd % 60
-            if m > 0:
-                msg = f"Doucement le spam respire un peu fils. Reviens dans {m}m {s}s."
-            else:
-                msg = f"Doucement le spam respire un peu fils. Reviens dans {s}s."
+            # Même logique : bypass cooldown
+            # cd = int(error.retry_after)
+            # m = cd // 60
+            # s = cd % 60
+            # if m > 0:
+            #     msg = f"Doucement le spam respire un peu fils. Reviens dans {m}m {s}s."
+            # else:
+            #     msg = f"Doucement le spam respire un peu fils. Reviens dans {s}s."
             
-            if interaction.response.is_done():
-                await interaction.followup.send(msg, ephemeral=True)
-            else:
-                await interaction.response.send_message(msg, ephemeral=True)
+            # if interaction.response.is_done():
+            #     await interaction.followup.send(msg, ephemeral=True)
+            # else:
+            #     await interaction.response.send_message(msg, ephemeral=True)
+            pass # On ignore l'erreur silencieusement ou on pourrait tenter de relancer la commande slash mais c'est plus complexe
         except Exception:
             pass
         return

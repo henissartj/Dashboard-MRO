@@ -7,6 +7,10 @@ import datetime as dt
 import secrets
 import re
 import asyncio
+import random
+import io
+from PIL import Image, ImageDraw, ImageFont
+import plotly.graph_objects as go
 from zoneinfo import ZoneInfo
 from typing import Literal
 
@@ -19,6 +23,8 @@ DDL = [
         user_id BIGINT PRIMARY KEY,
         balance BIGINT NOT NULL DEFAULT 0,
         bank BIGINT NOT NULL DEFAULT 0,
+        bank_2 BIGINT NOT NULL DEFAULT 0,
+        bank_3 BIGINT NOT NULL DEFAULT 0,
         last_daily TIMESTAMP NULL,
         last_weekly TIMESTAMP NULL,
         last_monthly TIMESTAMP NULL
@@ -58,7 +64,80 @@ DDL = [
         setting_value VARCHAR(255)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """,
+    """
+    CREATE TABLE IF NOT EXISTS crypto_history (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        price DECIMAL(20, 8) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_properties (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id BIGINT NOT NULL,
+        property_key VARCHAR(32) NOT NULL,
+        last_collected TIMESTAMP NULL,
+        INDEX idx_user_prop (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_luxury (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id BIGINT NOT NULL,
+        item_key VARCHAR(32) NOT NULL,
+        purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        serial_number INT DEFAULT 0,
+        original_owner_id BIGINT DEFAULT NULL,
+        INDEX idx_user_lux (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS invoices (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        sender_id BIGINT NOT NULL,
+        receiver_id BIGINT NOT NULL,
+        amount BIGINT NOT NULL,
+        reason VARCHAR(255),
+        status VARCHAR(16) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_inv_recv (receiver_id),
+        INDEX idx_inv_send (sender_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
 ]
+
+# --- REAL ESTATE DATA ---
+PROPERTIES = {
+    "studio": {"name": "Studio miteux", "price": 50_000, "income": 500, "emoji": "🏚️", "desc": "Un petit trou à rat, mais c'est chez toi."},
+    "appartement": {"name": "Appartement Centre", "price": 200_000, "income": 2_500, "emoji": "🏢", "desc": "Un T3 sympa en centre-ville."},
+    "maison": {"name": "Maison de Banlieue", "price": 1_000_000, "income": 15_000, "emoji": "🏡", "desc": "Jardin, garage et barbecue le dimanche."},
+    "villa": {"name": "Villa de Luxe", "price": 5_000_000, "income": 80_000, "emoji": "🌴", "desc": "Piscine à débordement et vue sur la mer."},
+    "immeuble": {"name": "Gratte-ciel", "price": 20_000_000, "income": 350_000, "emoji": "🏙️", "desc": "Tu possèdes la skyline. Le patron."}
+}
+
+# --- LUXURY SHOP DATA ---
+LUXURY_ITEMS = {
+    "rolex": {"name": "Montre en Or", "price": 20_000, "emoji": "⌚", "type": "Accessoire"},
+    "sac": {"name": "Sac de Luxe", "price": 15_000, "emoji": "👜", "type": "Accessoire"},
+    "costume": {"name": "Costume Sur-Mesure", "price": 10_000, "emoji": "👔", "type": "Vêtement"},
+    "sportcar": {"name": "Voiture de Sport", "price": 150_000, "emoji": "🏎️", "type": "Véhicule"},
+    "supercar": {"name": "Supercar", "price": 2_000_000, "emoji": "🚀", "type": "Véhicule"},
+    "yacht": {"name": "Yacht Privé", "price": 10_000_000, "emoji": "🛥️", "type": "Véhicule"},
+    "jet": {"name": "Jet Privé", "price": 50_000_000, "emoji": "✈️", "type": "Véhicule"},
+    "island": {"name": "Île Privée", "price": 500_000_000, "emoji": "🏝️", "type": "Immobilier"}
+}
+
+# --- CONSTANTS ---
+BANK_TIERS = {
+    0: {"limit": 2_500, "price": 0, "name": "Compte Épargne Junior"},
+    1: {"limit": 20_000, "price": 10_000, "name": "Compte Standard"},
+    2: {"limit": 100_000, "price": 50_000, "name": "Compte Premium"},
+    3: {"limit": 500_000, "price": 200_000, "name": "Compte Gold"},
+    4: {"limit": 2_000_000, "price": 1_000_000, "name": "Compte Platinum"},
+    5: {"limit": 10_000_000, "price": 5_000_000, "name": "Compte Black (Offshore)"}
+}
+SUSPICIOUS_THRESHOLD = 50_000
 
 # Nouvelle fonction utilitaire pour le formatage abrégé et complet
 def format_currency_abbr(n: int) -> str:
@@ -111,6 +190,182 @@ def format_currency_abbr(n: int) -> str:
     return f"-{final_str}" if n < 0 else final_str
 
 
+class BalanceView(discord.ui.View):
+    def __init__(self, ctx, member, bal, bank1, bank2, bank3, fcoin, cur_emoji, cog):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+        self.member = member
+        self.bal = bal
+        self.bank1 = bank1
+        self.bank2 = bank2
+        self.bank3 = bank3
+        self.fcoin = fcoin
+        self.cur = cur_emoji
+        self.cog = cog
+        
+        # Determine available banks (if balance > 0)
+        # Note: User request: "faut pas que par défaut ça affiche 'banque 1, 2 et 3' alors que l'user les a pas forcément"
+        # Logic: Always show Main Bank (1). Show 2 & 3 only if they have funds OR if explicitly requested via button click?
+        # Better: Show buttons for all, but embed only shows active one.
+        
+        # Default view: Overview (Poche + Main Bank)
+        self.current_view = "main"
+        self.update_buttons()
+
+    def update_buttons(self):
+        self.clear_items()
+        
+        # Main Button
+        btn_main = discord.ui.Button(label="Principal", style=discord.ButtonStyle.primary if self.current_view == "main" else discord.ButtonStyle.secondary)
+        btn_main.callback = self.show_main
+        self.add_item(btn_main)
+        
+        # Bank 2 Button (Only if used or navigation)
+        # Showing button allows user to check even if 0
+        btn_b2 = discord.ui.Button(label="Banque 2", style=discord.ButtonStyle.primary if self.current_view == "bank2" else discord.ButtonStyle.secondary)
+        btn_b2.callback = self.show_bank2
+        self.add_item(btn_b2)
+
+        # Bank 3 Button
+        btn_b3 = discord.ui.Button(label="Banque 3", style=discord.ButtonStyle.primary if self.current_view == "bank3" else discord.ButtonStyle.secondary)
+        btn_b3.callback = self.show_bank3
+        self.add_item(btn_b3)
+
+    async def show_main(self, interaction: discord.Interaction):
+        if interaction.user != self.ctx.author: return await interaction.response.send_message("Tu n'es pas le propriétaire de ce compte.", ephemeral=True)
+        self.current_view = "main"
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    async def show_bank2(self, interaction: discord.Interaction):
+        if interaction.user != self.ctx.author: return await interaction.response.send_message("Tu n'es pas le propriétaire de ce compte.", ephemeral=True)
+        self.current_view = "bank2"
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    async def show_bank3(self, interaction: discord.Interaction):
+        if interaction.user != self.ctx.author: return await interaction.response.send_message("Tu n'es pas le propriétaire de ce compte.", ephemeral=True)
+        self.current_view = "bank3"
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    def get_embed(self):
+        emb = self.cog._bank_embed(
+            self.ctx,
+            title=f"Solde de {self.member.display_name}",
+            color=discord.Color.gold(),
+            actor=self.member
+        )
+        
+        # Poche is always visible
+        emb.add_field(name="Poche", value=f"{self.cog._fmt_amount(self.bal)} {self.cur}", inline=True)
+        
+        if self.current_view == "main":
+            emb.add_field(name="Banque 1", value=f"{self.cog._fmt_amount(self.bank1)} {self.cur}", inline=True)
+            if self.bank2 > 0 or self.bank3 > 0:
+                 emb.set_footer(text="D'autres fonds disponibles en Banque 2/3")
+        elif self.current_view == "bank2":
+            emb.add_field(name="Banque 2", value=f"{self.cog._fmt_amount(self.bank2)} {self.cur}", inline=True)
+        elif self.current_view == "bank3":
+            emb.add_field(name="Banque 3", value=f"{self.cog._fmt_amount(self.bank3)} {self.cur}", inline=True)
+            
+        return emb
+
+
+class InvoiceView(discord.ui.View):
+    def __init__(self, ctx, inv_id, amount, sender_id, cog):
+        super().__init__(timeout=600) # 10 minutes
+        self.ctx = ctx
+        self.inv_id = inv_id
+        self.amount = amount
+        self.sender_id = sender_id
+        self.cog = cog
+
+    @discord.ui.button(label="✅ Payer", style=discord.ButtonStyle.green)
+    async def pay_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # We need to call the payfacture command logic or reimplement it.
+        # Calling the command is cleaner if possible, but context is different (Interaction).
+        # Let's reimplement logic for speed and cleaner interaction response.
+        
+        await interaction.response.defer()
+        
+        # Security checks
+        await self.cog._connect()
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Re-check invoice status
+                await cur.execute("SELECT status FROM invoices WHERE id=%s", (self.inv_id,))
+                res = await cur.fetchone()
+                if not res:
+                    return await interaction.followup.send("❌ Facture introuvable.", ephemeral=True)
+                if res[0] != 'pending':
+                    return await interaction.followup.send(f"❌ Facture déjà {res[0]}.", ephemeral=True)
+                
+                # Check Balance
+                await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (interaction.user.id,))
+                res = await cur.fetchone()
+                if not res:
+                    return await interaction.followup.send("❌ Erreur compte utilisateur.", ephemeral=True)
+                bal, b1, b2, b3 = res
+                total_wealth = bal + b1 + b2 + b3
+                
+                if total_wealth < self.amount:
+                    return await interaction.followup.send("❌ Fonds insuffisants.", ephemeral=True)
+                
+                # Deduct
+                remaining = self.amount
+                new_bal, new_b1, new_b2, new_b3 = bal, b1, b2, b3
+                
+                if new_bal >= remaining: new_bal -= remaining; remaining = 0
+                else: remaining -= new_bal; new_bal = 0
+                if remaining > 0 and new_b1 >= remaining: new_b1 -= remaining; remaining = 0
+                elif remaining > 0: remaining -= new_b1; new_b1 = 0
+                if remaining > 0 and new_b2 >= remaining: new_b2 -= remaining; remaining = 0
+                elif remaining > 0: remaining -= new_b2; new_b2 = 0
+                if remaining > 0 and new_b3 >= remaining: new_b3 -= remaining; remaining = 0
+                elif remaining > 0: remaining -= new_b3; new_b3 = 0
+                
+                # Update Payer
+                await cur.execute(
+                    "UPDATE users SET balance=%s, bank=%s, bank_2=%s, bank_3=%s WHERE user_id=%s",
+                    (new_bal, new_b1, new_b2, new_b3, interaction.user.id)
+                )
+                
+                # Update Receiver
+                await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (self.amount, self.sender_id))
+                
+                # Update Invoice
+                await cur.execute("UPDATE invoices SET status='paid' WHERE id=%s", (self.inv_id,))
+                
+                # Log
+                is_suspect = 1 if self.amount >= SUSPICIOUS_THRESHOLD else 0
+                await cur.execute(
+                    "INSERT INTO transactions (type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    ('invoice', interaction.user.id, self.sender_id, self.amount, 'mix', 'success', is_suspect)
+                )
+                
+        await interaction.followup.send(f"✅ Facture #{self.inv_id} payée avec succès !")
+        self.stop()
+        # Disable buttons
+        for child in self.children:
+            child.disabled = True
+        await interaction.message.edit(view=self)
+
+    @discord.ui.button(label="❌ Refuser", style=discord.ButtonStyle.red)
+    async def refuse_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        await self.cog._connect()
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE invoices SET status='refused' WHERE id=%s", (self.inv_id,))
+        
+        await interaction.followup.send(f"🚫 Facture #{self.inv_id} refusée.")
+        self.stop()
+        for child in self.children:
+            child.disabled = True
+        await interaction.message.edit(view=self)
+
+
 class Economy(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -124,6 +379,7 @@ class Economy(commands.Cog):
         self._blackjack_sessions: dict[int, 'BlackjackGame'] = {}
         self._roulette_sessions: dict[int, dict] = {}
         self.logs_enabled = True # Default
+        self.illegal_cooldowns = commands.CooldownMapping.from_cooldown(1, 3600, commands.BucketType.user)
 
     async def _connect(self):
         if self.pool:
@@ -132,22 +388,48 @@ class Economy(commands.Cog):
         db = os.getenv("DB_NAME", "bot_fazer")
         user = os.getenv("DB_USER", "botfazer")
         pwd = os.getenv("DB_PASSWORD", "")
-        self.pool = await aiomysql.create_pool(
-            host=host, db=db, user=user, password=pwd, autocommit=True, minsize=1, maxsize=10
-        )
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                for sql in DDL:
-                    await cur.execute(sql)
-                # Load settings
-                await cur.execute("SELECT setting_value FROM settings WHERE setting_key='logs_enabled'")
-                row = await cur.fetchone()
-                if row:
-                    self.logs_enabled = (row[0] == "1")
-                else:
-                    # Insert default
-                    await cur.execute("INSERT INTO settings(setting_key, setting_value) VALUES('logs_enabled', '1')")
-                    self.logs_enabled = True
+        try:
+            print(f"[DEBUG] Connecting to DB {host} as {user}...")
+            self.pool = await aiomysql.create_pool(
+                host=host, db=db, user=user, password=pwd, autocommit=True, minsize=1, maxsize=10
+            )
+            print("[DEBUG] DB Connected successfully.")
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    for sql in DDL:
+                        await cur.execute(sql)
+                    
+                    # --- MIGRATIONS (Fixes pour tables existantes) ---
+                    try:
+                        await cur.execute("ALTER TABLE user_luxury ADD COLUMN serial_number INT DEFAULT 0")
+                    except Exception:
+                        pass
+                    try:
+                        await cur.execute("ALTER TABLE user_luxury ADD COLUMN original_owner_id BIGINT DEFAULT NULL")
+                    except Exception:
+                        pass
+                    try:
+                        await cur.execute("ALTER TABLE users ADD COLUMN bank_tier INT DEFAULT 0")
+                    except Exception:
+                        pass
+                    try:
+                        await cur.execute("ALTER TABLE transactions ADD COLUMN is_suspect TINYINT DEFAULT 0")
+                    except Exception:
+                        pass
+                    
+                    # Load settings
+                    await cur.execute("SELECT setting_value FROM settings WHERE setting_key='logs_enabled'")
+                    row = await cur.fetchone()
+                    if row:
+                        self.logs_enabled = (row[0] == "1")
+                    else:
+                        # Insert default
+                        await cur.execute("INSERT INTO settings(setting_key, setting_value) VALUES('logs_enabled', '1')")
+                        self.logs_enabled = True
+        except Exception as e:
+            print(f"[ERROR] DB Connection failed: {e}")
+            self.pool = None
+            raise e
 
     def _currency_emoji(self, ctx: commands.Context) -> str:
         try:
@@ -247,12 +529,16 @@ class Economy(commands.Cog):
 
         try:
             self._daily_reset_task.start()
+            self._daily_tax_task.start()
+            self._crypto_update_task.start()
         except Exception:
             pass
 
     def cog_unload(self):
         try:
             self._daily_reset_task.cancel()
+            self._daily_tax_task.cancel()
+            self._crypto_update_task.cancel()
         except Exception:
             pass
 
@@ -262,7 +548,61 @@ class Economy(commands.Cog):
             await self._connect()
             async with self.pool.acquire() as conn:
                 async with conn.cursor() as cur:
-                    await cur.execute("UPDATE users SET balance=0, bank=0")
+                    # Reset balance (poche) à 0 chaque jour. Les banques ne sont PAS reset.
+                    await cur.execute("UPDATE users SET balance=0")
+        except Exception:
+            pass
+
+    @tasks.loop(time=dt.time(hour=6, minute=5, tzinfo=ZoneInfo("Europe/Paris")))
+    async def _daily_tax_task(self):
+        try:
+            await self._connect()
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    # Appliquer une taxe quotidienne de 2% sur les banques
+                    await cur.execute("""
+                        UPDATE users 
+                        SET bank = FLOOR(bank * 0.98),
+                            bank_2 = FLOOR(bank_2 * 0.98),
+                            bank_3 = FLOOR(bank_3 * 0.98)
+                    """)
+        except Exception:
+            pass
+
+    @tasks.loop(seconds=10)
+    async def _crypto_update_task(self):
+        try:
+            await self._connect()
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    # Get current price
+                    await cur.execute("SELECT price FROM crypto_history ORDER BY created_at DESC LIMIT 1")
+                    row = await cur.fetchone()
+                    current_price = float(row[0]) if row else 1.25
+
+                    # Check for inflation (credits in last minute)
+                    await cur.execute("SELECT SUM(amount) FROM transactions WHERE type='credit' AND created_at >= NOW() - INTERVAL 1 MINUTE")
+                    res = await cur.fetchone()
+                    recent_credits = float(res[0]) if res and res[0] else 0
+
+                    volatility = 0.02
+                    bias = 0
+
+                    if recent_credits > 5000:
+                        volatility = 0.05
+                        bias = -0.01
+                        if recent_credits > 50000:
+                            volatility = 0.15
+                            bias = -0.05
+                    
+                    change = random.uniform(-volatility, volatility) + bias
+                    new_price = max(0.1, current_price * (1 + change))
+                    
+                    await cur.execute("INSERT INTO crypto_history(price) VALUES(%s)", (new_price,))
+                    
+                    # Cleanup old history periodically
+                    if random.random() < 0.01:
+                         await cur.execute("DELETE FROM crypto_history WHERE created_at < NOW() - INTERVAL 24 HOUR")
         except Exception:
             pass
 
@@ -294,28 +634,411 @@ class Economy(commands.Cog):
         
         await ctx.send(msg)
 
+
+    @commands.command(name="work", aliases=["w"])
+    @commands.cooldown(1, 60, commands.BucketType.user)
+    async def work(self, ctx: commands.Context):
+        """Travailler pour gagner un peu d'argent."""
+        await self._connect(); await self._ensure_user(ctx.author.id)
+        
+        earnings = random.randint(50, 200)
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (earnings, ctx.author.id))
+                
+                # Log (Optional for small amounts, but consistent)
+                if self.logs_enabled:
+                     await cur.execute(
+                        "INSERT INTO transactions (type, requester_id, target_id, amount, account, status) VALUES (%s, %s, %s, %s, %s, %s)",
+                        ('work', ctx.author.id, ctx.author.id, earnings, 'cash', 'success')
+                    )
+        
+        await ctx.send(f"🔨 Vous avez travaillé et gagné **{self._fmt_amount(earnings)}** {self._currency_emoji(ctx)}.")
+
+    @commands.command(name="braquage")
+    @commands.cooldown(1, 3600, commands.BucketType.user)
+    async def braquage(self, ctx: commands.Context, target: discord.Member):
+        """(Illégal) Tenter de braquer un joueur."""
+        if target.bot or target.id == ctx.author.id:
+            return await ctx.send("❌ Cible invalide.")
+        
+        await self._connect(); await self._ensure_user(ctx.author.id); await self._ensure_user(target.id)
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Check target balance
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (target.id,))
+                t_bal = (await cur.fetchone())[0]
+                
+                if t_bal < 100:
+                    return await ctx.send(f"❌ {target.display_name} est trop pauvre pour être braqué.")
+                
+                # 30% Success Rate
+                if random.random() < 0.3:
+                    # Success: Steal 10-50% of cash
+                    percent = random.uniform(0.1, 0.5)
+                    steal_amt = int(t_bal * percent)
+                    
+                    # Update balances
+                    await cur.execute("UPDATE users SET balance = balance - %s WHERE user_id=%s", (steal_amt, target.id))
+                    await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (steal_amt, ctx.author.id))
+                    
+                    # Log
+                    await cur.execute(
+                        "INSERT INTO transactions (type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, 1)",
+                        ('robbery_success', ctx.author.id, target.id, steal_amt, 'cash', 'success')
+                    )
+                    
+                    await ctx.send(f"🔫 **Braquage Réussi !** Vous avez volé {self._fmt_amount(steal_amt)} {self._currency_emoji(ctx)} à {target.mention} !")
+                else:
+                    # Fail: Pay fine (10% of own cash or 500 min)
+                    await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                    own_bal = (await cur.fetchone())[0]
+                    fine = max(500, int(own_bal * 0.1))
+                    
+                    if own_bal < fine: fine = own_bal # Take all if poor
+                    
+                    await cur.execute("UPDATE users SET balance = balance - %s WHERE user_id=%s", (fine, ctx.author.id))
+                    
+                    # Log
+                    await cur.execute(
+                        "INSERT INTO transactions (type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, 1)",
+                        ('robbery_fail', ctx.author.id, target.id, fine, 'cash', 'fail')
+                    )
+                    
+                    await ctx.send(f"👮 **Échec !** La police vous a attrapé. Amende : {self._fmt_amount(fine)} {self._currency_emoji(ctx)}.")
+
+    @commands.command(name="gofast")
+    @commands.cooldown(1, 7200, commands.BucketType.user)
+    async def gofast(self, ctx: commands.Context):
+        """(Illégal) Faire un Go-Fast (Risqué)."""
+        await self._connect(); await self._ensure_user(ctx.author.id)
+        
+        # Scenario
+        scenarios = [
+            {"msg": "🏎️ Vous foncez sur l'autoroute avec la cargaison...", "risk": 0.2, "reward": (5000, 15000)},
+            {"msg": "🚤 Vous traversez la frontière en hors-bord...", "risk": 0.4, "reward": (10000, 30000)},
+            {"msg": "✈️ Vous pilotez un avion rase-mottes...", "risk": 0.6, "reward": (25000, 80000)},
+        ]
+        
+        chosen = random.choice(scenarios)
+        msg = await ctx.send(f"{chosen['msg']} (Simulation en cours...)")
+        await asyncio.sleep(3)
+        
+        if random.random() > chosen['risk']:
+            # Success
+            reward = random.randint(*chosen['reward'])
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (reward, ctx.author.id))
+                    # Log
+                    await cur.execute(
+                        "INSERT INTO transactions (type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, 1)",
+                        ('gofast_success', ctx.author.id, ctx.author.id, reward, 'cash', 'success')
+                    )
+            await msg.edit(content=f"✅ **Succès !** La livraison est arrivée à bon port. Gain : {self._fmt_amount(reward)} {self._currency_emoji(ctx)}")
+        else:
+            # Fail
+            fine = random.randint(1000, 5000)
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("UPDATE users SET balance = balance - %s WHERE user_id=%s", (fine, ctx.author.id))
+                    # Log
+                    await cur.execute(
+                        "INSERT INTO transactions (type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, 1)",
+                        ('gofast_fail', ctx.author.id, ctx.author.id, fine, 'cash', 'fail')
+                    )
+            await msg.edit(content=f"🚓 **Interception !** La douane vous a coincé. Vous perdez la cargaison et payez {self._fmt_amount(fine)} {self._currency_emoji(ctx)} d'avocat.")
+
+    def _draw_credit_card_sync(self, user_name, user_id, bal, bank1, bank2, bank3, assets_val):
+        # Create base card image (Dark Gold/Black Gradient simulation)
+        width, height = 600, 350
+        image = Image.new('RGB', (width, height), color=(20, 20, 20))
+        draw = ImageDraw.Draw(image)
+        
+        # Background Gradient (Fake)
+        for y in range(height):
+            r = int(20 + (y / height) * 30)
+            g = int(20 + (y / height) * 30)
+            b = int(25 + (y / height) * 40)
+            draw.line([(0, y), (width, y)], fill=(r, g, b))
+            
+        # Border
+        draw.rectangle([(10, 10), (width-10, height-10)], outline=(212, 175, 55), width=5) # Gold border
+        
+        # Chip (Fake)
+        draw.rectangle([(50, 100), (110, 150)], fill=(212, 175, 55), outline=(0,0,0))
+        draw.line([(80, 100), (80, 150)], fill=(0,0,0), width=1)
+        draw.line([(50, 125), (110, 125)], fill=(0,0,0), width=1)
+
+        # Text
+        try:
+            # Try load font, fallback to default
+            font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+            font_med = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
+        except:
+            font_large = ImageFont.load_default()
+            font_med = ImageFont.load_default()
+            font_small = ImageFont.load_default()
+
+        # Bank Name
+        draw.text((width-250, 30), "MRO BANK", fill=(255, 255, 255), font=font_large)
+        
+        # Card Number (Fake)
+        card_num = f"4921  {str(user_id)[:4]}  {str(user_id)[4:8]}  {str(user_id)[8:12]}"
+        draw.text((50, 180), card_num, fill=(240, 240, 240), font=font_med)
+        
+        # Holder Name
+        draw.text((50, 280), user_name.upper(), fill=(255, 255, 255), font=font_med)
+        
+        # Exp Date
+        draw.text((450, 260), "VALID THRU", fill=(200, 200, 200), font=font_small)
+        draw.text((450, 285), "12/99", fill=(255, 255, 255), font=font_med)
+
+        # Balances (Right Side List)
+        # Using simple format_currency_abbr from global scope or reimplement small logic
+        def fmt(n):
+            if n >= 1_000_000_000: return f"{n/1_000_000_000:.1f}B"
+            if n >= 1_000_000: return f"{n/1_000_000:.1f}M"
+            if n >= 1_000: return f"{n/1_000:.1f}k"
+            return str(n)
+
+        # Draw Balances on Card (Bottom Right overlay or similar? maybe too crowded)
+        # Let's put total wealth top left
+        total = bal + bank1 + bank2 + bank3
+        draw.text((50, 40), f"WEALTH: ${fmt(total)}", fill=(212, 175, 55), font=font_small)
+
+        # Save
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        buffer.seek(0)
+        return buffer
+
+    @commands.command(name="card", aliases=["carte"])
+    async def card(self, ctx: commands.Context, member: discord.Member | None = None):
+        member = member or ctx.author
+        await self._connect(); await self._ensure_user(member.id)
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (member.id,))
+                res = await cur.fetchone()
+                if not res: res = (0, 0, 0, 0)
+                bal, bank1, bank2, bank3 = res
+                
+                # Get Assets Value
+                assets_val = 0
+                # Real Estate
+                await cur.execute("SELECT property_key FROM user_properties WHERE user_id=%s", (member.id,))
+                props = await cur.fetchall()
+                for p in props:
+                    if p[0] in PROPERTIES: assets_val += PROPERTIES[p[0]]['price']
+                
+                # Luxury
+                await cur.execute("SELECT item_key FROM user_luxury WHERE user_id=%s", (member.id,))
+                luxs = await cur.fetchall()
+                for l in luxs:
+                    if l[0] in LUXURY_ITEMS: assets_val += LUXURY_ITEMS[l[0]]['price']
+        
+        # Run sync drawing in executor
+        buf = await self.bot.loop.run_in_executor(
+            None, 
+            self._draw_credit_card_sync, 
+            member.display_name, 
+            member.id, 
+            bal, 
+            bank1, 
+            bank2, 
+            bank3,
+            assets_val
+        )
+        
+        file = discord.File(buf, filename="credit_card.png")
+        await ctx.send(f"Voici la carte de {member.mention}", file=file)
+
     @commands.command(name="balance", aliases=["bal"]) 
     async def balance(self, ctx: commands.Context, member: discord.Member | None = None):
         await self._connect(); member = member or ctx.author; await self._ensure_user(member.id)
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT balance, bank FROM users WHERE user_id=%s", (member.id,))
-                bal, bank = await cur.fetchone()
+                await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (member.id,))
+                res = await cur.fetchone()
+                if not res: res = (0, 0, 0, 0)
+                bal, bank1, bank2, bank3 = res
+        
+        cur_emoji = self._currency_emoji(ctx)
+        
+        # Check if View is needed (if user has money in other banks)
+        # User requested buttons anyway.
+        
+        view = BalanceView(ctx, member, bal, bank1, bank2, bank3, 0.0, cur_emoji, self)
+        await ctx.send(embed=view.get_embed(), view=view)
+
+    @commands.command(name="depobank", aliases=["db"])
+    async def depobank(self, ctx: commands.Context, bank_id: int, amount: str):
+        if bank_id not in (1, 2, 3):
+            emb = self._bank_embed(ctx, title="Erreur", description="Banque invalide. Utilisez 1, 2 ou 3.", color=discord.Color.red())
+            return await ctx.send(embed=emb)
+        
+        await self._connect(); await self._ensure_user(ctx.author.id)
+        
+        col_name = "bank" if bank_id == 1 else f"bank_{bank_id}"
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(f"SELECT balance, bank_tier, {col_name} FROM users WHERE user_id=%s", (ctx.author.id,))
+                res = await cur.fetchone()
+                bal, tier, current_bank = res
+                
+                amt = self._parse_bet_amount(amount, bal)
+                if amt <= 0:
+                    emb = self._bank_embed(ctx, title="Erreur", description="Montant invalide.", color=discord.Color.red())
+                    return await ctx.send(embed=emb)
+                
+                # Check Tier Limit
+                limit = BANK_TIERS.get(tier, BANK_TIERS[0])["limit"]
+                if current_bank + amt > limit:
+                    space = limit - current_bank
+                    emb = self._bank_embed(
+                        ctx, 
+                        title="Plafond Atteint", 
+                        description=f"❌ Votre palier ({BANK_TIERS.get(tier, {}).get('name', 'Inconnu')}) est limité à {self._fmt_amount(limit)} {self._currency_emoji(ctx)}.\nEspace libre : {self._fmt_amount(space)}.", 
+                        color=discord.Color.red()
+                    )
+                    emb.set_footer(text="Utilisez +upgrade_bank pour augmenter votre plafond.")
+                    return await ctx.send(embed=emb)
+
+                # Atomic Transaction: Update only if balance >= amount
+                await cur.execute(
+                    f"UPDATE users SET balance = balance - %s, {col_name} = {col_name} + %s WHERE user_id=%s AND balance >= %s",
+                    (amt, amt, ctx.author.id, amt)
+                )
+                
+                if cur.rowcount == 0:
+                    emb = self._bank_embed(ctx, title="Erreur", description="Pas assez en poche (ou transaction échouée).", color=discord.Color.red())
+                    return await ctx.send(embed=emb)
+
+                # Fetch new values for display
+                await cur.execute(f"SELECT balance, {col_name} FROM users WHERE user_id=%s", (ctx.author.id,))
+                new_bal, new_bank = await cur.fetchone()
+                
+                # Log Suspect
+                if amt >= SUSPICIOUS_THRESHOLD:
+                     await cur.execute(
+                        "INSERT INTO transactions (type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, 1)",
+                        ('deposit', ctx.author.id, ctx.author.id, amt, f'bank_{bank_id}', 'success')
+                    )
+
+        
         cur = self._currency_emoji(ctx)
         emb = self._bank_embed(
             ctx,
-            title=f"Solde de {member.display_name}",
-            color=discord.Color.gold(),
+            title=f"Dépôt Banque {bank_id}",
+            color=discord.Color.green(),
             fields=[
-                ("Poche", f"{self._fmt_amount(bal)} {cur}", True),
-                ("Banque", f"{self._fmt_amount(bank)} {cur}", True),
+                ("Montant", f"{self._fmt_amount(amt)} {cur}", True),
+                ("Nouveau Solde Banque", f"{self._fmt_amount(new_bank)} {cur}", True),
             ],
-            actor=member,
+            txn_id=self._txn_id(),
+        )
+        await ctx.send(embed=emb)
+
+    @commands.command(name="upgrade_bank", aliases=["upbank"])
+    async def upgrade_bank(self, ctx: commands.Context, tier_choice: int | None = None):
+        """Améliorer son compte bancaire pour augmenter le plafond."""
+        await self._connect(); await self._ensure_user(ctx.author.id)
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT bank_tier, balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                current_tier, bal = await cur.fetchone()
+                
+                if tier_choice is None:
+                    # Show Menu
+                    desc = f"**Votre Palier Actuel :** {BANK_TIERS.get(current_tier, {}).get('name')} (Max {self._fmt_amount(BANK_TIERS.get(current_tier, {}).get('limit'))})\n\n"
+                    desc += "**Paliers Disponibles :**\n"
+                    for t, data in BANK_TIERS.items():
+                        if t > current_tier:
+                            desc += f"`{t}` : **{data['name']}** — Max {self._fmt_amount(data['limit'])} — Prix : **{self._fmt_amount(data['price'])}**\n"
+                    
+                    desc += "\nUtilisez `+upgrade_bank <numero>` pour acheter."
+                    emb = self._bank_embed(ctx, title="⬆️ Amélioration Bancaire", description=desc, color=discord.Color.gold())
+                    return await ctx.send(embed=emb)
+                
+                if tier_choice <= current_tier:
+                    return await ctx.send("❌ Vous avez déjà ce palier ou mieux.")
+                
+                if tier_choice not in BANK_TIERS:
+                    return await ctx.send("❌ Palier invalide.")
+                
+                target_data = BANK_TIERS[tier_choice]
+                price = target_data["price"]
+                
+                if bal < price:
+                    return await ctx.send(f"❌ Pas assez d'argent en poche (Requis: {self._fmt_amount(price)}).")
+                
+                # Buy
+                await cur.execute("UPDATE users SET balance=balance-%s, bank_tier=%s WHERE user_id=%s", (price, tier_choice, ctx.author.id))
+                
+        await ctx.send(f"✅ Félicitations ! Vous êtes passé au palier **{target_data['name']}** (Max {self._fmt_amount(target_data['limit'])}).")
+
+    @commands.command(name="withbank", aliases=["wb"])
+    async def withbank(self, ctx: commands.Context, bank_id: int, amount: str):
+        if bank_id not in (1, 2, 3):
+            emb = self._bank_embed(ctx, title="Erreur", description="Banque invalide. Utilisez 1, 2 ou 3.", color=discord.Color.red())
+            return await ctx.send(embed=emb)
+        
+        await self._connect(); await self._ensure_user(ctx.author.id)
+        
+        col_name = "bank" if bank_id == 1 else f"bank_{bank_id}"
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(f"SELECT {col_name} FROM users WHERE user_id=%s", (ctx.author.id,))
+                bank_bal = (await cur.fetchone())[0]
+                
+                amt = self._parse_bet_amount(amount, bank_bal)
+                if amt <= 0:
+                    emb = self._bank_embed(ctx, title="Erreur", description="Montant invalide.", color=discord.Color.red())
+                    return await ctx.send(embed=emb)
+                
+                # Atomic Transaction
+                await cur.execute(
+                    f"UPDATE users SET balance = balance + %s, {col_name} = {col_name} - %s WHERE user_id=%s AND {col_name} >= %s",
+                    (amt, amt, ctx.author.id, amt)
+                )
+
+                if cur.rowcount == 0:
+                    emb = self._bank_embed(ctx, title="Erreur", description="Pas assez dans la banque (ou transaction échouée).", color=discord.Color.red())
+                    return await ctx.send(embed=emb)
+
+                # Fetch new values
+                await cur.execute(f"SELECT balance, {col_name} FROM users WHERE user_id=%s", (ctx.author.id,))
+                new_bal, new_bank = await cur.fetchone()
+
+        
+        cur = self._currency_emoji(ctx)
+        emb = self._bank_embed(
+            ctx,
+            title=f"Retrait Banque {bank_id}",
+            color=discord.Color.blue(),
+            fields=[
+                ("Montant", f"{self._fmt_amount(amt)} {cur}", True),
+                ("Nouveau Solde Banque", f"{self._fmt_amount(new_bank)} {cur}", True),
+            ],
+            txn_id=self._txn_id(),
         )
         await ctx.send(embed=emb)
 
     @commands.command(name="deposit", aliases=["dep"]) 
     async def deposit(self, ctx: commands.Context, amount: str):
+        """(Désactivé) Déposer de l'argent."""
+        emb = self._bank_embed(ctx, title="Action Impossible", description="❌ Les dépôts sont désactivés par la banque centrale.", color=discord.Color.red())
+        await ctx.send(embed=emb)
+        return
+
         await self._connect(); await self._ensure_user(ctx.author.id)
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -329,6 +1052,18 @@ class Economy(commands.Cog):
                 if bal < amt:
                     emb = self._bank_embed(ctx, title="Erreur", description="Pas assez en poche.", color=discord.Color.red())
                     return await ctx.send(embed=emb)
+                
+                # Limite de 100k (Banque 1)
+                MAX_CAPACITY = 100000
+                if bank + amt > MAX_CAPACITY:
+                    space = MAX_CAPACITY - bank
+                    if space <= 0:
+                        desc = "La banque est pleine (Max 100k)."
+                    else:
+                        desc = f"Limite de 100k atteinte. Tu ne peux déposer que {self._fmt_amount(space)} {self._currency_emoji(ctx)}."
+                    emb = self._bank_embed(ctx, title="Erreur", description=desc, color=discord.Color.red())
+                    return await ctx.send(embed=emb)
+
                 bal -= amt; bank += amt
                 await cur.execute("UPDATE users SET balance=%s, bank=%s WHERE user_id=%s", (bal, bank, ctx.author.id))
         cur = self._currency_emoji(ctx)
@@ -374,6 +1109,202 @@ class Economy(commands.Cog):
         )
         await ctx.send(embed=emb)
 
+    @commands.command(name="facture", aliases=["invoice", "bill"])
+    async def facture(self, ctx: commands.Context, target: discord.Member, amount: str, *, reason: str = "Aucun motif"):
+        """Envoyer une facture à un joueur."""
+        if target.bot or target.id == ctx.author.id:
+            return await ctx.send("❌ Cible invalide.")
+            
+        await self._connect(); await self._ensure_user(ctx.author.id); await self._ensure_user(target.id)
+        
+        # Check amount
+        # Need target balance for "all" ? No, fixed amount usually.
+        # Use a dummy balance for parsing.
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                 await cur.execute("SELECT balance FROM users WHERE user_id=%s", (target.id,))
+                 t_bal = (await cur.fetchone())[0]
+
+        amt_int = self._parse_bet_amount(amount, t_bal)     
+        if amt_int <= 0:
+            return await ctx.send("❌ Montant invalide.")
+            
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "INSERT INTO invoices (sender_id, receiver_id, amount, reason, status) VALUES (%s, %s, %s, %s, 'pending')",
+                    (ctx.author.id, target.id, amt_int, reason)
+                )
+                inv_id = cur.lastrowid
+                
+        cur_emoji = self._currency_emoji(ctx)
+        
+        # Notify Sender
+        await ctx.send(f"✅ Facture **#{inv_id}** de {self._fmt_amount(amt_int)} {cur_emoji} envoyée à {target.mention} pour : *{reason}*.")
+        
+        # Notify Receiver (Channel with Buttons)
+        emb = discord.Embed(
+            title="🧾 Facture Reçue",
+            description=f"**De :** {ctx.author.mention}\n**Montant :** {self._fmt_amount(amt_int)} {cur_emoji}\n**Motif :** {reason}",
+            color=discord.Color.orange()
+        )
+        emb.set_footer(text=f"ID: {inv_id}")
+        
+        view = InvoiceView(ctx, inv_id, amt_int, ctx.author.id, self)
+        await ctx.send(f"{target.mention}, vous avez reçu une facture !", embed=emb, view=view)
+
+    @commands.command(name="payfacture", aliases=["payinvoice", "pf"])
+    async def payfacture(self, ctx: commands.Context, invoice_id: int):
+        """(Obsolète) Payer une facture (Utilisez les boutons)."""
+        await ctx.send("ℹ️ Utilisez les boutons sous la facture pour payer ou refuser.")
+
+    @commands.command(name="admin_assets")
+    @commands.has_permissions(administrator=True)
+    async def admin_assets(self, ctx: commands.Context, action: str, target: discord.Member, asset_type: str = None, item_key: str = None):
+        """(Admin) Gérer les assets : list/remove <user> [immo/luxe] [key]"""
+        await self._connect(); await self._ensure_user(target.id)
+        
+        if action == "list":
+            # List all assets
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    # Immo
+                    await cur.execute("SELECT property_key FROM user_properties WHERE user_id=%s", (target.id,))
+                    props = await cur.fetchall()
+                    p_list = [f"`{p[0]}` ({PROPERTIES.get(p[0], {}).get('name', '?')})" for p in props]
+                    
+                    # Luxe
+                    await cur.execute("SELECT item_key, serial_number FROM user_luxury WHERE user_id=%s", (target.id,))
+                    luxs = await cur.fetchall()
+                    l_list = [f"`{l[0]}` (#{l[1]})" for l in luxs]
+            
+            desc = f"**Immobilier ({len(p_list)}) :**\n" + (", ".join(p_list) if p_list else "Aucun") + "\n\n"
+            desc += f"**Luxe ({len(l_list)}) :**\n" + (", ".join(l_list) if l_list else "Aucun")
+            
+            emb = self._bank_embed(ctx, title=f"Assets de {target.display_name}", description=desc, color=discord.Color.red())
+            await ctx.send(embed=emb)
+            
+        elif action == "remove":
+            if not asset_type or not item_key:
+                return await ctx.send("❌ Usage: `+admin_assets remove <user> <immo/luxe> <key>`")
+            
+            if asset_type not in ("immo", "luxe"):
+                return await ctx.send("❌ Type invalide (immo/luxe).")
+
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    if asset_type == "immo":
+                        await cur.execute("DELETE FROM user_properties WHERE user_id=%s AND property_key=%s", (target.id, item_key))
+                    else:
+                        await cur.execute("DELETE FROM user_luxury WHERE user_id=%s AND item_key=%s", (target.id, item_key))
+                    
+                    if cur.rowcount > 0:
+                        await ctx.send(f"✅ Asset `{item_key}` retiré à {target.display_name}.")
+                        # Log
+                        await cur.execute(
+                            "INSERT INTO transactions (type, requester_id, target_id, amount, account, status) VALUES (%s, %s, %s, %s, %s, %s)",
+                            ('admin_remove_asset', ctx.author.id, target.id, 0, asset_type, 'success')
+                        )
+                    else:
+                        await ctx.send("❌ Asset introuvable pour ce joueur.")
+
+    @commands.command(name="audit")
+    @commands.has_permissions(administrator=True) # Only admins? Or Police role? Let's say Admins for now.
+    async def audit(self, ctx: commands.Context, target: discord.Member):
+        """(Admin) Auditer les finances d'un joueur."""
+        await self._connect()
+        
+        embed = discord.Embed(title=f"🕵️ Rapport d'Audit : {target.display_name}", color=discord.Color.red())
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Wealth
+                await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (target.id,))
+                res = await cur.fetchone()
+                if not res: return await ctx.send("Utilisateur introuvable.")
+                bal, b1, b2, b3 = res
+                embed.add_field(name="💰 Richesse Actuelle", value=f"Cash: {self._fmt_amount(bal)}\nBanques: {self._fmt_amount(b1+b2+b3)}", inline=False)
+                
+                # Assets
+                await cur.execute("SELECT property_key FROM user_properties WHERE user_id=%s", (target.id,))
+                props = await cur.fetchall()
+                prop_val = sum(PROPERTIES[p[0]]['price'] for p in props if p[0] in PROPERTIES)
+                
+                await cur.execute("SELECT item_key FROM user_luxury WHERE user_id=%s", (target.id,))
+                luxs = await cur.fetchall()
+                lux_val = sum(LUXURY_ITEMS[l[0]]['price'] for l in luxs if l[0] in LUXURY_ITEMS)
+                
+                embed.add_field(name="🏰 Patrimoine", value=f"Immobilier: {self._fmt_amount(prop_val)}\nLuxe: {self._fmt_amount(lux_val)}", inline=False)
+
+                # Recent Inflows (Money In)
+                await cur.execute(
+                    "SELECT type, requester_id, amount, created_at FROM transactions WHERE target_id=%s AND type IN ('transfer', 'invoice') ORDER BY created_at DESC LIMIT 5",
+                    (target.id,)
+                )
+                inflows = await cur.fetchall()
+                in_txt = ""
+                for t in inflows:
+                    ttype, req_id, amt, date = t
+                    in_txt += f"• +{self._fmt_amount(amt)} de <@{req_id}> ({ttype}) le {date.strftime('%d/%m')}\n"
+                if not in_txt: in_txt = "Aucun mouvement suspect récent."
+                embed.add_field(name="📥 Entrées d'Argent (5 dernières)", value=in_txt, inline=False)
+                
+                # Recent Outflows (Money Out)
+                await cur.execute(
+                    "SELECT type, target_id, amount, created_at FROM transactions WHERE requester_id=%s AND type IN ('transfer', 'invoice') ORDER BY created_at DESC LIMIT 5",
+                    (target.id,)
+                )
+                outflows = await cur.fetchall()
+                out_txt = ""
+                for t in outflows:
+                    ttype, tgt_id, amt, date = t
+                    out_txt += f"• -{self._fmt_amount(amt)} vers <@{tgt_id}> ({ttype}) le {date.strftime('%d/%m')}\n"
+                if not out_txt: out_txt = "Aucune dépense majeure récente."
+                embed.add_field(name="📤 Sorties d'Argent (5 dernières)", value=out_txt, inline=False)
+
+        await ctx.send(embed=embed)
+
+    @commands.command(name="ecostats")
+    async def ecostats(self, ctx: commands.Context):
+        """Statistiques économiques globales du serveur."""
+        await self._connect()
+        cur_emoji = self._currency_emoji(ctx)
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Money Supply (M1)
+                await cur.execute("SELECT SUM(balance + bank + bank_2 + bank_3) FROM users")
+                m1 = (await cur.fetchone())[0] or 0
+                
+                # Real Estate Value
+                await cur.execute("SELECT property_key FROM user_properties")
+                all_props = await cur.fetchall()
+                prop_val = sum(PROPERTIES[p[0]]['price'] for p in all_props if p[0] in PROPERTIES)
+                
+                # Luxury Value
+                await cur.execute("SELECT item_key FROM user_luxury")
+                all_lux = await cur.fetchall()
+                lux_val = sum(LUXURY_ITEMS[l[0]]['price'] for l in all_lux if l[0] in LUXURY_ITEMS)
+                
+                # GDP (Gross Domestic Product - approximated by Total Wealth)
+                gdp = m1 + prop_val + lux_val
+                
+                # Richest Player
+                await cur.execute("SELECT user_id, (balance + bank + bank_2 + bank_3) as wealth FROM users ORDER BY wealth DESC LIMIT 1")
+                richest = await cur.fetchone()
+                
+        embed = discord.Embed(title="📊 Statistiques Économiques (INSEE)", color=discord.Color.dark_blue())
+        embed.add_field(name="💰 Masse Monétaire (Cash + Banques)", value=f"{self._fmt_amount(m1)} {cur_emoji}", inline=False)
+        embed.add_field(name="🏰 Valorisation Immobilière", value=f"{self._fmt_amount(prop_val)} {cur_emoji}", inline=True)
+        embed.add_field(name="💎 Marché du Luxe", value=f"{self._fmt_amount(lux_val)} {cur_emoji}", inline=True)
+        embed.add_field(name="🌍 PIB Total (Wealth)", value=f"**{self._fmt_amount(gdp)} {cur_emoji}**", inline=False)
+        
+        if richest:
+            share = (richest[1] / m1 * 100) if m1 > 0 else 0
+            embed.add_field(name="👑 Joueur le plus riche", value=f"<@{richest[0]}> possède {share:.1f}% de la masse monétaire.", inline=False)
+            
+        await ctx.send(embed=embed)
+
     @commands.command(name="send", aliases=["give","sd"]) 
     async def send(self, ctx: commands.Context, member: discord.Member, amount: str):
         await self._connect(); await self._ensure_user(ctx.author.id); await self._ensure_user(member.id)
@@ -410,8 +1341,8 @@ class Economy(commands.Cog):
         await self._connect()
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # Top 10 users based on total balance (poche + banque)
-                await cur.execute("SELECT user_id, (balance+bank) AS total FROM users ORDER BY total DESC LIMIT 10")
+                # Top 10 users based on total balance (poche + toutes les banques)
+                await cur.execute("SELECT user_id, (balance + bank + bank_2 + bank_3) AS total FROM users ORDER BY total DESC LIMIT 10")
                 rows = await cur.fetchall()
         
         cur = self._currency_emoji(ctx)
@@ -545,6 +1476,289 @@ class Economy(commands.Cog):
         )
         await ctx.send(embed=emb)
 
+    @commands.command(name="immo", aliases=["realestate"])
+    async def immo(self, ctx: commands.Context, action: str = None, name: str = None):
+        """Système immobilier: buy, list, collect"""
+        await self._connect()
+        cur_emoji = self._currency_emoji(ctx)
+        
+        if not action or action.lower() == "list":
+            embed = discord.Embed(title="🏢 Agence Immobilière", color=discord.Color.blue())
+            for key, data in PROPERTIES.items():
+                embed.add_field(
+                    name=f"{data['emoji']} {data['name']}",
+                    value=f"**Prix:** {self._fmt_amount(data['price'])} {cur_emoji}\n**Revenu:** {self._fmt_amount(data['income'])} {cur_emoji}/jour\n*{data['desc']}*",
+                    inline=False
+                )
+            embed.set_footer(text=f"Utilise {ctx.prefix}immo buy <nom> pour acheter")
+            return await ctx.send(embed=embed)
+
+        if action.lower() == "buy":
+            if not name:
+                return await ctx.send(f"❌ Indique le nom du bien à acheter (ex: `{ctx.prefix}immo buy studio`).")
+            
+            # Find property
+            prop_key = next((k for k in PROPERTIES if k.lower() == name.lower() or PROPERTIES[k]['name'].lower() == name.lower()), None)
+            if not prop_key:
+                return await ctx.send("❌ Ce bien n'existe pas. Regarde `+immo list`.")
+            
+            prop_data = PROPERTIES[prop_key]
+            price = prop_data['price']
+            
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    # Check balance
+                    await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (ctx.author.id,))
+                    res = await cur.fetchone()
+                    if not res: return await ctx.send("❌ Compte introuvable.")
+                    bal, b1, b2, b3 = res
+                    total_wealth = bal + b1 + b2 + b3
+                    
+                    if total_wealth < price:
+                        return await ctx.send(f"❌ T'as pas les sous. Il faut {self._fmt_amount(price)} {cur_emoji}.")
+                    
+                    # Deduct money (prioritize pocket, then banks)
+                    remaining = price
+                    new_bal = bal
+                    new_b1 = b1
+                    new_b2 = b2
+                    new_b3 = b3
+                    
+                    if new_bal >= remaining:
+                        new_bal -= remaining
+                        remaining = 0
+                    else:
+                        remaining -= new_bal
+                        new_bal = 0
+                        
+                    if remaining > 0:
+                        if new_b1 >= remaining:
+                            new_b1 -= remaining
+                            remaining = 0
+                        else:
+                            remaining -= new_b1
+                            new_b1 = 0
+                            
+                    if remaining > 0:
+                        if new_b2 >= remaining:
+                            new_b2 -= remaining
+                            remaining = 0
+                        else:
+                            remaining -= new_b2
+                            new_b2 = 0
+                            
+                    if remaining > 0:
+                        if new_b3 >= remaining:
+                            new_b3 -= remaining
+                            remaining = 0
+                        else:
+                            remaining -= new_b3
+                            new_b3 = 0
+                    
+                    # Update Balance
+                    await cur.execute(
+                        "UPDATE users SET balance=%s, bank=%s, bank_2=%s, bank_3=%s WHERE user_id=%s",
+                        (new_bal, new_b1, new_b2, new_b3, ctx.author.id)
+                    )
+                    
+                    # Add Property
+                    await cur.execute(
+                        "INSERT INTO user_properties (user_id, property_key, last_collected) VALUES (%s, %s, %s)",
+                        (ctx.author.id, prop_key, dt.datetime.now() - dt.timedelta(days=1)) # Ready to collect immediately? Or wait 24h? Let's say wait. Actually user expects immediate rent? No, real estate takes time. Let's set last_collected to NOW, so they wait 24h.
+                    )
+                    await conn.commit()
+            
+            await ctx.send(f"✅ Félicitations ! Tu es l'heureux propriétaire de **{prop_data['name']}** {prop_data['emoji']} !")
+            return
+
+        if action.lower() == "collect":
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT id, property_key, last_collected FROM user_properties WHERE user_id=%s", (ctx.author.id,))
+                    rows = await cur.fetchall()
+                    
+                    if not rows:
+                        return await ctx.send("❌ Tu n'as aucun bien immobilier.")
+                    
+                    total_income = 0
+                    now = dt.datetime.now()
+                    collected_count = 0
+                    
+                    for row in rows:
+                        pid, key, last = row
+                        if key not in PROPERTIES: continue
+                        
+                        # Check 24h cooldown
+                        if last and (now - last).total_seconds() < 86400:
+                            continue
+                            
+                        income = PROPERTIES[key]['income']
+                        total_income += income
+                        collected_count += 1
+                        
+                        # Update timestamp
+                        await cur.execute("UPDATE user_properties SET last_collected=%s WHERE id=%s", (now, pid))
+                    
+                    if total_income > 0:
+                        # Add to balance
+                        await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (total_income, ctx.author.id))
+                        await conn.commit()
+                        await ctx.send(f"✅ Loyers collectés : **{self._fmt_amount(total_income)}** {cur_emoji} (sur {collected_count} biens).")
+                    else:
+                        await ctx.send("❌ Aucun loyer à collecter pour le moment (reviens plus tard).")
+            return
+
+    @commands.command(name="luxury", aliases=["shopluxe", "luxe"])
+    async def luxury(self, ctx: commands.Context, action: str = None, item_name: str = None):
+        """Boutique de luxe et flex"""
+        await self._connect()
+        cur_emoji = self._currency_emoji(ctx)
+        
+        if not action or action.lower() == "list":
+            embed = discord.Embed(title="💎 Boutique de Luxe", color=discord.Color.purple())
+            
+            # Group by type
+            categories = {}
+            for k, v in LUXURY_ITEMS.items():
+                t = v.get('type', 'Autre')
+                if t not in categories: categories[t] = []
+                categories[t].append(v)
+            
+            for cat, items in categories.items():
+                desc = ""
+                for data in items:
+                    key = next(k for k, v in LUXURY_ITEMS.items() if v == data)
+                    desc += f"{data['emoji']} **{data['name']}** - {self._fmt_amount(data['price'])} {cur_emoji} (`{key}`)\n"
+                embed.add_field(name=f"--- {cat} ---", value=desc, inline=False)
+                
+            embed.set_footer(text=f"Utilise {ctx.prefix}luxury buy <nom_item> pour flex.")
+            return await ctx.send(embed=embed)
+
+        if action.lower() == "buy":
+            if not item_name:
+                return await ctx.send("❌ Qu'est-ce que tu veux acheter ?")
+            
+            item_key = next((k for k in LUXURY_ITEMS if k.lower() == item_name.lower() or LUXURY_ITEMS[k]['name'].lower() == item_name.lower()), None)
+            if not item_key:
+                return await ctx.send("❌ Cet article n'existe pas.")
+            
+            data = LUXURY_ITEMS[item_key]
+            price = data['price']
+            
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    # Check balance
+                    await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (ctx.author.id,))
+                    res = await cur.fetchone()
+                    if not res: return await ctx.send("❌ Compte introuvable.")
+                    bal, b1, b2, b3 = res
+                    total_wealth = bal + b1 + b2 + b3
+                    
+                    if total_wealth < price:
+                        return await ctx.send(f"❌ T'es trop pauvre pour ça. Il faut {self._fmt_amount(price)} {cur_emoji}.")
+                    
+                    # Deduct (Pocket -> Banks)
+                    remaining = price
+                    new_bal, new_b1, new_b2, new_b3 = bal, b1, b2, b3
+                    
+                    # Deduction Logic (Same as Real Estate)
+                    if new_bal >= remaining: new_bal -= remaining; remaining = 0
+                    else: remaining -= new_bal; new_bal = 0
+                    if remaining > 0 and new_b1 >= remaining: new_b1 -= remaining; remaining = 0
+                    elif remaining > 0: remaining -= new_b1; new_b1 = 0
+                    if remaining > 0 and new_b2 >= remaining: new_b2 -= remaining; remaining = 0
+                    elif remaining > 0: remaining -= new_b2; new_b2 = 0
+                    if remaining > 0 and new_b3 >= remaining: new_b3 -= remaining; remaining = 0
+                    elif remaining > 0: remaining -= new_b3; new_b3 = 0
+                    
+                    # Update Balance
+                    await cur.execute(
+                        "UPDATE users SET balance=%s, bank=%s, bank_2=%s, bank_3=%s WHERE user_id=%s",
+                        (new_bal, new_b1, new_b2, new_b3, ctx.author.id)
+                    )
+                    
+                    # Generate Serial Number
+                    await cur.execute("SELECT COUNT(*) FROM user_luxury WHERE item_key=%s", (item_key,))
+                    count = (await cur.fetchone())[0]
+                    serial = count + 1
+                    
+                    # Add Item
+                    await cur.execute(
+                        "INSERT INTO user_luxury (user_id, item_key, serial_number, original_owner_id) VALUES (%s, %s, %s, %s)", 
+                        (ctx.author.id, item_key, serial, ctx.author.id)
+                    )
+                    await conn.commit()
+            
+            await ctx.send(f"💎 **BOOM !** Tu viens d'acheter **{data['name']}** {data['emoji']} (Série #{serial}) ! T'es le roi du pétrole.")
+            return
+
+    @commands.command(name="assets", aliases=["biens", "patrimoine"])
+    async def assets(self, ctx: commands.Context, member: discord.Member = None):
+        """Affiche le patrimoine immobilier et luxe"""
+        member = member or ctx.author
+        await self._connect()
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Get Properties
+                await cur.execute("SELECT property_key, last_collected FROM user_properties WHERE user_id=%s", (member.id,))
+                props = await cur.fetchall()
+                
+                # Get Luxury
+                await cur.execute("SELECT item_key, purchase_date FROM user_luxury WHERE user_id=%s", (member.id,))
+                luxs = await cur.fetchall()
+        
+        embed = discord.Embed(title=f"🏰 Patrimoine de {member.display_name}", color=discord.Color.gold())
+        
+        # Properties Field
+        if props:
+            prop_list = ""
+            total_income = 0
+            prop_val = 0
+            counts = {}
+            
+            for p in props:
+                k = p[0]
+                if k in PROPERTIES:
+                    counts[k] = counts.get(k, 0) + 1
+                    total_income += PROPERTIES[k]['income']
+                    prop_val += PROPERTIES[k]['price']
+            
+            for k, count in counts.items():
+                data = PROPERTIES[k]
+                prop_list += f"{count}x {data['emoji']} **{data['name']}**\n"
+            
+            prop_list += f"\n💰 **Revenu total:** {self._fmt_amount(total_income)}/jour"
+            prop_list += f"\n🏘️ **Valeur Immo:** {self._fmt_amount(prop_val)}"
+            embed.add_field(name="Immobilier", value=prop_list, inline=False)
+        else:
+            embed.add_field(name="Immobilier", value="SDF (Sans Domicile Fixe)", inline=False)
+            prop_val = 0
+
+        # Luxury Field
+        if luxs:
+            lux_list = ""
+            lux_val = 0
+            lcounts = {}
+            for l in luxs:
+                k = l[0]
+                if k in LUXURY_ITEMS:
+                    lcounts[k] = lcounts.get(k, 0) + 1
+                    lux_val += LUXURY_ITEMS[k]['price']
+            
+            for k, count in lcounts.items():
+                data = LUXURY_ITEMS[k]
+                lux_list += f"{count}x {data['emoji']} **{data['name']}**\n"
+            
+            lux_list += f"\n💎 **Valeur Luxe:** {self._fmt_amount(lux_val)}"
+            embed.add_field(name="Objets de Luxe", value=lux_list, inline=False)
+        else:
+            embed.add_field(name="Objets de Luxe", value="Aucun flow.", inline=False)
+            lux_val = 0
+            
+        embed.set_footer(text=f"Valeur Totale des Actifs: {self._fmt_amount(prop_val + lux_val)}")
+        await ctx.send(embed=embed)
+
     @commands.command(name="inventory", aliases=["inv"]) 
     async def inventory(self, ctx: commands.Context, member: discord.Member | None = None):
         await self._connect(); member = member or ctx.author; await self._ensure_user(member.id)
@@ -555,6 +1769,46 @@ class Economy(commands.Cog):
         desc = "\n".join([f"{i} ×{q}" for i, q in rows]) or "Inventaire vide."
         emb = self._bank_embed(ctx, title=f"Inventaire de {member.display_name}", description=desc, color=discord.Color.blurple(), actor=member)
         await ctx.send(embed=emb)
+
+    @commands.command(name="transactions", aliases=["tx"])
+    async def transactions(self, ctx: commands.Context):
+        await self._connect()
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("""
+                        SELECT type, amount, created_at, requester_id, target_id 
+                        FROM transactions 
+                        ORDER BY created_at DESC LIMIT 10
+                    """)
+                    rows = await cur.fetchall()
+            
+            if not rows:
+                return await ctx.send("Aucune transaction récente.")
+            
+            cur_sym = self._currency_emoji(ctx)
+            fields = []
+            for r in rows:
+                ttype, amount, date, u1_id, u2_id = r
+                date_str = date.strftime("%H:%M:%S")
+                u1 = f"<@{u1_id}>" if u1_id else "Système"
+                u2 = f"<@{u2_id}>" if u2_id else "Système"
+                
+                if ttype == 'transfer':
+                    desc = f"{u1} ➔ {u2}"
+                elif ttype == 'deposit':
+                    desc = f"{u1} ➔ Banque"
+                elif ttype == 'withdraw':
+                    desc = f"Banque ➔ {u1}"
+                else:
+                    desc = f"{ttype} {u1}"
+                    
+                fields.append((f"{date_str} • {self._fmt_amount(amount)} {cur_sym}", desc, False))
+                
+            emb = self._bank_embed(ctx, title="Dernières Transactions", color=discord.Color.blue(), fields=fields)
+            await ctx.send(embed=emb)
+        except Exception as e:
+            await ctx.send(f"Erreur transactions: {e}")
 
     # cmd
     @commands.command(name="daily", aliases=["d"])
@@ -585,7 +1839,7 @@ class Economy(commands.Cog):
         )
         await ctx.send(embed=emb)
 
-    @commands.command(name="weekly", aliases=["w"]) 
+    @commands.command(name="weekly") 
     async def weekly(self, ctx: commands.Context):
         await self._connect(); await self._ensure_user(ctx.author.id)
         reward = 1000
@@ -2366,106 +3620,7 @@ class AdminTransactionView(discord.ui.View):
             return await ctx.send("Non autorisé.")
         emb = self._bank_embed(ctx, title="Système de bourse retiré", description="Cette fonction n’est plus disponible.", color=discord.Color.dark_gray())
         await ctx.send(embed=emb)
-
-    # système de bourse retiré
-
-    async def _run_market_tick(self):
-        await self._connect()
-        try:
-            print("market tick: start")
-        except Exception:
-            pass
-        import random
-        market_bias = random.uniform(-0.5, 0.8)
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT id, owner_id, name, price FROM enterprises")
-                rows = await cur.fetchall()
-                summaries = []
-                ch = await self._resolve_bourse_channel()
-                ctx_like = type("_Ctx", (), {"author": self.bot.user, "guild": getattr(ch, "guild", None)})() if ch else None
-                cur_emoji = self._currency_emoji(ctx_like) if ctx_like else ""
-                if not ch:
-                    try:
-                        print("bourse channel not found; notifications skipped")
-                    except Exception:
-                        pass
-                for eid, owner_id, name, price in rows:
-                    self._prev_prices[eid] = price
-                    noise = random.uniform(-0.25, 0.35)
-                    factor = market_bias + noise
-                    if random.random() < 0.25:
-                        factor *= random.uniform(1.2, 2.0)
-                    if abs(factor) < 0.12:
-                        factor = (1 if random.random() < 0.5 else -1) * random.uniform(0.2, 0.5)
-                    if factor > 0.9:
-                        factor = 0.9
-                    if factor < -0.9:
-                        factor = -0.9
-                    change = int(price * factor)
-                    new_price = max(100, price + change)
-                    bonus = max(1, int(new_price * 0.02))
-                    await cur.execute("UPDATE enterprises SET price=%s WHERE id=%s", (new_price, eid))
-                    self._last_prices[eid] = new_price
-                    await cur.execute("UPDATE users SET bank=bank+%s WHERE user_id=%s", (bonus, owner_id))
-                    txid = secrets.token_hex(4)
-                    if self.logs_enabled:
-                        await cur.execute(
-                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                            (txid, "win", owner_id, owner_id, bonus, "bank", "won"),
-                        )
-                    prev = price
-                    delta = new_price - prev
-                    pct = (delta / prev * 100.0) if prev > 0 else 0.0
-                    try:
-                        print(f"market update: {name} {self._fmt_amount(prev)} -> {self._fmt_amount(new_price)} ({pct:+.2f}%)")
-                    except Exception:
-                        pass
-                    summaries.append((name, prev, new_price, delta, pct))
-                    if ch and ctx_like:
-                        try:
-                            status = "↗︎ en hausse" if delta > 0 else ("↘︎ en baisse" if delta < 0 else "→ stable")
-                            desc = (
-                                f"Prix: {self._fmt_amount(prev)} → {self._fmt_amount(new_price)} {cur_emoji}\n"
-                                f"Variation: {('+' if delta>0 else '')}{self._fmt_amount(delta)} ({pct:+.2f}%) • {status}\n\n"
-                                f"Acheter/Vendre: utilise `/bourse {name}` pour voir tes parts et décider."
-                            )
-                            emb = self._bank_embed(ctx_like, title=f"Bourse • {name}", description=desc, color=discord.Color.orange())
-                            await ch.send(embed=emb)
-                        except Exception as e:
-                            try:
-                                print(f"bourse send error: {e}")
-                            except Exception:
-                                pass
-                if ch and ctx_like and summaries:
-                    try:
-                        avg = sum(p for _, _, _, _, p in summaries) / len(summaries)
-                        status = "↗︎ marché en forte hausse" if avg > 0 else ("↘︎ marché en forte baisse" if avg < 0 else "→ marché stable")
-                        top = sorted(summaries, key=lambda t: abs(t[3]), reverse=True)[:10]
-                        lines = [
-                            f"{n}: {('+' if d>0 else '')}{self._fmt_amount(d)} ({p:+.2f}%)"
-                            for n, _, _, d, p in top
-                        ]
-                        desc = f"{status}\n\n" + "\n".join(lines)
-                        emb = self._bank_embed(ctx_like, title="Bourse • Mise à jour du marché", description=desc, color=discord.Color.red())
-                        await ch.send(embed=emb)
-                    except Exception as e:
-                        try:
-                            print(f"bourse summary error: {e}")
-                        except Exception:
-                            pass
-                try:
-                    await self.bot.tree.sync()
-                except Exception:
-                    pass
-        try:
-            print("market tick: end")
-        except Exception:
-            pass
-
-    # système de bourse retiré
-
-
+        
 async def setup(bot: commands.Bot):
     await bot.add_cog(Economy(bot))
     tree = bot.tree
