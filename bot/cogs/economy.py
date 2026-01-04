@@ -93,6 +93,17 @@ DDL = [
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """,
     """
+    CREATE TABLE IF NOT EXISTS user_card_customization (
+        user_id BIGINT PRIMARY KEY,
+        bg_type VARCHAR(32) NOT NULL DEFAULT 'gradient',
+        bg_color_start VARCHAR(16) NOT NULL DEFAULT '#141414',
+        bg_color_end VARCHAR(16) NOT NULL DEFAULT '#191928',
+        border_color VARCHAR(16) NOT NULL DEFAULT '#D4AF37',
+        text_color VARCHAR(16) NOT NULL DEFAULT '#FFFFFF',
+        pattern_overlay VARCHAR(32) DEFAULT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
+    """
     CREATE TABLE IF NOT EXISTS invoices (
         id INT AUTO_INCREMENT PRIMARY KEY,
         sender_id BIGINT NOT NULL,
@@ -137,6 +148,43 @@ BANK_TIERS = {
     4: {"limit": 2_000_000, "price": 1_000_000, "name": "Compte Platinum"},
     5: {"limit": 10_000_000, "price": 5_000_000, "name": "Compte Black (Offshore)"}
 }
+
+# --- CARD CUSTOMIZATION ---
+CARD_OPTS = {
+    "colors": {
+        "black": ("#000000", "#1a1a1a", 5_000),
+        "gold": ("#B8860B", "#FFD700", 50_000),
+        "platinum": ("#E5E4E2", "#C0C0C0", 25_000),
+        "red": ("#8B0000", "#FF0000", 10_000),
+        "blue": ("#00008B", "#0000FF", 10_000),
+        "green": ("#006400", "#00FF00", 10_000),
+        "purple": ("#4B0082", "#8A2BE2", 15_000),
+        "pink": ("#FF1493", "#FF69B4", 15_000),
+        "white": ("#D3D3D3", "#FFFFFF", 20_000),
+        "rainbow": ("#FF0000", "#0000FF", 100_000), # Special logic for rainbow?
+    },
+    "borders": {
+        "gold": ("#D4AF37", 5_000),
+        "silver": ("#C0C0C0", 2_000),
+        "black": ("#000000", 1_000),
+        "white": ("#FFFFFF", 2_000),
+        "red": ("#FF0000", 1_000),
+        "neon_blue": ("#00FFFF", 10_000),
+        "neon_green": ("#39FF14", 10_000),
+        "invisible": ("None", 50_000)
+    },
+    "patterns": {
+        "none": (None, 0),
+        "dots": ("dots", 5_000),
+        "lines": ("lines", 5_000),
+        "hex": ("hex", 10_000),
+        "diamond": ("diamond", 15_000),
+        "circuit": ("circuit", 25_000),
+        "skull": ("skull", 50_000),
+        "money": ("money", 50_000)
+    }
+}
+
 SUSPICIOUS_THRESHOLD = 50_000
 
 # Nouvelle fonction utilitaire pour le formatage abrégé et complet
@@ -674,6 +722,12 @@ class Economy(commands.Cog):
                 if t_bal < 100:
                     return await ctx.send(f"❌ {target.display_name} est trop pauvre pour être braqué.")
                 
+                # Check robber balance
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                robber_bal = (await cur.fetchone())[0]
+                if robber_bal < 500:
+                     return await ctx.send("❌ T'as pas assez d'argent pour payer l'amende en cas d'échec (min 500). Va travailler.")
+                
                 # 30% Success Rate
                 if random.random() < 0.3:
                     # Success: Steal 10-50% of cash
@@ -737,35 +791,126 @@ class Economy(commands.Cog):
                         "INSERT INTO transactions (type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, 1)",
                         ('gofast_success', ctx.author.id, ctx.author.id, reward, 'cash', 'success')
                     )
-            await msg.edit(content=f"✅ **Succès !** La livraison est arrivée à bon port. Gain : {self._fmt_amount(reward)} {self._currency_emoji(ctx)}")
+            try:
+                await msg.edit(content=f"✅ **Succès !** La livraison est arrivée à bon port. Gain : {self._fmt_amount(reward)} {self._currency_emoji(ctx)}")
+            except Exception:
+                await ctx.send(f"✅ **Succès !** Gain : {self._fmt_amount(reward)} {self._currency_emoji(ctx)}")
         else:
             # Fail
             fine = random.randint(1000, 5000)
             async with self.pool.acquire() as conn:
                 async with conn.cursor() as cur:
+                    # Check balance to avoid negative (crash)
+                    await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                    row = await cur.fetchone()
+                    current_bal = row[0] if row else 0
+                    
+                    if current_bal < fine:
+                        fine = current_bal # Take all they have if they are poor
+                        
                     await cur.execute("UPDATE users SET balance = balance - %s WHERE user_id=%s", (fine, ctx.author.id))
                     # Log
                     await cur.execute(
                         "INSERT INTO transactions (type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, 1)",
                         ('gofast_fail', ctx.author.id, ctx.author.id, fine, 'cash', 'fail')
                     )
-            await msg.edit(content=f"🚓 **Interception !** La douane vous a coincé. Vous perdez la cargaison et payez {self._fmt_amount(fine)} {self._currency_emoji(ctx)} d'avocat.")
+            try:
+                await msg.edit(content=f"🚓 **Interception !** La douane vous a coincé. Vous perdez la cargaison et payez {self._fmt_amount(fine)} {self._currency_emoji(ctx)} d'avocat.")
+            except Exception:
+                await ctx.send(f"🚓 **Interception !** Vous payez {self._fmt_amount(fine)} {self._currency_emoji(ctx)} d'avocat.")
 
-    def _draw_credit_card_sync(self, user_name, user_id, bal, bank1, bank2, bank3, assets_val):
-        # Create base card image (Dark Gold/Black Gradient simulation)
+    def _hex_to_rgb(self, hex_val):
+        try:
+            hex_val = hex_val.lstrip('#')
+            return tuple(int(hex_val[i:i+2], 16) for i in (0, 2, 4))
+        except:
+            return (20, 20, 20)
+
+    def _draw_credit_card_sync(self, user_name, user_id, bal, bank1, bank2, bank3, assets_val, card_style=None):
+        # Defaults
+        start_c = (20, 20, 20)
+        end_c = (25, 25, 40)
+        border_c = (212, 175, 55)
+        text_c = (255, 255, 255)
+        pattern = None
+        
+        if card_style:
+            # card_style = (bg_start, bg_end, border, text, pattern) strings
+            try:
+                start_c = self._hex_to_rgb(card_style[0])
+                end_c = self._hex_to_rgb(card_style[1])
+                if card_style[2] != "None":
+                    border_c = self._hex_to_rgb(card_style[2])
+                else:
+                    border_c = None
+                text_c = self._hex_to_rgb(card_style[3])
+                pattern = card_style[4]
+            except:
+                pass
+
+        # Create base card image
         width, height = 600, 350
-        image = Image.new('RGB', (width, height), color=(20, 20, 20))
+        image = Image.new('RGB', (width, height), color=start_c)
         draw = ImageDraw.Draw(image)
         
-        # Background Gradient (Fake)
+        # Background Gradient
+        r1, g1, b1 = start_c
+        r2, g2, b2 = end_c
         for y in range(height):
-            r = int(20 + (y / height) * 30)
-            g = int(20 + (y / height) * 30)
-            b = int(25 + (y / height) * 40)
+            ratio = y / height
+            r = int(r1 + (r2 - r1) * ratio)
+            g = int(g1 + (g2 - g1) * ratio)
+            b = int(b1 + (b2 - b1) * ratio)
             draw.line([(0, y), (width, y)], fill=(r, g, b))
             
+        # Pattern Overlay
+        if pattern:
+            overlay = Image.new('RGBA', (width, height), (0,0,0,0))
+            d_ov = ImageDraw.Draw(overlay)
+            p_col = (255, 255, 255, 30) # Low opacity white
+            
+            if pattern == "dots":
+                for x in range(0, width, 20):
+                    for y in range(0, height, 20):
+                        d_ov.ellipse([x, y, x+2, y+2], fill=p_col)
+            elif pattern == "lines":
+                for x in range(0, width+height, 20):
+                    d_ov.line([(x, 0), (0, x)], fill=p_col, width=2)
+            elif pattern == "hex":
+                # Simple fake hex
+                for x in range(0, width, 40):
+                    for y in range(0, height, 40):
+                         d_ov.polygon([(x+10, y), (x+30, y), (x+40, y+20), (x+30, y+40), (x+10, y+40), (x, y+20)], outline=p_col)
+            elif pattern == "diamond":
+                for x in range(0, width, 30):
+                    for y in range(0, height, 30):
+                         d_ov.polygon([(x+15, y), (x+30, y+15), (x+15, y+30), (x, y+15)], outline=p_col)
+            elif pattern == "circuit":
+                for _ in range(20):
+                    x1, y1 = random.randint(0, width), random.randint(0, height)
+                    x2, y2 = x1 + random.randint(-50, 50), y1
+                    x3, y3 = x2, y2 + random.randint(-50, 50)
+                    d_ov.line([(x1, y1), (x2, y2), (x3, y3)], fill=p_col, width=2)
+                    d_ov.ellipse([x1-2, y1-2, x1+2, y1+2], fill=p_col)
+            elif pattern == "skull":
+                 try:
+                    # Fallback font if bold not found
+                    f_skull = font_large
+                    d_ov.text((width//2 - 30, height//2 - 30), "☠️", font=f_skull, fill=(255,255,255,50))
+                 except: pass
+            elif pattern == "money":
+                 try:
+                    f_mon = font_large
+                    for _ in range(10):
+                        d_ov.text((random.randint(0, width), random.randint(0, height)), "$", font=f_mon, fill=p_col)
+                 except: pass
+
+            image.paste(overlay, (0,0), overlay)
+
         # Border
-        draw.rectangle([(10, 10), (width-10, height-10)], outline=(212, 175, 55), width=5) # Gold border
+        if border_c:
+            draw.rectangle([(10, 10), (width-10, height-10)], outline=border_c, width=5)
+
         
         # Chip (Fake)
         draw.rectangle([(50, 100), (110, 150)], fill=(212, 175, 55), outline=(0,0,0))
@@ -841,6 +986,10 @@ class Economy(commands.Cog):
                 luxs = await cur.fetchall()
                 for l in luxs:
                     if l[0] in LUXURY_ITEMS: assets_val += LUXURY_ITEMS[l[0]]['price']
+
+                # Get Customization
+                await cur.execute("SELECT bg_color_start, bg_color_end, border_color, text_color, pattern_overlay FROM user_card_customization WHERE user_id=%s", (member.id,))
+                custom = await cur.fetchone()
         
         # Run sync drawing in executor
         buf = await self.bot.loop.run_in_executor(
@@ -852,11 +1001,88 @@ class Economy(commands.Cog):
             bank1, 
             bank2, 
             bank3,
-            assets_val
+            assets_val,
+            custom
         )
         
         file = discord.File(buf, filename="credit_card.png")
         await ctx.send(f"Voici la carte de {member.mention}", file=file)
+
+    @commands.command(name="customize_card", aliases=["ccard"])
+    async def customize_card(self, ctx: commands.Context, category: str = None, choice: str = None):
+        """Personnaliser sa carte bancaire (Luxury)"""
+        prefix = ctx.prefix
+        cur_emoji = self._currency_emoji(ctx)
+        
+        if not category:
+            embed = discord.Embed(title="🎨 Atelier de Personnalisation CB", color=discord.Color.gold())
+            embed.description = "Rends ta carte unique. Les prix sont salés, c'est du luxe.\n\n" \
+                                f"**Usage:** `{prefix}customize_card <categorie> <choix>`"
+            
+            # Colors
+            colors_list = ", ".join([f"`{k}` ({self._fmt_amount(v[2])})" for k, v in CARD_OPTS['colors'].items()])
+            embed.add_field(name="🌈 Couleurs (Fond)", value=colors_list, inline=False)
+            
+            # Borders
+            borders_list = ", ".join([f"`{k}` ({self._fmt_amount(v[1])})" for k, v in CARD_OPTS['borders'].items()])
+            embed.add_field(name="🖼️ Bordures", value=borders_list, inline=False)
+            
+            # Patterns
+            patterns_list = ", ".join([f"`{k}` ({self._fmt_amount(v[1])})" for k, v in CARD_OPTS['patterns'].items()])
+            embed.add_field(name="✨ Motifs", value=patterns_list, inline=False)
+            
+            embed.set_footer(text="Exemple: +ccard colors black")
+            return await ctx.send(embed=embed)
+            
+        category = category.lower()
+        choice = choice.lower() if choice else None
+        
+        if category not in CARD_OPTS:
+            return await ctx.send("❌ Catégorie invalide. (colors, borders, patterns)")
+            
+        if not choice:
+            return await ctx.send(f"❌ Choisis une option pour `{category}`.")
+            
+        if choice not in CARD_OPTS[category]:
+             return await ctx.send(f"❌ Choix invalide pour `{category}`.")
+             
+        # Calculate Price and Data
+        if category == "colors":
+            data = CARD_OPTS['colors'][choice]
+            price = data[2]
+            sql = "INSERT INTO user_card_customization (user_id, bg_color_start, bg_color_end) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE bg_color_start=%s, bg_color_end=%s"
+            params = (ctx.author.id, data[0], data[1], data[0], data[1])
+            
+        elif category == "borders":
+            data = CARD_OPTS['borders'][choice]
+            price = data[1]
+            sql = "INSERT INTO user_card_customization (user_id, border_color) VALUES (%s, %s) ON DUPLICATE KEY UPDATE border_color=%s"
+            params = (ctx.author.id, data[0], data[0])
+            
+        elif category == "patterns":
+            data = CARD_OPTS['patterns'][choice]
+            price = data[1]
+            sql = "INSERT INTO user_card_customization (user_id, pattern_overlay) VALUES (%s, %s) ON DUPLICATE KEY UPDATE pattern_overlay=%s"
+            params = (ctx.author.id, data[0], data[0])
+            
+        # Purchase Transaction
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                bal = (await cur.fetchone())[0]
+                
+                if bal < price:
+                    return await ctx.send(f"❌ Trop pauvre. Il te faut {self._fmt_amount(price)} {cur_emoji}.")
+                
+                # Pay
+                await cur.execute("UPDATE users SET balance = balance - %s WHERE user_id=%s", (price, ctx.author.id))
+                
+                # Apply Customization
+                await cur.execute(sql, params)
+                await conn.commit()
+                
+        await ctx.send(f"🎨 **Succès !** Ta carte a été pimpée avec l'option **{choice}** pour {self._fmt_amount(price)} {cur_emoji}. Fais `+card` pour voir.")
 
     @commands.command(name="balance", aliases=["bal"]) 
     async def balance(self, ctx: commands.Context, member: discord.Member | None = None):
@@ -1366,37 +1592,68 @@ class Economy(commands.Cog):
         emb.set_footer(text="Basé sur le solde total (poche + banque).")
         await ctx.send(embed=emb)
 
-    # Shop commands
-    @commands.command(name="shop", aliases=["sh"]) 
-    async def shop(self, ctx: commands.Context, item_name: str | None = None):
+    @commands.command(name="fcoin", help="Affiche le cours du Fcoin")
+    async def fcoin(self, ctx: commands.Context):
         await self._connect()
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                if item_name:
-                    await cur.execute("SELECT item, buy_price, sell_price FROM shop WHERE item=%s", (item_name,))
-                    row = await cur.fetchone()
-                    if not row:
-                        emb = self._bank_embed(ctx, title="Erreur", description="Item introuvable.", color=discord.Color.red())
-                        return await ctx.send(embed=emb)
-                    item, buy, sell = row
-                    cur = self._currency_emoji(ctx)
-                    emb = self._bank_embed(
-                        ctx,
-                        title=f"Infos {item}",
-                        color=discord.Color.teal(),
-                        fields=[
-                            ("Prix d’achat", f"{self._fmt_amount(buy)} {cur}", True),
-                            ("Prix de vente", f"{self._fmt_amount(sell)} {cur}", True),
-                        ],
-                        actor=ctx.author,
-                    )
-                    return await ctx.send(embed=emb)
-                await cur.execute("SELECT item, buy_price, sell_price FROM shop ORDER BY buy_price ASC")
+                await cur.execute("SELECT price, created_at FROM crypto_history ORDER BY created_at DESC LIMIT 50")
                 rows = await cur.fetchall()
-        cur = self._currency_emoji(ctx)
-        desc = "\n".join([f"{i} — buy {self._fmt_amount(bp)} / sell {self._fmt_amount(sp)} {cur}" for i, bp, sp in rows]) or "Shop vide."
-        emb = self._bank_embed(ctx, title="Shop", description=desc, color=discord.Color.teal())
-        await ctx.send(embed=emb)
+        
+        if not rows:
+            return await ctx.send("Pas de données boursières.")
+            
+        rows = list(rows)
+        rows.reverse() # Chronological order
+        prices = [float(r[0]) for r in rows]
+        dates = [r[1] for r in rows]
+        
+        # Plot
+        fig = go.Figure(data=go.Scatter(x=dates, y=prices, mode='lines+markers', line=dict(color='#00ff00', width=2)))
+        fig.update_layout(
+            title="Cours du Fcoin",
+            xaxis_title="Temps",
+            yaxis_title="Valeur (Fcoins)",
+            template="plotly_dark",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)'
+        )
+        
+        img_bytes = fig.to_image(format="png")
+        file = discord.File(io.BytesIO(img_bytes), filename="fcoin.png")
+        
+        last_price = prices[-1]
+        prev_price = prices[-2] if len(prices) > 1 else last_price
+        diff = last_price - prev_price
+        diff_str = f"+{diff:.2f}" if diff >= 0 else f"{diff:.2f}"
+        
+        embed = discord.Embed(title="Fcoin Market", color=discord.Color.green() if diff >= 0 else discord.Color.red())
+        embed.add_field(name="Prix Actuel", value=f"{last_price:.2f}", inline=True)
+        embed.add_field(name="Variation", value=diff_str, inline=True)
+        embed.set_image(url="attachment://fcoin.png")
+        
+        await ctx.send(embed=embed, file=file)
+
+    @commands.command(name="maj", help="Nouveautés de la mise à jour")
+    async def maj(self, ctx: commands.Context):
+        embed = discord.Embed(title="📜 Note de Mise à Jour", color=discord.Color.gold())
+        embed.description = "**Derniers ajouts et correctifs :**"
+        
+        changes = [
+            "✅ **+market** : Nouvelle place de marché unifiée (Immo, Luxe, Objets).",
+            "✅ **+immo sell** : Possibilité de revendre ses biens immobiliers (70% du prix).",
+            "✅ **+luxury give** : Possibilité de transférer des objets de luxe à un autre joueur.",
+            "✅ **+braquage** : Sécurité ajoutée (il faut avoir de quoi payer l'amende).",
+            "✅ **+gofast** : Correction du bug de disparition du message et du crash.",
+            "✅ **+fcoin** : Retour du graphique boursier (corrigé).",
+            "✅ **+help** : Menu d'aide mis à jour."
+        ]
+        
+        embed.add_field(name="Changelog", value="\n".join(changes), inline=False)
+        embed.set_footer(text="Le dev travaille dur pour le quartier 🦾")
+        
+        await ctx.send(embed=embed)
+
 
     @commands.command(name="buy", aliases=["b"]) 
     async def buy(self, ctx: commands.Context, item_name: str):
@@ -1477,8 +1734,8 @@ class Economy(commands.Cog):
         await ctx.send(embed=emb)
 
     @commands.command(name="immo", aliases=["realestate"])
-    async def immo(self, ctx: commands.Context, action: str = None, name: str = None):
-        """Système immobilier: buy, list, collect"""
+    async def immo(self, ctx: commands.Context, action: str = None, *, name: str = None):
+        """Système immobilier: buy, sell, list, collect"""
         await self._connect()
         cur_emoji = self._currency_emoji(ctx)
         
@@ -1492,6 +1749,39 @@ class Economy(commands.Cog):
                 )
             embed.set_footer(text=f"Utilise {ctx.prefix}immo buy <nom> pour acheter")
             return await ctx.send(embed=embed)
+
+        if action.lower() == "sell":
+            if not name:
+                return await ctx.send(f"❌ Indique le nom du bien à vendre (ex: `{ctx.prefix}immo sell studio`).")
+            
+            # Find property
+            prop_key = next((k for k in PROPERTIES if k.lower() == name.lower() or PROPERTIES[k]['name'].lower() == name.lower()), None)
+            if not prop_key:
+                return await ctx.send("❌ Ce bien n'existe pas.")
+            
+            prop_data = PROPERTIES[prop_key]
+            sell_price = int(prop_data['price'] * 0.7)
+            
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    # Check ownership
+                    await cur.execute("SELECT id FROM user_properties WHERE user_id=%s AND property_key=%s LIMIT 1", (ctx.author.id, prop_key))
+                    row = await cur.fetchone()
+                    
+                    if not row:
+                        return await ctx.send(f"❌ Tu ne possèdes pas de **{prop_data['name']}**.")
+                    
+                    prop_id = row[0]
+                    
+                    # Delete one instance
+                    await cur.execute("DELETE FROM user_properties WHERE id=%s", (prop_id,))
+                    
+                    # Refund
+                    await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (sell_price, ctx.author.id))
+                    await conn.commit()
+            
+            await ctx.send(f"🤝 Bien vendu ! Tu as reçu **{self._fmt_amount(sell_price)}** {cur_emoji} pour ton **{prop_data['name']}**.")
+            return
 
         if action.lower() == "buy":
             if not name:
@@ -1609,7 +1899,7 @@ class Economy(commands.Cog):
             return
 
     @commands.command(name="luxury", aliases=["shopluxe", "luxe"])
-    async def luxury(self, ctx: commands.Context, action: str = None, item_name: str = None):
+    async def luxury(self, ctx: commands.Context, action: str = None, *, item_name: str = None):
         """Boutique de luxe et flex"""
         await self._connect()
         cur_emoji = self._currency_emoji(ctx)
@@ -1692,6 +1982,44 @@ class Economy(commands.Cog):
             await ctx.send(f"💎 **BOOM !** Tu viens d'acheter **{data['name']}** {data['emoji']} (Série #{serial}) ! T'es le roi du pétrole.")
             return
 
+        if action.lower() in ("give", "transfer"):
+            if not item_name:
+                return await ctx.send("❌ Quoi donner ? Usage: `+luxury give <item> <@joueur>`")
+            
+            args = item_name.split()
+            if len(args) < 2:
+                 return await ctx.send("❌ Usage: `+luxury give <item> <@joueur>`")
+            
+            target_str = args[-1]
+            real_item_name = " ".join(args[:-1])
+            
+            try:
+                converter = commands.MemberConverter()
+                target = await converter.convert(ctx, target_str)
+            except:
+                return await ctx.send("❌ Joueur introuvable.")
+                
+            if target.bot or target.id == ctx.author.id:
+                return await ctx.send("❌ Cible invalide.")
+                
+            item_key = next((k for k in LUXURY_ITEMS if k.lower() == real_item_name.lower() or LUXURY_ITEMS[k]['name'].lower() == real_item_name.lower()), None)
+            if not item_key:
+                return await ctx.send("❌ Cet article n'existe pas.")
+
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT id FROM user_luxury WHERE user_id=%s AND item_key=%s LIMIT 1", (ctx.author.id, item_key))
+                    row = await cur.fetchone()
+                    if not row:
+                        return await ctx.send("❌ Tu ne possèdes pas cet item.")
+                    lid = row[0]
+                    
+                    await cur.execute("UPDATE user_luxury SET user_id=%s WHERE id=%s", (target.id, lid))
+                    await conn.commit()
+            
+            await ctx.send(f"✅ Tu as donné **{LUXURY_ITEMS[item_key]['name']}** à {target.mention} ! C'est beau la générosité.")
+            return
+
     @commands.command(name="assets", aliases=["biens", "patrimoine"])
     async def assets(self, ctx: commands.Context, member: discord.Member = None):
         """Affiche le patrimoine immobilier et luxe"""
@@ -1758,6 +2086,82 @@ class Economy(commands.Cog):
             
         embed.set_footer(text=f"Valeur Totale des Actifs: {self._fmt_amount(prop_val + lux_val)}")
         await ctx.send(embed=embed)
+
+    @commands.command(name="market", aliases=["shop", "magasin"])
+    async def market(self, ctx: commands.Context, category: str = None, *, arg: str = None):
+        """Place de marché unifiée (Immo, Luxe, Objets)"""
+        await self._connect()
+        
+        if not category:
+            # Main Menu
+            embed = discord.Embed(title="🏪 Market Place", description="Bienvenue au marché. Choisis une catégorie :", color=discord.Color.blue())
+            embed.add_field(name="🏠 Immobilier", value=f"`{ctx.prefix}market immo` (ou `{ctx.prefix}immo`)", inline=True)
+            embed.add_field(name="💎 Luxe", value=f"`{ctx.prefix}market luxe` (ou `{ctx.prefix}luxury`)", inline=True)
+            embed.add_field(name="📦 Objets", value=f"`{ctx.prefix}market items` (ou `{ctx.prefix}buy`)", inline=True)
+            embed.set_footer(text="Tu peux aussi utiliser les commandes directes.")
+            return await ctx.send(embed=embed)
+        
+        cat = category.lower()
+        
+        if cat in ["immo", "immobilier", "realestate"]:
+            if arg:
+                args = arg.split()
+                action = args[0]
+                name = " ".join(args[1:]) if len(args) > 1 else None
+                await self.immo(ctx, action, name)
+            else:
+                await self.immo(ctx) # List
+                
+        elif cat in ["luxe", "luxury", "flex"]:
+            if arg:
+                args = arg.split()
+                action = args[0]
+                name = " ".join(args[1:]) if len(args) > 1 else None
+                await self.luxury(ctx, action, name)
+            else:
+                await self.luxury(ctx)
+                
+        elif cat in ["items", "objets", "shop"]:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT item, buy_price FROM shop")
+                    rows = await cur.fetchall()
+            
+            embed = discord.Embed(title="📦 Objets Divers", color=discord.Color.green())
+            if rows:
+                desc = ""
+                for r in rows:
+                    desc += f"**{r[0]}** — {self._fmt_amount(r[1])} {self._currency_emoji(ctx)}\n"
+                embed.description = desc
+            else:
+                embed.description = "Rien en rayon pour l'instant."
+                embed.add_field(name="🛡️ Protection", value="20.000 (Usage: `+buy protection`)", inline=False)
+                
+            embed.set_footer(text=f"Utilise {ctx.prefix}buy <item> pour acheter.")
+            await ctx.send(embed=embed)
+            
+        elif cat == "buy":
+             if not arg: return await ctx.send("Quoi acheter ?")
+             
+             if any(k.lower() == arg.lower() or v['name'].lower() == arg.lower() for k,v in PROPERTIES.items()):
+                 await self.immo(ctx, "buy", arg)
+                 return
+             
+             if any(k.lower() == arg.lower() or v['name'].lower() == arg.lower() for k,v in LUXURY_ITEMS.items()):
+                 await self.luxury(ctx, "buy", arg)
+                 return
+                 
+             await self.buy(ctx, arg)
+             
+        elif cat == "sell":
+             if not arg: return await ctx.send("Quoi vendre ?")
+             if any(k.lower() == arg.lower() or v['name'].lower() == arg.lower() for k,v in PROPERTIES.items()):
+                 await self.immo(ctx, "sell", arg)
+                 return
+             await self.sell(ctx, arg)
+             
+        else:
+             await ctx.send("Catégorie inconnue. Essaie `immo`, `luxe` ou `items`.")
 
     @commands.command(name="inventory", aliases=["inv"]) 
     async def inventory(self, ctx: commands.Context, member: discord.Member | None = None):
@@ -3620,6 +4024,8 @@ class AdminTransactionView(discord.ui.View):
             return await ctx.send("Non autorisé.")
         emb = self._bank_embed(ctx, title="Système de bourse retiré", description="Cette fonction n’est plus disponible.", color=discord.Color.dark_gray())
         await ctx.send(embed=emb)
+
+
         
 async def setup(bot: commands.Bot):
     await bot.add_cog(Economy(bot))
