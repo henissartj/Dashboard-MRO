@@ -19,6 +19,7 @@ bot = commands.Bot(command_prefix=PREFIXES, intents=INTENTS, help_command=None)
 
 BLOCKED_TARGET_ID = 1429920996080488601
 LOVE_ALLOWED_USER_ID = 1443339902623154207
+IGNORED_USER_ID = None
 ANNOUNCE_CHANNEL_ID = 1443709677212008561
 TWITTER_LOGO_URL = "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
 
@@ -185,6 +186,9 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
+    if message.author.id == IGNORED_USER_ID:
+        return
+
     print(f"[DEBUG] Message: '{message.content}' from {message.author} (len={len(message.content)})")
     
     content_lower = message.content.lower()
@@ -262,6 +266,9 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         #     msg = f"Doucement le spam respire un peu fils. Reviens dans {s}s."
         # await ctx.send(msg)
         return
+    print(f"[ERROR] Unhandled exception: {error}")
+    import traceback
+    traceback.print_exc()
     await ctx.send("Y’a eu un bug. Pas toi (j’espère). Réessaye.")
 
 @bot.tree.error

@@ -115,6 +115,60 @@ DDL = [
         INDEX idx_inv_recv (receiver_id),
         INDEX idx_inv_send (sender_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS marriages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user1_id BIGINT NOT NULL,
+        user2_id BIGINT NOT NULL,
+        marriage_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        joint_balance BIGINT DEFAULT 0,
+        UNIQUE KEY unique_marriage (user1_id, user2_id),
+        INDEX idx_u1 (user1_id),
+        INDEX idx_u2 (user2_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS clans (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(32) NOT NULL UNIQUE,
+        owner_id BIGINT NOT NULL,
+        balance BIGINT DEFAULT 0,
+        level INT DEFAULT 1,
+        description VARCHAR(255) DEFAULT 'Aucune description.',
+        badge VARCHAR(8) DEFAULT '🏢',
+        color VARCHAR(8) DEFAULT '#2b2d31',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS clan_members (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        clan_id INT NOT NULL,
+        user_id BIGINT NOT NULL UNIQUE,
+        role VARCHAR(16) DEFAULT 'member',
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_clan (clan_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS clan_invites (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        clan_id INT NOT NULL,
+        user_id BIGINT NOT NULL,
+        invited_by BIGINT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_invite (clan_id, user_id),
+        INDEX idx_invite_user (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_achievements (
+        user_id BIGINT NOT NULL,
+        badge_id VARCHAR(32) NOT NULL,
+        unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, badge_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
 ]
 
@@ -137,6 +191,15 @@ LUXURY_ITEMS = {
     "yacht": {"name": "Yacht Privé", "price": 10_000_000, "emoji": "🛥️", "type": "Véhicule"},
     "jet": {"name": "Jet Privé", "price": 50_000_000, "emoji": "✈️", "type": "Véhicule"},
     "island": {"name": "Île Privée", "price": 500_000_000, "emoji": "🏝️", "type": "Immobilier"}
+}
+
+# --- ACHIEVEMENTS ---
+ACHIEVEMENTS = {
+    "millionnaire": {"name": "Millionnaire", "desc": "Avoir 1M en poche", "emoji": "🤑"},
+    "magnat": {"name": "Magnat Immo", "desc": "Posséder 5 propriétés", "emoji": "🏘️"},
+    "mariage": {"name": "Just Married", "desc": "Être marié(e)", "emoji": "💍"},
+    "clan_boss": {"name": "Parrain", "desc": "Créer une organisation", "emoji": "🕶️"},
+    "investor": {"name": "Loup de Wall Street", "desc": "Posséder 1M en actions (fictive)", "emoji": "📈"}
 }
 
 # --- CONSTANTS ---
@@ -514,6 +577,21 @@ class Economy(commands.Cog):
         out = format_currency_abbr(n)
         # self._fmt_cache[n] = out
         return out
+
+    def _parse_amount(self, raw: str) -> int:
+        s = (raw or "").strip().lower()
+        if not s: return 0
+        mult = 1
+        if s.endswith("k"): mult, s = 1_000, s[:-1]
+        elif s.endswith("m"): mult, s = 1_000_000, s[:-1]
+        elif s.endswith("b"): mult, s = 1_000_000_000, s[:-1]
+        elif s.endswith("t"): mult, s = 1_000_000_000_000, s[:-1]
+        
+        s = re.sub(r"[\.,_]", "", s)
+        try:
+            return int(s) * mult
+        except:
+            return 0
 
     # Mise à jour de _parse_bet_amount pour inclure les milliards et plus (b, t, q)
     def _parse_bet_amount(self, raw: str, available: int) -> int:
@@ -1440,7 +1518,7 @@ class Economy(commands.Cog):
         """(Admin) Auditer les finances d'un joueur."""
         await self._connect()
         
-        embed = discord.Embed(title=f"🕵️ Rapport d'Audit : {target.display_name}", color=discord.Color.red())
+        embed = discord.Embed(title=f"🕵️ Rapport ta3 interpol : {target.display_name}", color=discord.Color.red())
         
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -1531,7 +1609,7 @@ class Economy(commands.Cog):
             
         await ctx.send(embed=embed)
 
-    @commands.command(name="send", aliases=["give","sd"]) 
+    @commands.command(name="send", aliases=["pay", "sd"]) 
     async def send(self, ctx: commands.Context, member: discord.Member, amount: str):
         await self._connect(); await self._ensure_user(ctx.author.id); await self._ensure_user(member.id)
         async with self.pool.acquire() as conn:
@@ -1593,11 +1671,13 @@ class Economy(commands.Cog):
         await ctx.send(embed=emb)
 
     @commands.command(name="fcoin", help="Affiche le cours du Fcoin")
+    @commands.cooldown(1, 30, commands.BucketType.guild) # 30s cooldown per guild
     async def fcoin(self, ctx: commands.Context):
         await self._connect()
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT price, created_at FROM crypto_history ORDER BY created_at DESC LIMIT 50")
+                # Limit to 30 points for speed
+                await cur.execute("SELECT price, created_at FROM crypto_history ORDER BY created_at DESC LIMIT 30")
                 rows = await cur.fetchall()
         
         if not rows:
@@ -1606,51 +1686,63 @@ class Economy(commands.Cog):
         rows = list(rows)
         rows.reverse() # Chronological order
         prices = [float(r[0]) for r in rows]
+        # Use simpler X axis (just indices or short time) to speed up rendering?
+        # Let's keep dates but maybe simplify the list
         dates = [r[1] for r in rows]
         
-        # Plot
-        fig = go.Figure(data=go.Scatter(x=dates, y=prices, mode='lines+markers', line=dict(color='#00ff00', width=2)))
-        fig.update_layout(
-            title="Cours du Fcoin",
-            xaxis_title="Temps",
-            yaxis_title="Valeur (Fcoins)",
-            template="plotly_dark",
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)'
-        )
-        
-        img_bytes = fig.to_image(format="png")
-        file = discord.File(io.BytesIO(img_bytes), filename="fcoin.png")
-        
-        last_price = prices[-1]
-        prev_price = prices[-2] if len(prices) > 1 else last_price
-        diff = last_price - prev_price
-        diff_str = f"+{diff:.2f}" if diff >= 0 else f"{diff:.2f}"
-        
-        embed = discord.Embed(title="Fcoin Market", color=discord.Color.green() if diff >= 0 else discord.Color.red())
-        embed.add_field(name="Prix Actuel", value=f"{last_price:.2f}", inline=True)
-        embed.add_field(name="Variation", value=diff_str, inline=True)
-        embed.set_image(url="attachment://fcoin.png")
-        
-        await ctx.send(embed=embed, file=file)
+        # Plot optimization: Static image generation
+        # We run this in executor to avoid blocking the bot loop
+        def generate_plot():
+            fig = go.Figure(data=go.Scatter(x=dates, y=prices, mode='lines', line=dict(color='#00ff00', width=2)))
+            # Minimal layout updates for speed
+            fig.update_layout(
+                title="Cours du Fcoin",
+                margin=dict(l=20, r=20, t=40, b=20),
+                height=400,
+                width=600,
+                template="plotly_dark",
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=True, gridcolor='#333')
+            )
+            return fig.to_image(format="png")
+
+        try:
+            img_bytes = await self.bot.loop.run_in_executor(None, generate_plot)
+            file = discord.File(io.BytesIO(img_bytes), filename="fcoin.png")
+            
+            last_price = prices[-1]
+            prev_price = prices[-2] if len(prices) > 1 else last_price
+            diff = last_price - prev_price
+            diff_str = f"+{diff:.2f}" if diff >= 0 else f"{diff:.2f}"
+            
+            embed = discord.Embed(title="Fcoin Market", color=discord.Color.green() if diff >= 0 else discord.Color.red())
+            embed.add_field(name="Prix Actuel", value=f"{last_price:.2f}", inline=True)
+            embed.add_field(name="Variation", value=diff_str, inline=True)
+            embed.set_image(url="attachment://fcoin.png")
+            embed.set_footer(text="Actualisé toutes les 10 minutes")
+            
+            await ctx.send(embed=embed, file=file)
+        except Exception as e:
+            await ctx.send(f"Erreur graphique: {e}")
 
     @commands.command(name="maj", help="Nouveautés de la mise à jour")
     async def maj(self, ctx: commands.Context):
         embed = discord.Embed(title="📜 Note de Mise à Jour", color=discord.Color.gold())
-        embed.description = "**Derniers ajouts et correctifs :**"
+        embed.description = "**Patch Note Explosif (v.Chaos) 🧨**"
         
         changes = [
-            "✅ **+market** : Nouvelle place de marché unifiée (Immo, Luxe, Objets).",
-            "✅ **+immo sell** : Possibilité de revendre ses biens immobiliers (70% du prix).",
-            "✅ **+luxury give** : Possibilité de transférer des objets de luxe à un autre joueur.",
-            "✅ **+braquage** : Sécurité ajoutée (il faut avoir de quoi payer l'amende).",
-            "✅ **+gofast** : Correction du bug de disparition du message et du crash.",
-            "✅ **+fcoin** : Retour du graphique boursier (corrigé).",
-            "✅ **+help** : Menu d'aide mis à jour."
+            "🎁 **+giveitem** (ou `+give`) : T'as trop de trucs ? Donne-les à tes potes (ou tes victimes).",
+            "⏳ **+cd** (ou `+cooldowns`) : Arrête de spammer comme un teubé, check tes délais d'attente ici.",
+            "💸 **+payall** (ou `+arosage`) : Pour les riches qui veulent rincer tout le vocal d'un coup. (Faites pleuvoir les billets !)",
+            "🕶️ **+org set** : Pimp ton gang avec description, badge et couleur.",
+            "💍 **+marry** : Marie-toi et partage le magot (ou divorce et prends la moitié, cheh).",
+            "📊 **+simulate** : Calcule si tes investissements immo valent le coup ou si tu te fais douiller."
         ]
         
-        embed.add_field(name="Changelog", value="\n".join(changes), inline=False)
-        embed.set_footer(text="Le dev travaille dur pour le quartier 🦾")
+        embed.add_field(name="Changelog du Boss", value="\n".join(changes), inline=False)
+        embed.set_footer(text="Codeur sous caféine - Bisous les rageux 😘")
         
         await ctx.send(embed=embed)
 
@@ -1697,6 +1789,402 @@ class Economy(commands.Cog):
         )
         await ctx.send(embed=emb)
 
+    # --- SOCIAL SYSTEMS ---
+
+    @commands.group(name="marry", invoke_without_command=True)
+    async def marry(self, ctx: commands.Context, target: discord.Member):
+        """Demander quelqu'un en mariage"""
+        if target.id == ctx.author.id or target.bot:
+            return await ctx.send("❌ Tu ne peux pas te marier avec toi-même ou un bot.")
+            
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Check if already married
+                await cur.execute("SELECT * FROM marriages WHERE user1_id=%s OR user2_id=%s OR user1_id=%s OR user2_id=%s", 
+                                (ctx.author.id, ctx.author.id, target.id, target.id))
+                if await cur.fetchone():
+                    return await ctx.send("❌ L'un de vous est déjà marié !")
+
+        # Simple confirmation mechanism
+        msg = await ctx.send(f"{target.mention}, {ctx.author.mention} te demande en mariage ! 💍\nRéponds `yes` pour accepter.")
+        
+        def check(m):
+            return m.author == target and m.channel == ctx.channel and m.content.lower() in ["yes", "oui"]
+            
+        try:
+            await self.bot.wait_for("message", check=check, timeout=60)
+        except asyncio.TimeoutError:
+            return await ctx.send("💔 Pas de réponse... C'est un râteau.")
+            
+        # Create marriage
+        u1, u2 = sorted([ctx.author.id, target.id])
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("INSERT INTO marriages (user1_id, user2_id) VALUES (%s, %s)", (u1, u2))
+                await conn.commit()
+                
+        await ctx.send(f"🎉 Félicitations ! {ctx.author.mention} et {target.mention} sont maintenant mariés ! 💒")
+
+    @marry.command(name="divorce")
+    async def divorce(self, ctx: commands.Context):
+        """Divorcer et partager le compte commun"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT id, joint_balance, user1_id, user2_id FROM marriages WHERE user1_id=%s OR user2_id=%s", (ctx.author.id, ctx.author.id))
+                row = await cur.fetchone()
+                
+                if not row:
+                    return await ctx.send("❌ Tu n'es pas marié.")
+                
+                mid, bal, u1, u2 = row
+                split = bal // 2
+                
+                # Refund split
+                if split > 0:
+                    await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (split, u1))
+                    await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (split, u2))
+                
+                await cur.execute("DELETE FROM marriages WHERE id=%s", (mid,))
+                await conn.commit()
+                
+        await ctx.send(f"💔 Divorce prononcé. Le compte commun ({bal}) a été partagé.")
+
+    @commands.group(name="org", aliases=["organisation", "clan"], invoke_without_command=True)
+    async def org(self, ctx: commands.Context):
+        """Système d'Organisations (Gangs)"""
+        await ctx.send("Commandes Organisation: `create`, `invite`, `join`, `leave`, `kick`, `info`, `members`, `deposit`, `withdraw`")
+
+    @org.command(name="create")
+    async def org_create(self, ctx: commands.Context, *, name: str):
+        """Créer une organisation (100k)"""
+        price = 100_000
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Check money
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                bal = (await cur.fetchone())[0]
+                if bal < price: return await ctx.send(f"❌ Il faut {self._fmt_amount(price)} pour créer une organisation.")
+                
+                # Check if already in clan
+                await cur.execute("SELECT id FROM clan_members WHERE user_id=%s", (ctx.author.id,))
+                if await cur.fetchone(): return await ctx.send("❌ Tu es déjà dans une organisation.")
+                
+                try:
+                    await cur.execute("INSERT INTO clans (name, owner_id) VALUES (%s, %s)", (name, ctx.author.id))
+                    clan_id = cur.lastrowid
+                    await cur.execute("INSERT INTO clan_members (clan_id, user_id, role) VALUES (%s, %s, 'owner')", (clan_id, ctx.author.id))
+                    await cur.execute("UPDATE users SET balance = balance - %s WHERE user_id=%s", (price, ctx.author.id))
+                    await conn.commit()
+                    await ctx.send(f"🕶️ Organisation **{name}** créée !")
+                except Exception as e:
+                    await ctx.send(f"❌ Erreur (Nom pris ?): {e}")
+
+    @org.command(name="set")
+    async def org_set(self, ctx: commands.Context, type: str, *, value: str):
+        """Personnaliser l'Orga: desc, badge, color"""
+        type = type.lower()
+        if type not in ["desc", "badge", "color"]:
+            return await ctx.send("❌ Types valides: `desc`, `badge`, `color`.")
+            
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Check Owner
+                await cur.execute("SELECT clan_id, role FROM clan_members WHERE user_id=%s", (ctx.author.id,))
+                res = await cur.fetchone()
+                if not res: return await ctx.send("❌ Tu n'es pas dans une organisation.")
+                clan_id, role = res
+                
+                if role != 'owner': return await ctx.send("❌ Seul le chef peut modifier l'organisation.")
+                
+                if type == "desc":
+                    if len(value) > 250: return await ctx.send("❌ Description trop longue (250 carac max).")
+                    await cur.execute("UPDATE clans SET description=%s WHERE id=%s", (value, clan_id))
+                    
+                elif type == "badge":
+                    # Check length mainly. Emojis can be custom <:name:id> which are longer strings.
+                    # Standard emoji is 1-2 chars. Custom emoji string is like < :name:123456789 > (approx 20-30 chars)
+                    # Let's increase limit to 60 to be safe for custom emojis.
+                    if len(value) > 60: return await ctx.send("❌ Badge trop long (Emoji standard ou personnalisé uniquement).")
+                    
+                    # Optional: Verify format if it looks like a custom emoji
+                    # import re
+                    # if '<:' in value and not re.match(r'<a?:.+?:\d+>', value):
+                    #    return await ctx.send("❌ Format d'émoji invalide.")
+                    
+                    await cur.execute("UPDATE clans SET badge=%s WHERE id=%s", (value, clan_id))
+                    
+                elif type == "color":
+                    # Check hex
+                    # Allow with or without #, and length 6 or 7
+                    clean_val = value.lstrip('#')
+                    if len(clean_val) != 6: return await ctx.send("❌ Format couleur invalide (ex: #ff0000).")
+                    
+                    # Ensure it stores with #
+                    final_val = f"#{clean_val}"
+                    
+                    await cur.execute("UPDATE clans SET color=%s WHERE id=%s", (final_val, clan_id))
+                
+                await conn.commit()
+        
+        await ctx.send(f"✅ Organisation mise à jour ({type}).")
+
+    @org.command(name="info")
+    async def org_info(self, ctx: commands.Context):
+        """Infos de l'organisation"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    SELECT c.name, c.balance, c.level, c.description, c.badge, c.color, COUNT(m.user_id) 
+                    FROM clans c 
+                    JOIN clan_members m ON c.id = m.clan_id 
+                    WHERE m.clan_id = (SELECT clan_id FROM clan_members WHERE user_id=%s)
+                    GROUP BY c.id
+                """, (ctx.author.id,))
+                row = await cur.fetchone()
+                
+                if not row: return await ctx.send("❌ Tu n'es pas dans une organisation.")
+                
+                name, bal, lvl, desc, badge, color_hex, members = row
+                
+                try:
+                    # Remove # if present for processing, but from_str usually handles hex
+                    if color_hex.startswith("#"):
+                        c_val = int(color_hex[1:], 16)
+                    else:
+                        c_val = int(color_hex, 16)
+                    color = discord.Color(c_val)
+                except:
+                    color = discord.Color.dark_grey()
+                    
+                embed = discord.Embed(title=f"{badge} Organisation {name}", description=desc, color=color)
+                embed.add_field(name="Niveau", value=f"⭐ {lvl}")
+                embed.add_field(name="Membres", value=f"👥 {members}")
+                embed.add_field(name="Trésorerie", value=f"{self._fmt_amount(bal)} {self._currency_emoji(ctx)}")
+                
+                # Show Owner
+                await cur.execute("SELECT user_id FROM clan_members WHERE clan_id=(SELECT clan_id FROM clan_members WHERE user_id=%s) AND role='owner'", (ctx.author.id,))
+                owner_row = await cur.fetchone()
+                if owner_row:
+                    owner_user = ctx.guild.get_member(owner_row[0])
+                    owner_name = owner_user.display_name if owner_user else f"ID:{owner_row[0]}"
+                    embed.set_footer(text=f"Chef: {owner_name}")
+                
+                await ctx.send(embed=embed)
+
+    @org.command(name="deposit")
+    async def org_deposit(self, ctx: commands.Context, amount: str):
+        """Déposer de l'argent dans le coffre de l'organisation"""
+        amount = self._parse_amount(amount)
+        if amount <= 0: return await ctx.send("❌ Montant invalide.")
+        
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Get Clan ID
+                await cur.execute("SELECT clan_id FROM clan_members WHERE user_id=%s", (ctx.author.id,))
+                res = await cur.fetchone()
+                if not res: return await ctx.send("❌ Tu n'es pas dans une organisation.")
+                clan_id = res[0]
+                
+                # Check user balance
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                bal = (await cur.fetchone())[0]
+                if bal < amount: return await ctx.send("❌ Pas assez d'argent en poche.")
+                
+                # Transfer
+                await cur.execute("UPDATE users SET balance = balance - %s WHERE user_id=%s", (amount, ctx.author.id))
+                await cur.execute("UPDATE clans SET balance = balance + %s WHERE id=%s", (amount, clan_id))
+                await conn.commit()
+                
+        await ctx.send(f"✅ Tu as déposé **{self._fmt_amount(amount)}** {self._currency_emoji(ctx)} dans le coffre de l'organisation.")
+
+    @org.command(name="withdraw")
+    async def org_withdraw(self, ctx: commands.Context, amount: str):
+        """(Chef) Retirer de l'argent du coffre"""
+        amount = self._parse_amount(amount)
+        if amount <= 0: return await ctx.send("❌ Montant invalide.")
+        
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Get Clan ID and Role
+                await cur.execute("SELECT clan_id, role FROM clan_members WHERE user_id=%s", (ctx.author.id,))
+                res = await cur.fetchone()
+                if not res: return await ctx.send("❌ Tu n'es pas dans une organisation.")
+                clan_id, role = res
+                
+                if role != 'owner': return await ctx.send("❌ Seul le chef peut retirer.")
+                
+                # Check clan balance
+                await cur.execute("SELECT balance FROM clans WHERE id=%s", (clan_id,))
+                c_bal = (await cur.fetchone())[0]
+                if c_bal < amount: return await ctx.send("❌ L'organisation n'a pas assez de fonds.")
+                
+                # Transfer
+                await cur.execute("UPDATE clans SET balance = balance - %s WHERE id=%s", (amount, clan_id))
+                await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (amount, ctx.author.id))
+                await conn.commit()
+                
+        await ctx.send(f"✅ Tu as retiré **{self._fmt_amount(amount)}** {self._currency_emoji(ctx)} du coffre de l'organisation.")
+
+    @org.command(name="invite")
+    async def org_invite(self, ctx: commands.Context, member: discord.Member):
+        """Inviter un membre dans l'organisation"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Check author clan & role
+                await cur.execute("SELECT clan_id, role FROM clan_members WHERE user_id=%s", (ctx.author.id,))
+                res = await cur.fetchone()
+                if not res: return await ctx.send("❌ Tu n'es pas dans une organisation.")
+                clan_id, role = res
+                
+                if role != 'owner': return await ctx.send("❌ Seul le chef peut inviter.")
+                
+                # Check if target is in a clan
+                await cur.execute("SELECT id FROM clan_members WHERE user_id=%s", (member.id,))
+                if await cur.fetchone(): return await ctx.send("❌ Ce joueur est déjà dans une organisation.")
+                
+                # Check if already invited
+                await cur.execute("SELECT id FROM clan_invites WHERE clan_id=%s AND user_id=%s", (clan_id, member.id))
+                if await cur.fetchone(): return await ctx.send("❌ Invitation déjà envoyée.")
+                
+                # Insert invite
+                await cur.execute("INSERT INTO clan_invites (clan_id, user_id, invited_by) VALUES (%s, %s, %s)", (clan_id, member.id, ctx.author.id))
+                await conn.commit()
+                
+        await ctx.send(f"📩 Invitation envoyée à {member.mention} ! (Il doit faire `+org join <nom_orga>` ou `+org accept` [si implémenté])")
+
+    @org.command(name="join")
+    async def org_join(self, ctx: commands.Context, *, org_name: str):
+        """Rejoindre une organisation (sur invitation)"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Check if user already in clan
+                await cur.execute("SELECT id FROM clan_members WHERE user_id=%s", (ctx.author.id,))
+                if await cur.fetchone(): return await ctx.send("❌ Tu es déjà dans une organisation.")
+                
+                # Find clan by name
+                await cur.execute("SELECT id FROM clans WHERE name=%s", (org_name,))
+                res = await cur.fetchone()
+                if not res: return await ctx.send("❌ Organisation introuvable.")
+                clan_id = res[0]
+                
+                # Check invite
+                await cur.execute("SELECT id FROM clan_invites WHERE clan_id=%s AND user_id=%s", (clan_id, ctx.author.id))
+                invite = await cur.fetchone()
+                if not invite: return await ctx.send("❌ Tu n'as pas été invité dans cette organisation.")
+                
+                # Join
+                await cur.execute("INSERT INTO clan_members (clan_id, user_id, role) VALUES (%s, %s, 'member')", (clan_id, ctx.author.id))
+                await cur.execute("DELETE FROM clan_invites WHERE clan_id=%s AND user_id=%s", (clan_id, ctx.author.id))
+                await conn.commit()
+                
+        await ctx.send(f"🎉 Tu as rejoint l'organisation **{org_name}** !")
+
+    @org.command(name="leave")
+    async def org_leave(self, ctx: commands.Context):
+        """Quitter l'organisation actuelle"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Check clan
+                await cur.execute("SELECT clan_id, role FROM clan_members WHERE user_id=%s", (ctx.author.id,))
+                res = await cur.fetchone()
+                if not res: return await ctx.send("❌ Tu n'es pas dans une organisation.")
+                clan_id, role = res
+                
+                if role == 'owner':
+                    return await ctx.send("❌ Le chef ne peut pas quitter l'organisation (il doit la dissoudre ou transférer le lead).")
+                
+                await cur.execute("DELETE FROM clan_members WHERE user_id=%s", (ctx.author.id,))
+                await conn.commit()
+                
+        await ctx.send("👋 Tu as quitté l'organisation.")
+
+    @org.command(name="kick")
+    async def org_kick(self, ctx: commands.Context, member: discord.Member):
+        """(Chef) Exclure un membre"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Check author
+                await cur.execute("SELECT clan_id, role FROM clan_members WHERE user_id=%s", (ctx.author.id,))
+                res = await cur.fetchone()
+                if not res: return await ctx.send("❌ Tu n'es pas dans une organisation.")
+                clan_id, role = res
+                
+                if role != 'owner': return await ctx.send("❌ Seul le chef peut exclure.")
+                
+                # Check target
+                await cur.execute("SELECT clan_id FROM clan_members WHERE user_id=%s", (member.id,))
+                t_res = await cur.fetchone()
+                if not t_res or t_res[0] != clan_id: return await ctx.send("❌ Ce membre n'est pas dans ton organisation.")
+                
+                if member.id == ctx.author.id: return await ctx.send("❌ Tu ne peux pas t'auto-kick.")
+                
+                await cur.execute("DELETE FROM clan_members WHERE user_id=%s", (member.id,))
+                await conn.commit()
+                
+        await ctx.send(f"👢 {member.mention} a été exclu de l'organisation.")
+
+    @org.command(name="members")
+    async def org_members(self, ctx: commands.Context):
+        """Voir les membres de l'organisation"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Get Clan ID
+                await cur.execute("SELECT clan_id FROM clan_members WHERE user_id=%s", (ctx.author.id,))
+                res = await cur.fetchone()
+                if not res: return await ctx.send("❌ Tu n'es pas dans une organisation.")
+                clan_id = res[0]
+                
+                # Get Members
+                await cur.execute("SELECT user_id, role FROM clan_members WHERE clan_id=%s", (clan_id,))
+                members = await cur.fetchall()
+                
+                # Get Clan Name
+                await cur.execute("SELECT name FROM clans WHERE id=%s", (clan_id,))
+                clan_name = (await cur.fetchone())[0]
+                
+        # Format
+        desc = ""
+        for uid, role in members:
+            u = ctx.guild.get_member(uid)
+            name = u.display_name if u else f"ID:{uid}"
+            emoji = "👑" if role == 'owner' else "👤"
+            desc += f"{emoji} **{name}** ({role})\n"
+            
+        embed = discord.Embed(title=f"Membres de {clan_name}", description=desc, color=discord.Color.dark_grey())
+        await ctx.send(embed=embed)
+
+    @commands.command(name="simulate")
+    async def simulate(self, ctx: commands.Context, type: str = "immo"):
+        """Simuler les revenus (ex: +simulate immo)"""
+        if type.lower() == "immo":
+            await self._connect()
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT property_key FROM user_properties WHERE user_id=%s", (ctx.author.id,))
+                    props = await cur.fetchall()
+                    
+            daily = sum([PROPERTIES.get(p[0], {}).get('income', 0) for p in props])
+            weekly = daily * 7
+            monthly = daily * 30
+            
+            embed = discord.Embed(title="📊 Simulation Immobilière", color=discord.Color.blue())
+            embed.add_field(name="Revenu Journalier", value=self._fmt_amount(daily), inline=False)
+            embed.add_field(name="Revenu Hebdo (7j)", value=self._fmt_amount(weekly), inline=False)
+            embed.add_field(name="Revenu Mensuel (30j)", value=self._fmt_amount(monthly), inline=False)
+            await ctx.send(embed=embed)
+
     @commands.command(name="sell", aliases=["se"]) 
     async def sell(self, ctx: commands.Context, item_name: str):
         await self._connect(); await self._ensure_user(ctx.author.id)
@@ -1732,6 +2220,101 @@ class Economy(commands.Cog):
             actor=ctx.author,
         )
         await ctx.send(embed=emb)
+
+    @commands.command(name="giveitem", aliases=["donner", "give"])
+    async def giveitem(self, ctx: commands.Context, member: discord.Member, item: str, qty: int = 1):
+        """Donner un objet de son inventaire à un autre joueur"""
+        if member.id == ctx.author.id or member.bot:
+            return await ctx.send("❌ Impossible de donner à soi-même ou à un bot espèce de gros zig")
+        if qty <= 0:
+            return await ctx.send("❌ Quantité invalide la con de t mort")
+            
+        await self._connect(); await self._ensure_user(member.id)
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Check sender inventory
+                await cur.execute("SELECT qty FROM inventory WHERE user_id=%s AND item=%s", (ctx.author.id, item))
+                row = await cur.fetchone()
+                if not row or row[0] < qty:
+                    return await ctx.send(f"❌ Mdr ta pas assez de **{item}**.")
+                
+                # Update sender
+                if row[0] == qty:
+                    await cur.execute("DELETE FROM inventory WHERE user_id=%s AND item=%s", (ctx.author.id, item))
+                else:
+                    await cur.execute("UPDATE inventory SET qty=qty-%s WHERE user_id=%s AND item=%s", (qty, ctx.author.id, item))
+                    
+                # Update receiver
+                await cur.execute("INSERT INTO inventory (user_id, item, qty) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE qty=qty+%s", (member.id, item, qty, qty))
+                
+        await ctx.send(f"🎁 Tu as donné **{qty}x {item}** à {member.mention} !")
+
+    @commands.command(name="cooldowns", aliases=["cd", "delais"])
+    async def cooldowns(self, ctx: commands.Context):
+        """Voir ses temps d'attente"""
+        embed = discord.Embed(title="⏳ Tes Cooldowns", color=discord.Color.blue())
+        desc = ""
+        
+        # List of tracked commands
+        cmds_to_check = ["work", "slut", "crime", "rob", "daily", "weekly", "monthly", "heist", "gofast", "braquage", "vol", "mine"]
+        
+        for name in cmds_to_check:
+            cmd = self.bot.get_command(name)
+            if cmd:
+                # Calculate retry_after manually if on cooldown
+                bucket = cmd._buckets.get_bucket(ctx)
+                if bucket:
+                    retry_after = bucket.get_retry_after()
+                    if retry_after:
+                        # Format time
+                        m, s = divmod(int(retry_after), 60)
+                        h, m = divmod(m, 60)
+                        time_str = f"{h}h {m}m {s}s" if h > 0 else f"{m}m {s}s"
+                        desc += f"🔴 **{name.capitalize()}**: {time_str}\n"
+                    else:
+                        desc += f"🟢 **{name.capitalize()}**: Prêt !\n"
+        
+        if not desc:
+            desc = "Aucun cooldown actif ou commandes non trouvées."
+            
+        embed.description = desc
+        await ctx.send(embed=embed)
+
+    @commands.command(name="payall", aliases=["arosage"])
+    @commands.has_permissions(administrator=True) # Start safe, or maybe high cost
+    async def payall(self, ctx: commands.Context, amount: int):
+        """(Admin) Donner de l'argent à tout le monde dans le salon vocal"""
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            return await ctx.send("❌ Tu dois être dans un salon vocal trou du cul")
+            
+        members = [m for m in ctx.author.voice.channel.members if not m.bot and m.id != ctx.author.id]
+        if not members:
+            return await ctx.send("❌ Personne à arroser ici à par ta soeur la grosse folle")
+            
+        total = amount * len(members)
+        
+        # Check balance if not admin? Let's make it for rich players too?
+        # For now, let's keep it simple: It TAKES from the user.
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                bal = (await cur.fetchone())[0]
+                
+                if bal < total:
+                    return await ctx.send(f"❌ Pas assez d'argent clochard ! Il faut {self._fmt_amount(total)} pour donner {self._fmt_amount(amount)} à {len(members)} personnes.")
+                
+                # Process
+                await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (total, ctx.author.id))
+                
+                count = 0
+                for m in members:
+                    await self._ensure_user(m.id) # Ensure they exist in DB
+                    await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (amount, m.id))
+                    count += 1
+                    
+        await ctx.send(f"💸 **ARROSAGE !** {ctx.author.mention} flex sur les pauvres et a distribué **{self._fmt_amount(amount)}** à {count} personnes dans {ctx.author.voice.channel.name} !")
 
     @commands.command(name="immo", aliases=["realestate"])
     async def immo(self, ctx: commands.Context, action: str = None, *, name: str = None):
@@ -1780,7 +2363,7 @@ class Economy(commands.Cog):
                     await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (sell_price, ctx.author.id))
                     await conn.commit()
             
-            await ctx.send(f"🤝 Bien vendu ! Tu as reçu **{self._fmt_amount(sell_price)}** {cur_emoji} pour ton **{prop_data['name']}**.")
+            await ctx.send(f"🤝 Bien vendu fils ! Tu as reçu **{self._fmt_amount(sell_price)}** {cur_emoji} pour ton **{prop_data['name']}**.")
             return
 
         if action.lower() == "buy":
@@ -1805,7 +2388,7 @@ class Economy(commands.Cog):
                     total_wealth = bal + b1 + b2 + b3
                     
                     if total_wealth < price:
-                        return await ctx.send(f"❌ T'as pas les sous. Il faut {self._fmt_amount(price)} {cur_emoji}.")
+                        return await ctx.send(f"❌ T'as pas les sous frero. Il faut {self._fmt_amount(price)} {cur_emoji}.")
                     
                     # Deduct money (prioritize pocket, then banks)
                     remaining = price
@@ -1868,7 +2451,7 @@ class Economy(commands.Cog):
                     rows = await cur.fetchall()
                     
                     if not rows:
-                        return await ctx.send("❌ Tu n'as aucun bien immobilier.")
+                        return await ctx.send("❌ Tu n'as aucun bien immobilier t à la rue aaa grosse viande va")
                     
                     total_income = 0
                     now = dt.datetime.now()
@@ -2163,6 +2746,119 @@ class Economy(commands.Cog):
         else:
              await ctx.send("Catégorie inconnue. Essaie `immo`, `luxe` ou `items`.")
 
+    @commands.command(name="profile", aliases=["profil", "p"])
+    async def profile(self, ctx: commands.Context, member: discord.Member = None):
+        """Afficher le profil complet (Stats, Assets, Badges, Social)"""
+        member = member or ctx.author
+        await self._connect(); await self._ensure_user(member.id)
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # 1. Money
+                await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (member.id,))
+                res = await cur.fetchone()
+                bal, b1, b2, b3 = res if res else (0,0,0,0)
+                total_money = bal + b1 + b2 + b3
+                
+                # 2. Assets (Immo + Luxe)
+                prop_val = 0
+                await cur.execute("SELECT property_key FROM user_properties WHERE user_id=%s", (member.id,))
+                props = await cur.fetchall()
+                for p in props:
+                    if p[0] in PROPERTIES: prop_val += PROPERTIES[p[0]]['price']
+                    
+                lux_val = 0
+                await cur.execute("SELECT item_key FROM user_luxury WHERE user_id=%s", (member.id,))
+                luxs = await cur.fetchall()
+                for l in luxs:
+                    if l[0] in LUXURY_ITEMS: lux_val += LUXURY_ITEMS[l[0]]['price']
+                    
+                # 3. Social (Marriage, Clan)
+                # Marriage
+                spouse_name = "Célibataire"
+                await cur.execute("SELECT user1_id, user2_id FROM marriages WHERE user1_id=%s OR user2_id=%s", (member.id, member.id))
+                m_row = await cur.fetchone()
+                if m_row:
+                    spouse_id = m_row[1] if m_row[0] == member.id else m_row[0]
+                    # Try fetch name
+                    spouse = ctx.guild.get_member(spouse_id)
+                    spouse_name = spouse.display_name if spouse else f"ID:{spouse_id}"
+                    
+                # Clan
+                clan_name = "Aucune"
+                clan_role = ""
+                clan_badge = ""
+                c_row = None
+                
+                try:
+                    await cur.execute("""
+                        SELECT c.name, m.role, c.badge 
+                        FROM clans c 
+                        JOIN clan_members m ON c.id = m.clan_id 
+                        WHERE m.user_id=%s
+                    """, (member.id,))
+                    c_row = await cur.fetchone()
+                    if c_row:
+                        clan_name = c_row[0]
+                        clan_role = f"({c_row[1]})"
+                        clan_badge = c_row[2] if c_row[2] else ""
+                except Exception:
+                    # Fallback if query fails (e.g. badge column missing despite fix)
+                    pass
+                    
+                # 4. Badges / Achievements
+                # Auto-check achievements before displaying
+                badges = []
+                
+                # Check Millionnaire
+                if total_money >= 1_000_000:
+                    badges.append(ACHIEVEMENTS['millionnaire']['emoji'])
+                
+                # Check Magnat
+                if len(props) >= 5:
+                    badges.append(ACHIEVEMENTS['magnat']['emoji'])
+                    
+                # Check Marriage
+                if m_row:
+                    badges.append(ACHIEVEMENTS['mariage']['emoji'])
+                    
+                # Check Clan Owner
+                if c_row and c_row[1] == 'owner':
+                    badges.append(ACHIEVEMENTS['clan_boss']['emoji'])
+                    
+                # We could store unlocked badges in DB, but dynamic check is fine for simple ones.
+                # If we used DB 'user_achievements', we would fetch them here.
+                
+        # Build Embed
+        embed = discord.Embed(title=f"Profil de {member.display_name}", color=discord.Color.gold())
+        embed.set_thumbnail(url=member.display_avatar.url)
+        
+        # General Stats
+        stats = f"💰 **Richesse:** {self._fmt_amount(total_money)}\n"
+        stats += f"🏙️ **Actifs:** {self._fmt_amount(prop_val + lux_val)}\n"
+        stats += f"💍 **Statut:** {spouse_name}\n"
+        stats += f"🕶️ **Organisation:** {clan_badge} {clan_name} {clan_role}"
+        embed.add_field(name="Informations", value=stats, inline=False)
+        
+        # Badges
+        if badges:
+            embed.add_field(name="Badges", value=" ".join(badges), inline=False)
+            
+        await ctx.send(embed=embed)
+
+    @commands.command(name="admin_fix_badge")
+    @commands.has_permissions(administrator=True)
+    async def admin_fix_badge(self, ctx: commands.Context):
+        """(Admin) Fix badge column length"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.execute("ALTER TABLE clans MODIFY COLUMN badge VARCHAR(100)")
+                    await ctx.send("✅ Column 'badge' resized to 100 chars.")
+                except Exception as e:
+                    await ctx.send(f"❌ Error: {e}")
+
     @commands.command(name="inventory", aliases=["inv"]) 
     async def inventory(self, ctx: commands.Context, member: discord.Member | None = None):
         await self._connect(); member = member or ctx.author; await self._ensure_user(member.id)
@@ -2420,6 +3116,33 @@ class Economy(commands.Cog):
             ],
         )
         await ctx.send(embed=emb)
+
+    @commands.command(name="admin_fix_db")
+    @commands.has_permissions(administrator=True)
+    async def admin_fix_db(self, ctx: commands.Context):
+        """Force database migration for clans table"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.execute("ALTER TABLE clans ADD COLUMN description VARCHAR(255) DEFAULT 'Aucune description.'")
+                    await ctx.send("Added description column.")
+                except Exception as e:
+                    await ctx.send(f"Desc col error (maybe exists): {e}")
+                    
+                try:
+                    await cur.execute("ALTER TABLE clans ADD COLUMN badge VARCHAR(8) DEFAULT '🏢'")
+                    await ctx.send("Added badge column.")
+                except Exception as e:
+                    await ctx.send(f"Badge col error (maybe exists): {e}")
+                    
+                try:
+                    await cur.execute("ALTER TABLE clans ADD COLUMN color VARCHAR(8) DEFAULT '#2b2d31'")
+                    await ctx.send("Added color column.")
+                except Exception as e:
+                    await ctx.send(f"Color col error (maybe exists): {e}")
+                    
+        await ctx.send("Migration attempts finished.")
 
     @commands.command(name="reset_user") 
     @commands.has_permissions(administrator=True)

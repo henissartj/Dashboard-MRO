@@ -1,0 +1,4 @@
+
+ALTER TABLE clans ADD COLUMN description VARCHAR(255) DEFAULT 'Aucune description.';
+ALTER TABLE clans ADD COLUMN badge VARCHAR(8) DEFAULT '🏢';
+ALTER TABLE clans ADD COLUMN color VARCHAR(8) DEFAULT '#2b2d31';

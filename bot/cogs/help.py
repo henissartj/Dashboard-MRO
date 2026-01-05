@@ -89,9 +89,28 @@ class Help(commands.Cog):
             f"`{prefix}shop` : Boutique générale",
             f"`{prefix}buy <item>` : Acheter un objet",
             f"`{prefix}sell <item>` : Vendre un objet",
+            f"`{prefix}giveitem <@joueur> <item> <qte>` : Donner un objet",
             f"`{prefix}inventory` : Voir votre inventaire"
         ]
         embed.add_field(name="🛍️ Shop & Inventaire", value="\n".join(shop_cmds), inline=False)
+
+        # --- 🏆 Social & Organisation ---
+        social_cmds = [
+            f"`{prefix}profile` : Voir votre profil complet (Badges, Orga, Mariage)",
+            f"`{prefix}marry <@user>` : Demander en mariage",
+            f"`{prefix}org` : Menu Organisation (Créer, Rejoindre, Info)",
+            f"`{prefix}org set <desc/badge/color> <valeur>` : Personnaliser son Orga",
+            f"`{prefix}payall <montant>` : Arroser tout le vocal ($$)",
+            f"`{prefix}simulate immo` : Calculer vos revenus immo futurs"
+        ]
+        embed.add_field(name="🏆 Social & Organisation", value="\n".join(social_cmds), inline=False)
+        
+        # --- ℹ️ Divers ---
+        misc_cmds = [
+            f"`{prefix}maj` : Voir le changelog (Quoi de neuf ?)",
+            f"`{prefix}cd` : Voir vos temps d'attente (Cooldowns)"
+        ]
+        embed.add_field(name="ℹ️ Divers", value="\n".join(misc_cmds), inline=False)
 
         # --- 🛡️ Admin / Police ---
         if ctx.author.guild_permissions.administrator:
