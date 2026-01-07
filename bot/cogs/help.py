@@ -25,7 +25,7 @@ class Help(commands.Cog):
         # --- 🏦 Banque & Paliers ---
         bank_cmds = [
             f"`{prefix}depobank <1-3> <montant>` : Déposer (Plafond selon Palier)",
-            f"`{prefix}withbank <1-3> <montant>` : Retirer",
+            f"`{prefix}withbank <1-3> <montant>` : Retirer (aucune limite de retrait)",
             f"`{prefix}upgrade_bank` : Améliorer son compte bancaire (Augmenter plafond)",
             f"`{prefix}card` : Voir sa carte et ses comptes",
             f"`{prefix}facture <@user> <montant> [motif]` : Envoyer une facture"
@@ -61,7 +61,13 @@ class Help(commands.Cog):
 
         # --- 🎰 Casino & Jeux ---
         game_cmds = [
-            f"`{prefix}course` : Courses Hippiques (PMU Street) 🐎",
+            f"`{prefix}course start [durée]` : Ouvrir les paris (Admin)",
+            f"`{prefix}bet <numéro> <mise>` : Parier sur un cheval",
+            f"`{prefix}course run` : Lancer la course (Admin)",
+            f"`{prefix}horsebuy <nom>` : Acheter son cheval (50m)",
+            f"`{prefix}course addhorse <nom>` : Ajouter son cheval à la course",
+            f"`{prefix}horserename <ancien> <nouveau>` : Renommer son cheval",
+            f"`{prefix}horsesell <nom>` : Vendre son cheval (35m)",
             f"`{prefix}slots <mise>` : Machine à sous",
             f"`{prefix}roulette <mise> <choix>` : Roulette Casino",
             f"`{prefix}blackjack <mise>` : Blackjack (21)",
@@ -86,7 +92,7 @@ class Help(commands.Cog):
         
         # --- 💼 Travail & Revenus ---
         work_cmds = [
-            f"`{prefix}khedma` : Travailler (Petits boulots)",
+            f"`{prefix}work` / `/{'khedma'}` : Travailler (bonus Orga)",
             f"`{prefix}daily` : Récompense journalière",
             f"`{prefix}weekly` : Récompense hebdomadaire",
             f"`{prefix}monthly` : Récompense mensuelle",
@@ -119,7 +125,9 @@ class Help(commands.Cog):
         # --- ℹ️ Divers ---
         misc_cmds = [
             f"`{prefix}maj` : Voir le changelog (Quoi de neuf ?)",
-            f"`{prefix}cd` : Voir vos temps d'attente (Cooldowns)"
+            f"`{prefix}cd` : Voir vos temps d'attente (Cooldowns)",
+            f"`{prefix}cooldown_global <secondes>` : Verrouiller commandes serveur",
+            f"`{prefix}cooldown_repeat <secondes>` : Empêcher la répétition d'une commande"
         ]
         embed.add_field(name="ℹ️ Divers", value="\n".join(misc_cmds), inline=False)
 
@@ -129,12 +137,15 @@ class Help(commands.Cog):
                 f"`{prefix}add_money <@joueur> <montant>` : Give d'argent",
                 f"`{prefix}remove_money <@joueur> <montant>` : Retrait d'argent",
                 f"`{prefix}reset_user <@joueur>` : Reset complet d'un joueur",
+                f"`{prefix}reset_all <motdepasse>` : Reset global (Owner)",
+                f"`{prefix}set_max_bet <montant>` : Régler la mise maximale",
                 f"`{prefix}tax <@joueur> <montant>` : Taxer (va dans la poche admin)",
                 f"`{prefix}taxrich <taux%>` : Taxer les riches (5% par défaut)",
                 f"`{prefix}awardbadge <@joueur> <badge>` : Donner un badge",
                 f"`{prefix}payall <montant>` : Arroser le vocal",
                 f"`{prefix}admin_fix_badge` : Fix taille colonne badge",
-                f"`{prefix}toggle_logs <on/off>` : Activer/Désactiver logs"
+                f"`{prefix}toggle_logs <on/off>` : Activer/Désactiver logs",
+                f"`{prefix}dn <nom>` : Ban par nom et DM image"
             ]
             embed.add_field(name="🛡️ Admin / Police", value="\n".join(admin_cmds), inline=False)
             
@@ -143,26 +154,30 @@ class Help(commands.Cog):
     @commands.command(name="maj")
     async def maj(self, ctx: commands.Context):
         embed = discord.Embed(title="📜 Note de Mise à Jour", color=discord.Color.gold())
-        embed.description = "**Patch Note : Images Fun & Courses Hippiques 🐎**"
+        embed.description = "**Nouveautés : PMU Street, Travail et Admin**"
         
         changes = [
-            "📸 **Images Fun** :",
-            "• `+parions` : Crée ton ticket Parions Street avec logo FDJ.",
-            "• `+perdu <@user>` : Affiche de recherche 'Perdu de vue'.",
-            "• `+idcard <@user>` : Carte d'identité du quartier.",
-            "• `+diplome <@user>` : Diplôme de la rue selon ta richesse.",
+            "🐎 **PMU Street** :",
+            "• `+course start [durée]` ouvre les paris, `+course run` lance.",
+            "• `+bet <num> <mise>` pour miser. Animation live.",
+            "• `+horsebuy <nom>` pour acheter son cheval (50m).",
+            "• `+course addhorse <nom>` ajoute ton cheval à la course.",
+            "• `+horserename <ancien> <nouveau>` renomme ton cheval.",
+            "• `+horsesell <nom>` revend ton cheval (35m).",
+            "• Les propriétaires prennent 10% des mises sur leur cheval.",
+            "• L’embed des partants mentionne le propriétaire.",
             "",
-            "🐎 **Courses de Chevaux (PMU)** :",
-            "• Admin lance : `+course start` puis `+course run`.",
-            "• Joueurs parient : `+bet [num] [mise]`.",
-            "• Course en direct avec animation !",
+            "💼 **Travail** :",
+            "• `+work` et `/khedma` refonctionnent. Bonus selon l’Organisation.",
             "",
-            "⚙️ **Améliorations** :",
-            "• `+add_money` accepte '1m', '100k' etc.",
-            "• `+facture` change de couleur quand payée/refusée.",
-            "• Carte bancaire : Texte auto-adaptatif (noir sur blanc) & Patterns corrigés.",
-            "• `+interest` corrigé.",
-            "• Taxe riche abaissée à 3M."
+            "🛡️ **Admin** :",
+            "• `+dn <nom>` bannit par nom et envoie une image en DM.",
+            "• `+set_max_bet <montant>` règle la mise maximale des jeux (hors PMU).",
+            "• `+cooldown_global <secondes>` verrouille toutes les commandes temporairement.",
+            "• `+cooldown_repeat <secondes>` bloque la répétition d’une même commande.",
+            "• `+reset_all pommedeterre` réinitialise tout (owner uniquement).",
+            "",
+            "le dev travaille fort pour le quartier"
         ]
         
         embed.add_field(name="Changelog", value="\n".join(changes), inline=False)

@@ -182,6 +182,18 @@ DDL = [
         PRIMARY KEY (user_id, badge_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
+    ,
+    """
+    CREATE TABLE IF NOT EXISTS user_horses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        owner_id BIGINT NOT NULL,
+        name VARCHAR(64) NOT NULL,
+        emoji VARCHAR(8) NOT NULL,
+        base_speed FLOAT NOT NULL,
+        variance FLOAT NOT NULL,
+        INDEX idx_owner (owner_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
 ]
 
 # --- REAL ESTATE DATA ---
@@ -469,11 +481,9 @@ class InvoiceView(discord.ui.View):
                 
         await interaction.followup.send(f"✅ Facture #{self.inv_id} payée avec succès !")
         self.stop()
-        # Disable buttons
         for child in self.children:
             child.disabled = True
-            
-        # Update Embed
+        
         if interaction.message.embeds:
             embed = interaction.message.embeds[0]
             embed.color = discord.Color.green()
@@ -490,9 +500,15 @@ class InvoiceView(discord.ui.View):
             if not field_updated:
                 embed.add_field(name="Statut", value="✅ Payée", inline=True)
                 
-            await interaction.message.edit(embed=embed, view=self)
+            try:
+                await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=PrintTicketView(self.ctx, self.inv_id, self.amount, self.sender_id, self.cog))
+            except Exception:
+                await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=None)
         else:
-            await interaction.message.edit(view=self)
+            try:
+                await interaction.followup.edit_message(message_id=interaction.message.id, view=PrintTicketView(self.ctx, self.inv_id, self.amount, self.sender_id, self.cog))
+            except Exception:
+                await interaction.followup.edit_message(message_id=interaction.message.id, view=None)
 
     @discord.ui.button(label="❌ Refuser", style=discord.ButtonStyle.red)
     async def refuse_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -524,9 +540,77 @@ class InvoiceView(discord.ui.View):
             if not field_updated:
                 embed.add_field(name="Statut", value="🚫 Refusée", inline=True)
                 
-            await interaction.message.edit(embed=embed, view=self)
+            await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=self)
         else:
-            await interaction.message.edit(view=self)
+            await interaction.followup.edit_message(message_id=interaction.message.id, view=self)
+
+class PrintTicketView(discord.ui.View):
+    def __init__(self, ctx, inv_id, amount, sender_id, cog):
+        super().__init__(timeout=300)
+        self.ctx = ctx
+        self.inv_id = inv_id
+        self.amount = amount
+        self.sender_id = sender_id
+        self.cog = cog
+
+    @discord.ui.button(label="🧾 Imprimer le ticket", style=discord.ButtonStyle.gray)
+    async def print_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        await self.cog._connect()
+        # Fetch invoice details (reason, status, timestamps)
+        reason = "Aucun"
+        status = "paid"
+        created_at = None
+        try:
+            async with self.cog.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT reason, status, created_at FROM invoices WHERE id=%s", (self.inv_id,))
+                    row = await cur.fetchone()
+                    if row:
+                        reason, status, created_at = row
+        except Exception:
+            pass
+        # Build receipt image
+        import io, datetime
+        from PIL import Image, ImageDraw, ImageFont
+        width, height = 650, 360
+        img = Image.new("RGB", (width, height), (245, 245, 245))
+        draw = ImageDraw.Draw(img)
+        try:
+            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+            font_text = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+        except Exception:
+            font_title = None; font_text = None; font_small = None
+        # Header
+        draw.rectangle([(0,0),(width,70)], fill=(33, 150, 243))
+        title = f"Ticket de Paiement — Facture #{self.inv_id}"
+        draw.text((20, 20), title, fill=(255,255,255), font=font_title or None)
+        # Body
+        payer = interaction.user.display_name
+        receiver_user = interaction.guild.get_member(self.sender_id) if interaction.guild else None
+        receiver = receiver_user.display_name if receiver_user else f"ID:{self.sender_id}"
+        cur = self.cog._currency_emoji(self.ctx)
+        amt_txt = f"{self.cog._fmt_amount(self.amount)} {cur}"
+        now_txt = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+        created_txt = created_at.strftime("%d/%m/%Y %H:%M") if created_at else now_txt
+        y = 95
+        draw.text((20, y), f"Payé par: {payer}", fill=(20,20,20), font=font_text or None); y+=28
+        draw.text((20, y), f"Destinataire: {receiver}", fill=(20,20,20), font=font_text or None); y+=28
+        draw.text((20, y), f"Montant: {amt_txt}", fill=(20,20,20), font=font_text or None); y+=28
+        draw.text((20, y), f"Motif: {reason}", fill=(20,20,20), font=font_text or None); y+=28
+        draw.text((20, y), f"Statut: {status.upper()}", fill=(20,120,20), font=font_text or None); y+=28
+        draw.text((20, y), f"Émise le: {created_txt}", fill=(80,80,80), font=font_small or None); y+=22
+        draw.text((20, y), f"Imprimé le: {now_txt}", fill=(80,80,80), font=font_small or None)
+        # Footer
+        draw.rectangle([(0,height-40),(width,height)], fill=(230,230,230))
+        draw.text((20, height-30), "Merci pour votre paiement — Bot de Fazer", fill=(60,60,60), font=font_small or None)
+        # Send image
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        file = discord.File(buf, filename=f"ticket_facture_{self.inv_id}.png")
+        await interaction.followup.send(file=file)
 
 
 class Economy(commands.Cog):
@@ -545,6 +629,7 @@ class Economy(commands.Cog):
         self.illegal_cooldowns = commands.CooldownMapping.from_cooldown(1, 3600, commands.BucketType.user)
         self._emoji_cache = None
         self._known_users = set()
+        self.max_bet_limit = 1_000_000
 
     async def _connect(self):
         if self.pool:
@@ -656,8 +741,46 @@ class Economy(commands.Cog):
         if not s:
             return 0
         if s in ("all", "tout"):
+            amt = int(available)
+        else:
+            mult = 1
+            if s.endswith("k"):
+                mult = 1_000
+                s = s[:-1]
+            elif s.endswith("m"):
+                mult = 1_000_000
+                s = s[:-1]
+            elif s.endswith("b"):
+                mult = 1_000_000_000
+                s = s[:-1]
+            elif s.endswith("t"):
+                mult = 1_000_000_000_000
+                s = s[:-1]
+            elif s.endswith("q"):
+                mult = 1_000_000_000_000_000
+                s = s[:-1]
+
+            s = s.replace("_", "")
+            try:
+                if mult > 1:
+                    s = s.replace(",", ".")
+                    amt = int(float(s) * mult)
+                else:
+                    s = re.sub(r"[^0-9]", "", s)
+                    amt = int(s)
+            except Exception:
+                return 0
+
+        max_bet = getattr(self, "max_bet_limit", 1_000_000)
+        amt = max(0, min(amt, max_bet))
+        return amt
+
+    def _parse_amount_all_nocap(self, raw: str, available: int) -> int:
+        s = (raw or "").strip().lower()
+        if not s:
+            return 0
+        if s in ("all", "tout"):
             return int(available)
-            
         mult = 1
         if s.endswith("k"):
             mult = 1_000
@@ -665,32 +788,26 @@ class Economy(commands.Cog):
         elif s.endswith("m"):
             mult = 1_000_000
             s = s[:-1]
-        elif s.endswith("b"): # Milliards
+        elif s.endswith("b"):
             mult = 1_000_000_000
             s = s[:-1]
-        elif s.endswith("t"): # Billions
+        elif s.endswith("t"):
             mult = 1_000_000_000_000
             s = s[:-1]
-        elif s.endswith("q"): # Quadrillions
+        elif s.endswith("q"):
             mult = 1_000_000_000_000_000
             s = s[:-1]
-
-        # Nettoyage : on garde les points/virgules seulement si multiplicateur, sinon on vire tout pour les entiers
         s = s.replace("_", "")
-        
         try:
             if mult > 1:
-                # Avec suffixe (ex: 1.5k), on accepte les décimales
-                # On remplace , par . pour float()
                 s = s.replace(",", ".")
-                return int(float(s) * mult)
+                amt = int(float(s) * mult)
             else:
-                # Sans suffixe (ex: 100.000 ou 100,000), on considère que c'est un entier formaté
-                # On vire tous les séparateurs non numériques sauf chiffres
                 s = re.sub(r"[^0-9]", "", s)
-                return int(s)
+                amt = int(s)
         except Exception:
             return 0
+        return max(0, min(amt, int(available)))
 
     async def cog_load(self):
         try:
@@ -1456,7 +1573,7 @@ class Economy(commands.Cog):
                 await cur.execute(f"SELECT {col_name} FROM users WHERE user_id=%s", (ctx.author.id,))
                 bank_bal = (await cur.fetchone())[0]
                 
-                amt = self._parse_bet_amount(amount, bank_bal)
+                amt = self._parse_amount_all_nocap(amount, bank_bal)
                 if amt <= 0:
                     emb = self._bank_embed(ctx, title="Erreur", description="Montant invalide.", color=discord.Color.red())
                     return await ctx.send(embed=emb)
@@ -1498,7 +1615,7 @@ class Economy(commands.Cog):
             async with conn.cursor() as cur:
                 await cur.execute("SELECT balance, bank FROM users WHERE user_id=%s", (ctx.author.id,))
                 bal, bank = await cur.fetchone()
-                amt = self._parse_bet_amount(amount, bank)
+                amt = self._parse_amount_all_nocap(amount, bank)
                 
                 if amt <= 0:
                     emb = self._bank_embed(ctx, title="Erreur", description="Montant invalide.", color=discord.Color.red())
@@ -1537,7 +1654,7 @@ class Economy(commands.Cog):
                  await cur.execute("SELECT balance FROM users WHERE user_id=%s", (target.id,))
                  t_bal = (await cur.fetchone())[0]
 
-        amt_int = self._parse_bet_amount(amount, t_bal)     
+        amt_int = self._parse_amount_all_nocap(amount, t_bal)     
         if amt_int <= 0:
             return await ctx.send("❌ Montant invalide.")
             
@@ -1724,7 +1841,7 @@ class Economy(commands.Cog):
             async with conn.cursor() as cur:
                 await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
                 bal = (await cur.fetchone())[0]
-                amount_int = self._parse_bet_amount(amount, bal)
+                amount_int = self._parse_amount_all_nocap(amount, bal)
 
                 if amount_int <= 0:
                     emb = self._bank_embed(ctx, title="Erreur", description="Montant invalide.", color=discord.Color.red())
@@ -2739,6 +2856,13 @@ class Economy(commands.Cog):
                 # Get Luxury
                 await cur.execute("SELECT item_key, purchase_date, serial_number FROM user_luxury WHERE user_id=%s", (member.id,))
                 luxs = await cur.fetchall()
+                
+                # Get Horses
+                try:
+                    await cur.execute("SELECT name, emoji FROM user_horses WHERE owner_id=%s", (member.id,))
+                    horses = await cur.fetchall()
+                except Exception:
+                    horses = []
         
         embed = discord.Embed(title=f"🏰 Patrimoine de {member.display_name}", color=discord.Color.gold())
         
@@ -2795,8 +2919,20 @@ class Economy(commands.Cog):
         else:
             embed.add_field(name="Objets de Luxe", value="Aucun flow.", inline=False)
             lux_val = 0
+        
+        # Horses Field
+        horse_val = 0
+        if horses:
+            horse_list = ""
+            for n, e in horses:
+                horse_list += f"{e} **{n}**\n"
+            horse_val = len(horses) * 50_000_000
+            horse_list += f"\n🐎 **Valeur Chevaux:** {self._fmt_amount(horse_val)}"
+            embed.add_field(name="Chevaux", value=horse_list, inline=False)
+        else:
+            embed.add_field(name="Chevaux", value="Aucun cheval.", inline=False)
             
-        embed.set_footer(text=f"Valeur Totale des Actifs: {self._fmt_amount(prop_val + lux_val)}")
+        embed.set_footer(text=f"Valeur Totale des Actifs: {self._fmt_amount(prop_val + lux_val + horse_val)}")
         await ctx.send(embed=embed)
 
     @commands.command(name="market", aliases=["shop", "magasin"])
@@ -3106,8 +3242,7 @@ class Economy(commands.Cog):
                     time_diff = dt.datetime.now() - last_interest_row[0]
                     if time_diff.total_seconds() < 86400:  # 24 hours
                         hours_left = int((86400 - time_diff.total_seconds()) / 3600)
-                        # return await ctx.send(f"❌ Vous devez attendre encore {hours_left}h avant de collecter vos intérêts.")
-                        pass # On bypass le cooldown pour le moment si c'est pour debug, sinon décommenter
+                        return await ctx.send(f"❌ Tu dois attendre encore {hours_left}h avant de collecter tes intérêts.")
                 
                 # Award interest
                 await cur.execute("UPDATE users SET balance=balance+%s, last_interest=NOW() WHERE user_id=%s", (interest_amount, ctx.author.id))
@@ -3520,6 +3655,15 @@ class Economy(commands.Cog):
         )
         await ctx.send(embed=emb)
 
+    @commands.command(name="set_max_bet")
+    @is_owner_or_admin()
+    async def set_max_bet(self, ctx: commands.Context, amount: str):
+        val = self._parse_amount(amount)
+        if val <= 0:
+            return await ctx.send("❌ Montant invalide.")
+        self.max_bet_limit = val
+        await ctx.send(f"✅ Mise maximale fixée à {self._fmt_amount(val)}.")
+
     @commands.command(name="admin_fix_db")
     @is_owner_or_admin()
     async def admin_fix_db(self, ctx: commands.Context):
@@ -3546,6 +3690,27 @@ class Economy(commands.Cog):
                     await ctx.send(f"Color col error (maybe exists): {e}")
                     
         await ctx.send("Migration attempts finished.")
+
+    @commands.command(name="reset_all")
+    async def reset_all(self, ctx: commands.Context, password: str):
+        if ctx.author.id != 1443339902623154207:
+            return await ctx.send("🚫 Owner only.")
+        if password != "pommedeterre":
+            return await ctx.send("❌ Mot de passe incorrect.")
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.execute("UPDATE users SET balance=0, bank=0, bank_2=0, bank_3=0, bank_tier=1")
+                    await cur.execute("DELETE FROM inventory")
+                    await cur.execute("DELETE FROM user_horses")
+                    await cur.execute("DELETE FROM user_achievements")
+                    await cur.execute("DELETE FROM user_properties")
+                    await cur.execute("UPDATE clans SET balance=0")
+                    await cur.execute("DELETE FROM clan_members")
+                except Exception as e:
+                    return await ctx.send(f"❌ Erreur reset: {e}")
+        await ctx.send(content="@everyone", embed=discord.Embed(title="🔄 Reset global", description="Tous les comptes et assets ont été réinitialisés.", color=discord.Color.red()))
 
     @commands.command(name="reset_user") 
     @is_owner_or_admin()
@@ -5078,16 +5243,21 @@ class AdminTransactionView(discord.ui.View):
         org_level = 0
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("""
-                    SELECT c.name, c.level 
-                    FROM clans c 
-                    JOIN clan_members m ON c.id = m.clan_id 
-                    WHERE m.user_id=%s
-                """, (ctx.author.id,))
-                row = await cur.fetchone()
-                if row:
-                    org_name, org_level = row
-                    bonus_amount = org_level * 5000
+                try:
+                    await cur.execute("""
+                        SELECT c.name, c.level 
+                        FROM clans c 
+                        JOIN clan_members m ON c.id = m.clan_id 
+                        WHERE m.user_id=%s
+                    """, (ctx.author.id,))
+                    row = await cur.fetchone()
+                    if row:
+                        org_name, org_level = row
+                        bonus_amount = org_level * 5000
+                except Exception:
+                    bonus_amount = 0
+                    org_name = None
+                    org_level = 0
                 total_amount = base_amount + bonus_amount
                 await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (total_amount, ctx.author.id))
         cur_emoji = self._currency_emoji(ctx)

@@ -50,6 +50,9 @@ class HorseRace(commands.Cog):
         self.horses = []
         self.bets = {} # user_id: (horse_id, amount)
         self.race_message = None
+        self.step_delay = 2.5
+        self.horse_owner = {}
+        self.board_message = None
         
         self.horse_names = [
             "Tonnerre", "Lasagne", "Petit Poney", "Kebab", "Fazer Express",
@@ -83,7 +86,7 @@ class HorseRace(commands.Cog):
 
     @course.command(name="start")
     # Check admin or owner
-    async def start(self, ctx):
+    async def start(self, ctx, duration: int | None = None):
         # Admin check logic duplicated from economy because cleaner than importing
         is_admin = False
         if ctx.author.id == 1443339902623154207: is_admin = True
@@ -99,6 +102,13 @@ class HorseRace(commands.Cog):
         self.bets = {}
         self.bets_open = True
         self.race_active = True
+        if duration:
+            try:
+                d = int(duration)
+            except:
+                d = None
+            if d and d >= 10 and d <= 300:
+                self.step_delay = max(1.0, d / 10.0)
         
         # Display Board
         desc = "🏁 **LA COURSE VA BIENTÔT COMMENCER !** 🏁\n\n"
@@ -107,13 +117,15 @@ class HorseRace(commands.Cog):
         desc += "📋 **LISTE DES PARTANTS :**\n"
         
         for h in self.horses:
-            desc += f"**#{h.id} {h.emoji} {h.name}** | Cote: **{h.odds}**\n"
+            owner_note = ""
+            if h.id in self.horse_owner:
+                owner_note = f" — 👤 Cheval de <@{self.horse_owner[h.id]}>"
+            desc += f"**#{h.id} {h.emoji} {h.name}** | Cote: **{h.odds}**{owner_note}\n"
             
         embed = discord.Embed(title="🐎 PMU STREET - Paris Ouverts", description=desc, color=discord.Color.green())
         embed.set_thumbnail(url="https://media.discordapp.net/attachments/100000000000000000/100000000000000000/horse.png") # Placeholder or remove
         embed.set_footer(text="L'admin lancera la course avec +course run")
-        
-        await ctx.send(embed=embed)
+        self.board_message = await ctx.send(embed=embed)
 
     @commands.command(name="bet")
     async def bet(self, ctx, horse_id: int, amount: str):
@@ -181,8 +193,8 @@ class HorseRace(commands.Cog):
         # 25 seconds duration approx.
         # We update every 2.5 seconds -> 10 steps.
         
-        for step in range(15): # Max 15 steps safety
-            await asyncio.sleep(2.5)
+        for step in range(15):
+            await asyncio.sleep(self.step_delay)
             
             # Move horses
             for h in self.horses:
@@ -252,12 +264,18 @@ class HorseRace(commands.Cog):
             await cog._connect()
             async with cog.pool.acquire() as conn:
                 async with conn.cursor() as cur:
+                    owner_cut = {}
                     for uid, (hid, amt) in self.bets.items():
                         if hid == winner.id:
                             winnings = int(amt * winner.odds)
                             await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (winnings, uid))
                             winners_names.append(f"<@{uid}> (+{cog._fmt_amount(winnings)})")
                             total_payout += winnings
+                        if hid in self.horse_owner:
+                            owner_id = self.horse_owner[hid]
+                            owner_cut[owner_id] = owner_cut.get(owner_id, 0) + int(amt * 0.10)
+                    for oid, cut in owner_cut.items():
+                        await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (cut, oid))
                             
         if winners_names:
             msg = f"💸 **Félicitations aux gagnants :**\n{', '.join(winners_names)}"
@@ -268,6 +286,127 @@ class HorseRace(commands.Cog):
             
         self.race_active = False
         self.bets_open = False
+
+    @commands.command(name="horsebuy", aliases=["buyhorse","cheval","chevalbuy"])
+    async def horsebuy(self, ctx, *, name: str):
+        cog = self.bot.get_cog('Economy')
+        if not cog: return await ctx.send("❌ Erreur système.")
+        price = 50_000_000
+        await cog._connect()
+        async with cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                row = await cur.fetchone()
+                if not row or row[0] < price:
+                    return await ctx.send("❌ Pas assez en poche pour acheter le cheval (50m).")
+                await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (price, ctx.author.id))
+                await cur.execute("""
+                    CREATE TABLE IF NOT EXISTS user_horses (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        owner_id BIGINT NOT NULL,
+                        name VARCHAR(64) NOT NULL,
+                        emoji VARCHAR(8) NOT NULL,
+                        base_speed FLOAT NOT NULL,
+                        variance FLOAT NOT NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """)
+                emoji = random.choice(self.emojis)
+                base_speed = random.uniform(0.95, 1.25)
+                variance = random.uniform(0.1, 0.25)
+                await cur.execute("INSERT INTO user_horses(owner_id,name,emoji,base_speed,variance) VALUES(%s,%s,%s,%s,%s)", (ctx.author.id, name, emoji, base_speed, variance))
+        await ctx.send(f"✅ Cheval **{name}** acheté pour **50m**.")
+
+    @course.command(name="addhorse")
+    async def addhorse(self, ctx, *, name: str):
+        if not self.bets_open:
+            return await ctx.send("❌ Les paris ne sont pas ouverts.")
+        cog = self.bot.get_cog('Economy')
+        if not cog: return await ctx.send("❌ Erreur système.")
+        await cog._connect()
+        async with cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT emoji, base_speed, variance FROM user_horses WHERE owner_id=%s AND name=%s", (ctx.author.id, name))
+                row = await cur.fetchone()
+                if not row:
+                    return await ctx.send("❌ Tu ne possèdes pas ce cheval.")
+                emoji, base_speed, variance = row
+        new_id = (max([h.id for h in self.horses]) + 1) if self.horses else 1
+        h = Horse(new_id, name, emoji, float(base_speed), float(variance))
+        self.horses.append(h)
+        self.horse_owner[new_id] = ctx.author.id
+        await ctx.send(f"✅ Cheval **#{new_id} {name}** ajouté à la course.")
+        await self._refresh_board(ctx)
+
+    async def _refresh_board(self, ctx):
+        if not self.bets_open or not self.board_message:
+            return
+        desc = "🏁 **LA COURSE VA BIENTÔT COMMENCER !** 🏁\n\n"
+        desc += "Pariez sur votre cheval favori avec `+bet [numéro] [montant]`\n"
+        desc += "*Exemple: +bet 2 500*\n\n"
+        desc += "📋 **LISTE DES PARTANTS :**\n"
+        for h in self.horses:
+            owner_note = ""
+            if h.id in self.horse_owner:
+                owner_note = f" — 👤 Cheval de <@{self.horse_owner[h.id]}>"
+            desc += f"**#{h.id} {h.emoji} {h.name}** | Cote: **{h.odds}**{owner_note}\n"
+        embed = discord.Embed(title="🐎 PMU STREET - Paris Ouverts", description=desc, color=discord.Color.green())
+        try:
+            await self.board_message.edit(embed=embed)
+        except:
+            pass
+
+    @commands.command(name="horserename", aliases=["renamehorse","chevalrename"])
+    async def horserename(self, ctx, old_name: str, *, new_name: str):
+        cog = self.bot.get_cog('Economy')
+        if not cog: return await ctx.send("❌ Erreur système.")
+        if len(new_name) < 2 or len(new_name) > 32:
+            return await ctx.send("❌ Nom invalide (2–32 caractères).")
+        await cog._connect()
+        updated = False
+        async with cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE user_horses SET name=%s WHERE owner_id=%s AND name=%s", (new_name, ctx.author.id, old_name))
+                if cur.rowcount > 0:
+                    updated = True
+        if not updated:
+            return await ctx.send("❌ Aucun cheval trouvé à ton nom avec ce nom.")
+        for h in self.horses:
+            if h.name == old_name and self.horse_owner.get(h.id) == ctx.author.id:
+                h.name = new_name
+        await ctx.send(f"✅ Cheval renommé en **{new_name}**.")
+        await self._refresh_board(ctx)
+
+    @commands.command(name="horsesell", aliases=["sellhorse"])
+    async def horsesell(self, ctx, *, name: str):
+        cog = self.bot.get_cog('Economy')
+        if not cog:
+            return await ctx.send("❌ Erreur système.")
+        if self.bets_open:
+            for h in self.horses:
+                if h.name == name and self.horse_owner.get(h.id) == ctx.author.id:
+                    return await ctx.send("❌ Cheval engagé dans une course, vente impossible.")
+        price = int(50_000_000 * 0.7)
+        await cog._connect()
+        sold = False
+        async with cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT id FROM user_horses WHERE owner_id=%s AND name=%s LIMIT 1", (ctx.author.id, name))
+                row = await cur.fetchone()
+                if not row:
+                    return await ctx.send("❌ Tu ne possèdes pas ce cheval.")
+                horse_id = row[0]
+                await cur.execute("DELETE FROM user_horses WHERE id=%s", (horse_id,))
+                await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (price, ctx.author.id))
+                sold = True
+        if sold:
+            rem = []
+            for h in self.horses:
+                if h.name == name and self.horse_owner.get(h.id) == ctx.author.id:
+                    rem.append(h)
+            for h in rem:
+                self.horses.remove(h)
+                self.horse_owner.pop(h.id, None)
+            await ctx.send(f"✅ Cheval vendu pour **{cog._fmt_amount(price)}**.")
 
 async def setup(bot):
     await bot.add_cog(HorseRace(bot))

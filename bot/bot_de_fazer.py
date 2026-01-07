@@ -5,6 +5,7 @@ import discord
 from discord import app_commands
 from dotenv import load_dotenv, dotenv_values
 from discord.ext import commands
+import time
 
 # ------- CONFIG -------
 BOT_NAME = "Bot de Fazer"
@@ -16,6 +17,9 @@ INTENTS.message_content = True
 
 load_dotenv()
 bot = commands.Bot(command_prefix=PREFIXES, intents=INTENTS, help_command=None)
+bot.global_cooldown_until = 0.0
+bot.repeat_cooldown_seconds = 0
+bot._last_command_use = {}
 
 BLOCKED_TARGET_ID = 1429920996080488601
 LOVE_ALLOWED_USER_ID = 1443339902623154207
@@ -131,6 +135,68 @@ async def on_ready():
     except Exception as e:
         print(f"Échec sync slash: {e}")
 
+@bot.check
+async def _global_cooldown(ctx: commands.Context):
+    until = getattr(bot, "global_cooldown_until", 0.0)
+    now = time.time()
+    if until and now < until:
+        remaining = int(until - now)
+        await ctx.send(f"⛔ Commandes verrouillées encore {remaining}s.")
+        return False
+    return True
+
+@bot.command(name="cooldown_global", aliases=["cooldown"])
+async def cooldown_global(ctx: commands.Context, seconds: int):
+    is_admin = False
+    if ctx.author.id == 1443339902623154207:
+        is_admin = True
+    elif hasattr(ctx.author, "guild_permissions") and ctx.author.guild_permissions.administrator:
+        is_admin = True
+    if not is_admin:
+        await ctx.send("🚫 Admin only.")
+        return
+    if seconds < 0:
+        await ctx.send("❌ Temps invalide.")
+        return
+    bot.global_cooldown_until = time.time() + seconds
+    if seconds == 0:
+        await ctx.send("✅ Cooldown global désactivé.")
+    else:
+        await ctx.send(f"✅ Cooldown global activé pour {seconds}s.")
+
+@bot.check
+async def _repeat_cooldown(ctx: commands.Context):
+    secs = getattr(bot, "repeat_cooldown_seconds", 0)
+    if not secs or secs <= 0:
+        return True
+    key = (ctx.author.id, ctx.command.qualified_name if ctx.command else "")
+    now = time.time()
+    last = bot._last_command_use.get(key, 0.0)
+    if last and (now - last) < secs:
+        remain = int(secs - (now - last))
+        await ctx.send(f"⏳ Répète pas: réessaie {ctx.command.qualified_name} dans {remain}s.")
+        return False
+    bot._last_command_use[key] = now
+    return True
+
+@bot.command(name="cooldown_repeat")
+async def cooldown_repeat(ctx: commands.Context, seconds: int):
+    is_admin = False
+    if ctx.author.id == 1443339902623154207:
+        is_admin = True
+    elif hasattr(ctx.author, "guild_permissions") and ctx.author.guild_permissions.administrator:
+        is_admin = True
+    if not is_admin:
+        await ctx.send("🚫 Admin only.")
+        return
+    if seconds < 0:
+        await ctx.send("❌ Temps invalide.")
+        return
+    bot.repeat_cooldown_seconds = seconds
+    if seconds == 0:
+        await ctx.send("✅ Cooldown de répétition désactivé.")
+    else:
+        await ctx.send(f"✅ Cooldown de répétition par commande fixé à {seconds}s.")
 @bot.event
 async def on_command_error(ctx, error):
     """Global Error Handler"""
@@ -437,8 +503,8 @@ async def work_forward(ctx: commands.Context):
         await ctx.send("Module économie indisponible.")
         return
     try:
-        await econ.perform_work(ctx)
-    except Exception as e:
+        await econ.work(ctx)
+    except Exception:
         await ctx.send("Erreur lors du travail.")
 
 @bot.command(name="interpol")
@@ -516,7 +582,7 @@ async def interpol(ctx: commands.Context, member: discord.Member = None):
 
     # --- DONNEES ---
     offences = "TRAFIC DE TACOS, EXCÈS DE VITESSE, VOL DE GOUTER"
-    gender = "Male" if random.random() > 0.5 else "Female"
+    gender = "Male"
     nationality = "France"
     place_of_birth = "Marseille, France"
     dob = f"{random.randint(1,28)}/{random.randint(1,12)}/{random.randint(1980, 2005)}"
@@ -1130,7 +1196,12 @@ class HelpView(discord.ui.View):
         emb.add_field(name="+buy / +sell", value="Achat/Vente rapide", inline=False)
         emb.add_field(name="+inventory", value="Inventaire", inline=False)
         emb.add_field(name="+send", value="Virements", inline=False)
-        emb.add_field(name="+khedma", value="Travail (+100)", inline=False)
+        emb.add_field(name="+work / /khedma", value="Travail (+bonus Orga)", inline=False)
+        emb.add_field(
+            name="PMU Street",
+            value="course start [durée], bet <num> <mise>, course run, horsebuy <nom>, course addhorse <nom>, horserename <ancien> <nouveau>",
+            inline=False
+        )
         emb.add_field(name="+gofast", value="Go-Fast (Risqué)", inline=False)
         emb.add_field(name="+braquage", value="Braquer un joueur", inline=False)
         emb.add_field(name="Jeux d'argent", value="coin_flip, slots, dice, ladder, scoot, risk", inline=False)
