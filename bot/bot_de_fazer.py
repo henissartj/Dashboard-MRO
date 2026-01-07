@@ -100,6 +100,12 @@ async def on_ready():
         print(f"Échec chargement interest: {e}")
 
     try:
+        await bot.load_extension("cogs.horserace")
+        print("Cog horserace chargé.")
+    except Exception as e:
+        print(f"Échec chargement horserace: {e}")
+
+    try:
         await bot.tree.sync()
         print("Slash commands synchronisées.")
     except Exception as e:
@@ -841,6 +847,141 @@ async def diplome(ctx: commands.Context, member: discord.Member = None):
     background.save(buffer, format='PNG')
     buffer.seek(0)
     await ctx.send(file=discord.File(buffer, filename="diplome.png"))
+
+
+@bot.command(name="parions")
+async def parions(ctx: commands.Context):
+    """Génère un ticket de pari sportif fun"""
+    import io
+    import random
+    import datetime
+    import aiohttp
+    from PIL import Image, ImageDraw, ImageFont
+
+    width, height = 400, 600
+    background = Image.new('RGB', (width, height), color=(255, 255, 240)) # Papier thermique un peu jaune
+    draw = ImageDraw.Draw(background)
+    
+    try:
+        font_header = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 30)
+        font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
+        font_mono = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 14)
+        font_status = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
+    except:
+        font_header = ImageFont.load_default()
+        font_bold = ImageFont.load_default()
+        font_mono = ImageFont.load_default()
+        font_status = ImageFont.load_default()
+
+    # Logo / Header
+    draw.rectangle([(0,0), (width, 80)], fill=(0, 50, 150)) # Blue header
+    
+    # Fetch Logo FDJ (Cached)
+    logo_img = getattr(bot, "fdj_cache", None)
+    
+    if logo_img is None:
+        try:
+            async with aiohttp.ClientSession() as session:
+                 async with session.get("https://www.bertrand-sport-avocat.com/images/logos/Institutions%20et%20Tribunaux/logo_FdJ.png") as resp:
+                     if resp.status == 200:
+                         data = await resp.read()
+                         logo_raw = Image.open(io.BytesIO(data)).convert("RGBA")
+                         # Resize small
+                         ratio = logo_raw.width / logo_raw.height
+                         new_h = 30
+                         new_w = int(new_h * ratio)
+                         logo_img = logo_raw.resize((new_w, new_h))
+                         bot.fdj_cache = logo_img
+        except Exception as e:
+            print(f"Error logo parions: {e}")
+            
+    if logo_img:
+        # Place at top left
+        background.paste(logo_img, (15, 20), logo_img)
+
+    text = "PARIONS STREET"
+    try: l = draw.textlength(text, font=font_header)
+    except: l = 200
+    draw.text(((width-l)/2 + 20, 25), text, fill=(255,255,255), font=font_header)
+    
+    # Info
+    y = 100
+    date_str = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+    draw.text((20, y), f"Date: {date_str}", fill=(0,0,0), font=font_mono)
+    draw.text((20, y+20), f"Joueur: {ctx.author.display_name}", fill=(0,0,0), font=font_mono)
+    
+    y += 60
+    draw.line([(20, y), (width-20, y)], fill=(0,0,0), width=2)
+    y += 20
+    
+    # Bets
+    matches = [
+        ("OM vs PSG", "1 (OM)", "5.50"),
+        ("Nasdas vs Sarkozy", "1 (KO)", "2.10"),
+        ("Labubu vs Tung tung sahur", "2 (Tung tung)", "1.80"),
+        ("XADV vs Tmax", "2 (Tmax volé)", "1.05"),
+        ("Fazer prison 2026 ?", "OUI (Sûr)", "1.01"),
+        ("Jul vs Beethoven", "1 (Le J)", "1.10"),
+        ("Marseille vs Monde", "1 (Jamais on perd)", "1.00"),
+        ("Kebab vs Tacos", "2 (Sauce Algérienne)", "1.50"),
+        ("Twingo vs Ferrari", "1 (Stage 3)", "50.0"),
+        ("Bitcoin vs RSA", "2 (Sûr)", "1.10"),
+        ("Météo Marseille", "Soleil", "1.01"),
+        ("Contrôle vs Fuite", "2 (Fuite)", "2.00")
+    ]
+    
+    selected = random.sample(matches, 3)
+    total_cote = 1.0
+    
+    for match, bet, cote in selected:
+        draw.text((20, y), match, fill=(0,0,0), font=font_bold)
+        draw.text((width-60, y), cote, fill=(0,0,0), font=font_bold)
+        y += 20
+        draw.text((20, y), f"👉 {bet}", fill=(50,50,50), font=font_mono)
+        y += 30
+        total_cote *= float(cote)
+        
+    y += 10
+    draw.line([(20, y), (width-20, y)], fill=(0,0,0), width=2)
+    y += 20
+    
+    # Mise & Gain
+    mise = random.choice([10, 20, 50, 100, 500])
+    gain = int(mise * total_cote)
+    
+    draw.text((20, y), f"Mise Totale :", fill=(0,0,0), font=font_bold)
+    draw.text((width-100, y), f"{mise} €", fill=(0,0,0), font=font_bold)
+    y += 30
+    draw.text((20, y), f"Cote Totale :", fill=(0,0,0), font=font_bold)
+    draw.text((width-100, y), f"{total_cote:.2f}", fill=(0,0,0), font=font_bold)
+    y += 30
+    draw.text((20, y), f"GAIN POTENTIEL :", fill=(0,0,0), font=font_bold)
+    draw.text((width-200, y+30), f"{gain} €", fill=(0,100,0), font=font_header)
+    
+    # Status Stamp
+    status = random.choice(["GAGNÉ", "PERDU", "PERDU", "PERDU"]) # More likely to lose
+    color = (0, 150, 0) if status == "GAGNÉ" else (200, 0, 0)
+    
+    # Rotate text for stamp effect
+    stamp = Image.new('RGBA', (300, 100), (0,0,0,0))
+    d_stamp = ImageDraw.Draw(stamp)
+    d_stamp.rectangle([(10,10), (280, 80)], outline=color, width=5)
+    try: l = d_stamp.textlength(status, font=font_status)
+    except: l = 100
+    d_stamp.text(((290-l)/2, 20), status, fill=color, font=font_status)
+    
+    stamp = stamp.rotate(15, expand=1)
+    background.paste(stamp, (50, 400), stamp)
+
+    # Barcode at bottom
+    for i in range(20, width-20, 5):
+        h = random.randint(30, 50)
+        draw.line([(i, height-60), (i, height-60+h)], fill=(0,0,0), width=2)
+
+    buffer = io.BytesIO()
+    background.save(buffer, format='PNG')
+    buffer.seek(0)
+    await ctx.send(file=discord.File(buffer, filename="parions.png"))
 
 
 @bot.command(name="userinfo")

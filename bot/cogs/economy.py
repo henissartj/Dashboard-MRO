@@ -472,7 +472,27 @@ class InvoiceView(discord.ui.View):
         # Disable buttons
         for child in self.children:
             child.disabled = True
-        await interaction.message.edit(view=self)
+            
+        # Update Embed
+        if interaction.message.embeds:
+            embed = interaction.message.embeds[0]
+            embed.color = discord.Color.green()
+            if " (PAYÉE)" not in (embed.title or ""):
+                embed.title = f"{embed.title} (PAYÉE)"
+            
+            # Update or add status field
+            field_updated = False
+            for i, field in enumerate(embed.fields):
+                if field.name == "Statut":
+                    embed.set_field_at(i, name="Statut", value="✅ Payée", inline=True)
+                    field_updated = True
+                    break
+            if not field_updated:
+                embed.add_field(name="Statut", value="✅ Payée", inline=True)
+                
+            await interaction.message.edit(embed=embed, view=self)
+        else:
+            await interaction.message.edit(view=self)
 
     @discord.ui.button(label="❌ Refuser", style=discord.ButtonStyle.red)
     async def refuse_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -486,7 +506,27 @@ class InvoiceView(discord.ui.View):
         self.stop()
         for child in self.children:
             child.disabled = True
-        await interaction.message.edit(view=self)
+            
+        # Update Embed
+        if interaction.message.embeds:
+            embed = interaction.message.embeds[0]
+            embed.color = discord.Color.red()
+            if " (REFUSÉE)" not in (embed.title or ""):
+                embed.title = f"{embed.title} (REFUSÉE)"
+            
+            # Update or add status field
+            field_updated = False
+            for i, field in enumerate(embed.fields):
+                if field.name == "Statut":
+                    embed.set_field_at(i, name="Statut", value="🚫 Refusée", inline=True)
+                    field_updated = True
+                    break
+            if not field_updated:
+                embed.add_field(name="Statut", value="🚫 Refusée", inline=True)
+                
+            await interaction.message.edit(embed=embed, view=self)
+        else:
+            await interaction.message.edit(view=self)
 
 
 class Economy(commands.Cog):
@@ -984,11 +1024,30 @@ class Economy(commands.Cog):
             except:
                 pass
 
+        # Auto-adjust for light backgrounds (Luminance check)
+        # Y = 0.299 R + 0.587 G + 0.114 B
+        lum = start_c[0]*0.299 + start_c[1]*0.587 + start_c[2]*0.114
+        if lum > 160: # Threshold for light background
+             text_c = (20, 20, 20)
+             p_col = (0, 0, 0, 40) # Dark pattern
+        else:
+             p_col = (255, 255, 255, 30) # Light pattern
+
         # Create base card image
         width, height = 600, 350
         image = Image.new('RGB', (width, height), color=start_c)
         draw = ImageDraw.Draw(image)
         
+        # Fonts
+        try:
+            font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+            font_med = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
+        except:
+            font_large = ImageFont.load_default()
+            font_med = ImageFont.load_default()
+            font_small = ImageFont.load_default()
+
         # Background Gradient
         r1, g1, b1 = start_c
         r2, g2, b2 = end_c
@@ -1003,7 +1062,7 @@ class Economy(commands.Cog):
         if pattern:
             overlay = Image.new('RGBA', (width, height), (0,0,0,0))
             d_ov = ImageDraw.Draw(overlay)
-            p_col = (255, 255, 255, 30) # Low opacity white
+            # p_col is already defined above based on background brightness
             
             if pattern == "dots":
                 for x in range(0, width, 20):
@@ -1032,7 +1091,7 @@ class Economy(commands.Cog):
                  try:
                     # Fallback font if bold not found
                     f_skull = font_large
-                    d_ov.text((width//2 - 30, height//2 - 30), "☠️", font=f_skull, fill=(255,255,255,50))
+                    d_ov.text((width//2 - 30, height//2 - 30), "☠️", font=f_skull, fill=p_col)
                  except: pass
             elif pattern == "money":
                  try:
@@ -1054,29 +1113,22 @@ class Economy(commands.Cog):
         draw.line([(50, 125), (110, 125)], fill=(0,0,0), width=1)
 
         # Text
-        try:
-            # Try load font, fallback to default
-            font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
-            font_med = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
-            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
-        except:
-            font_large = ImageFont.load_default()
-            font_med = ImageFont.load_default()
-            font_small = ImageFont.load_default()
+        # Fonts loaded at start of function
+
 
         # Bank Name
-        draw.text((width-250, 30), "MRO BANK", fill=(255, 255, 255), font=font_large)
+        draw.text((width-250, 30), "MRO BANK", fill=text_c, font=font_large)
         
         # Card Number (Fake)
         card_num = f"4921  {str(user_id)[:4]}  {str(user_id)[4:8]}  {str(user_id)[8:12]}"
-        draw.text((50, 180), card_num, fill=(240, 240, 240), font=font_med)
+        draw.text((50, 180), card_num, fill=text_c, font=font_med)
         
         # Holder Name
-        draw.text((50, 280), user_name.upper(), fill=(255, 255, 255), font=font_med)
+        draw.text((50, 280), user_name.upper(), fill=text_c, font=font_med)
         
         # Exp Date
-        draw.text((450, 260), "VALID THRU", fill=(200, 200, 200), font=font_small)
-        draw.text((450, 285), "12/99", fill=(255, 255, 255), font=font_med)
+        draw.text((450, 260), "VALID THRU", fill=text_c, font=font_small)
+        draw.text((450, 285), "12/99", fill=text_c, font=font_med)
 
         # Balances (Right Side List)
         # Using simple format_currency_abbr from global scope or reimplement small logic
@@ -1186,8 +1238,15 @@ class Economy(commands.Cog):
         if category == "colors":
             data = CARD_OPTS['colors'][choice]
             price = data[2]
-            sql = "INSERT INTO user_card_customization (user_id, bg_color_start, bg_color_end) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE bg_color_start=%s, bg_color_end=%s"
-            params = (ctx.author.id, data[0], data[1], data[0], data[1])
+            
+            # Auto-adjust text color based on background
+            if choice in ("white", "platinum"):
+                new_text_color = "#141414"
+            else:
+                new_text_color = "#FFFFFF"
+            
+            sql = "INSERT INTO user_card_customization (user_id, bg_color_start, bg_color_end, text_color) VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE bg_color_start=%s, bg_color_end=%s, text_color=%s"
+            params = (ctx.author.id, data[0], data[1], new_text_color, data[0], data[1], new_text_color)
             
         elif category == "borders":
             data = CARD_OPTS['borders'][choice]
@@ -3080,7 +3139,7 @@ class Economy(commands.Cog):
                 last_interest_row = await cur.fetchone()
                 
                 if last_interest_row and last_interest_row[0]:
-                    time_diff = datetime.now() - last_interest_row[0]
+                    time_diff = dt.datetime.now() - last_interest_row[0]
                     if time_diff.total_seconds() < 86400:  # 24 hours
                         hours_left = int((86400 - time_diff.total_seconds()) / 3600)
                         # return await ctx.send(f"❌ Vous devez attendre encore {hours_left}h avant de collecter vos intérêts.")
@@ -3111,8 +3170,8 @@ class Economy(commands.Cog):
         await self._connect()
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # Define "very rich" as users with > 10M total wealth
-                rich_threshold = 10_000_000
+                # Define "very rich" as users with > 3M total wealth
+                rich_threshold = 3_000_000
                 
                 # Get all rich users
                 await cur.execute("""
@@ -3350,19 +3409,24 @@ class Economy(commands.Cog):
     # Admin commands
     @commands.command(name="add_money", aliases=["addmoney", "$addmoney"]) 
     @is_owner_or_admin()
-    async def add_money(self, ctx: commands.Context, member: discord.Member, amount: int, mode: str | None = None):
+    async def add_money(self, ctx: commands.Context, member: discord.Member, amount: str, mode: str | None = None):
         await self._connect(); await self._ensure_user(member.id)
+        
+        val = self._parse_amount(amount)
+        if val <= 0:
+            return await ctx.send("❌ Montant invalide.")
+            
         col = "bank" if (mode or "").lower() == "bank" else "balance"
         if col not in ("balance", "bank"):
             return await ctx.send(embed=self._bank_embed(ctx, title="Erreur", description="Compte invalide.", color=discord.Color.red()))
         txid = self._txn_id()
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                if self.logs_enabled:
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "credit", ctx.author.id, member.id, amount, col, "pending"),
-                    )
+                # Always insert for pending transaction
+                await cur.execute(
+                    "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                    (txid, "credit", ctx.author.id, member.id, val, col, "pending"),
+                )
         cur = self._currency_emoji(ctx)
         emb = self._bank_embed(
             ctx,
@@ -3370,7 +3434,7 @@ class Economy(commands.Cog):
             color=discord.Color.orange(),
             fields=[
                 ("Cible", member.mention, True),
-                ("Montant", f"+{self._fmt_amount(amount)} {cur}", True),
+                ("Montant", f"+{self._fmt_amount(val)} {cur}", True),
                 ("Compte", col, True),
             ],
             txn_id=txid,
@@ -3448,14 +3512,19 @@ class Economy(commands.Cog):
 
     @commands.command(name="remove_money", aliases=["remoney"]) 
     @is_owner_or_admin()
-    async def remove_money(self, ctx: commands.Context, member: discord.Member, amount: int, mode: str | None = None):
+    async def remove_money(self, ctx: commands.Context, member: discord.Member, amount: str, mode: str | None = None):
         await self._connect(); await self._ensure_user(member.id)
+        
+        val = self._parse_amount(amount)
+        if val <= 0:
+            return await ctx.send("❌ Montant invalide.")
+            
         col = "bank" if (mode or "").lower() == "bank" else "balance"
         if col not in ("balance", "bank"):
             return await ctx.send(embed=self._bank_embed(ctx, title="Erreur", description="Compte invalide.", color=discord.Color.red()))
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(f"UPDATE users SET {col}={col}-%s WHERE user_id=%s", (amount, member.id))
+                await cur.execute(f"UPDATE users SET {col}={col}-%s WHERE user_id=%s", (val, member.id))
         cur = self._currency_emoji(ctx)
         emb = self._bank_embed(
             ctx,
@@ -3463,7 +3532,7 @@ class Economy(commands.Cog):
             color=discord.Color.red(),
             fields=[
                 ("Cible", member.mention, True),
-                ("Montant", f"-{self._fmt_amount(amount)} {cur}", True),
+                ("Montant", f"-{self._fmt_amount(val)} {cur}", True),
                 ("Compte", col, True),
             ],
         )
