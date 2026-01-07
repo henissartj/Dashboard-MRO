@@ -847,44 +847,8 @@ class Economy(commands.Cog):
         await ctx.send(msg)
 
 
-    @commands.command(name="work", aliases=["w"])
-    @commands.cooldown(1, 60, commands.BucketType.user)
-    async def work(self, ctx: commands.Context):
-        """Travailler pour gagner un peu d'argent (Bonus Orga !)."""
-        await self._connect(); await self._ensure_user(ctx.author.id)
-        
-        base_earnings = random.randint(50, 200)
-        bonus = 0
-        bonus_msg = ""
-        
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                # Check Clan Bonus
-                await cur.execute("""
-                    SELECT c.level 
-                    FROM clans c 
-                    JOIN clan_members m ON c.id = m.clan_id 
-                    WHERE m.user_id=%s
-                """, (ctx.author.id,))
-                row = await cur.fetchone()
-                
-                if row:
-                    lvl = row[0]
-                    # Bonus: 5% per level
-                    multiplier = 1 + (lvl * 0.05)
-                    earnings = int(base_earnings * multiplier)
-                    bonus = earnings - base_earnings
-                    if bonus > 0:
-                        bonus_msg = f" (dont {self._fmt_amount(bonus)} bonus Orga Lvl {lvl})"
-                else:
-                    earnings = base_earnings
-                
-                await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (earnings, ctx.author.id))
-                
-        # Log (Optional for small amounts, but consistent)
-        await self._log_transaction('work', ctx.author.id, ctx.author.id, earnings, 'cash', 'success')
-        
-        await ctx.send(f"🔨 Vous avez travaillé et gagné **{self._fmt_amount(earnings)}** {self._currency_emoji(ctx)}{bonus_msg}.")
+    # Old work command removed in favor of khedma/work unified logic
+
 
     @commands.command(name="braquage")
     @commands.cooldown(1, 3600, commands.BucketType.user)
@@ -3325,25 +3289,43 @@ class Economy(commands.Cog):
     @commands.command(name="daily", aliases=["d"])
     async def daily(self, ctx: commands.Context):
         await self._connect(); await self._ensure_user(ctx.author.id)
-        reward = 200
+        
+        base_reward = 5000
+        bonus = 0
+        org_name = None
+        
         now = dt.datetime.now()
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
+                # Check Org
+                await cur.execute("SELECT c.name, c.level FROM clans c JOIN clan_members m ON c.id=m.clan_id WHERE m.user_id=%s", (ctx.author.id,))
+                res = await cur.fetchone()
+                if res:
+                    org_name, lvl = res
+                    bonus = lvl * 50000
+                
                 await cur.execute("SELECT last_daily FROM users WHERE user_id=%s", (ctx.author.id,))
                 row = await cur.fetchone()
                 last = row[0] if row else None
                 if last and last.date() == now.date():
                     emb = self._bank_embed(ctx, title="Crédit quotidien", color=discord.Color.red(), fields=[("Statut", "Déjà collecté aujourd'hui", False), ("Dernière", last.strftime("%Y-%m-%d %H:%M:%S"), False)])
                     return await ctx.send(embed=emb)
-                await cur.execute("UPDATE users SET balance=balance+%s, last_daily=NOW() WHERE user_id=%s", (reward, ctx.author.id))
+                
+                total = base_reward + bonus
+                await cur.execute("UPDATE users SET balance=balance+%s, last_daily=NOW() WHERE user_id=%s", (total, ctx.author.id))
+        
         cur = self._currency_emoji(ctx)
+        desc = f"💰 Base : {self._fmt_amount(base_reward)} {cur}"
+        if bonus > 0:
+            desc += f"\n🏢 Bonus Orga ({org_name}) : +{self._fmt_amount(bonus)} {cur}"
+            
         emb = self._bank_embed(
             ctx,
             title="Crédit quotidien",
             color=discord.Color.green(),
             fields=[
-                ("Montant", f"+{self._fmt_amount(reward)} {cur}", True),
-                ("Bénéficiaire", ctx.author.mention, True),
+                ("Montant Total", f"+{self._fmt_amount(total)} {cur}", True),
+                ("Détail", desc, False),
             ],
             txn_id=self._txn_id(),
             actor=ctx.author,
@@ -5045,9 +5027,10 @@ class AdminTransactionView(discord.ui.View):
         emb = self._bank_embed(ctx, title="Scoot", description=f"{ctx.author.mention} défie {member.mention}. Mise: {self._fmt_amount(amt)} {cur_emoji} chacun.", color=discord.Color.blurple())
         await ctx.send(embed=emb, view=view)
 
-    @commands.command(name="khedma", help="Travaille et gagne 100. Cooldown 5 minutes.")
-    @commands.dynamic_cooldown(lambda ctx: None if getattr(ctx.author, "guild_permissions", None) and ctx.author.guild_permissions.administrator else commands.Cooldown(1, 5*60), commands.BucketType.user)
-    async def khedma(self, ctx: commands.Context):
+    @commands.command(name="work", aliases=["khedma", "w"], help="Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.")
+    @commands.dynamic_cooldown(lambda ctx: commands.Cooldown(1, 300), commands.BucketType.user)
+    async def work(self, ctx: commands.Context):
+        print(f"[DEBUG] Executing work command for {ctx.author}")
         await self._connect(); await self._ensure_user(ctx.author.id)
         
         base_amount = 100
@@ -5068,8 +5051,8 @@ class AdminTransactionView(discord.ui.View):
                 
                 if row:
                     org_name, org_level = row
-                    # BONUS SIGNIFICATIF: Niveau * 150
-                    bonus_amount = org_level * 150
+                    # BONUS SIGNIFICATIF: Niveau * 5000
+                    bonus_amount = org_level * 5000
                 
                 total_amount = base_amount + bonus_amount
                 
@@ -5087,11 +5070,40 @@ class AdminTransactionView(discord.ui.View):
         emb = self._bank_embed(ctx, title="Khedma", description=desc, color=discord.Color.green(), actor=ctx.author)
         await ctx.send(embed=emb)
 
+    async def perform_work(self, ctx: commands.Context):
+        await self._connect(); await self._ensure_user(ctx.author.id)
+        base_amount = 100
+        bonus_amount = 0
+        org_name = None
+        org_level = 0
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    SELECT c.name, c.level 
+                    FROM clans c 
+                    JOIN clan_members m ON c.id = m.clan_id 
+                    WHERE m.user_id=%s
+                """, (ctx.author.id,))
+                row = await cur.fetchone()
+                if row:
+                    org_name, org_level = row
+                    bonus_amount = org_level * 5000
+                total_amount = base_amount + bonus_amount
+                await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (total_amount, ctx.author.id))
+        cur_emoji = self._currency_emoji(ctx)
+        desc = f"💰 Salaire de base : {self._fmt_amount(base_amount)} {cur_emoji}"
+        if bonus_amount > 0:
+            desc += f"\n🏢 Bonus Organisation ({org_name} Lvl {org_level}) : +{self._fmt_amount(bonus_amount)} {cur_emoji}"
+            desc += f"\n**Total : +{self._fmt_amount(total_amount)} {cur_emoji}**"
+        else:
+            desc += f"\n(Rejoignez une organisation pour gagner plus !)"
+        emb = self._bank_embed(ctx, title="Khedma", description=desc, color=discord.Color.green(), actor=ctx.author)
+        await ctx.send(embed=emb)
     # Alias goût local
     @commands.command(name="khadma", aliases=["khadema", "khdma", "khedma2"])  
     @commands.dynamic_cooldown(lambda ctx: None if getattr(ctx.author, "guild_permissions", None) and ctx.author.guild_permissions.administrator else commands.Cooldown(1, 5*60), commands.BucketType.user)
     async def khadma(self, ctx: commands.Context):
-        await self.khedma(ctx)
+        await self.work(ctx)
 
     # système d’entreprise retiré
     async def entreprise(self, ctx: commands.Context, name: str):

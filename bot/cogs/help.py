@@ -61,6 +61,7 @@ class Help(commands.Cog):
 
         # --- 🎰 Casino & Jeux ---
         game_cmds = [
+            f"`{prefix}course` : Courses Hippiques (PMU Street) 🐎",
             f"`{prefix}slots <mise>` : Machine à sous",
             f"`{prefix}roulette <mise> <choix>` : Roulette Casino",
             f"`{prefix}blackjack <mise>` : Blackjack (21)",
@@ -74,6 +75,15 @@ class Help(commands.Cog):
         ]
         embed.add_field(name="🎰 Casino & Jeux", value="\n".join(game_cmds), inline=False)
 
+        # --- 📸 Images & Fun ---
+        fun_cmds = [
+            f"`{prefix}parions` : Ticket Parions Street (FDJ)",
+            f"`{prefix}perdu <@user>` : Avis de recherche",
+            f"`{prefix}idcard <@user>` : Carte d'identité",
+            f"`{prefix}diplome <@user>` : Diplôme certifié"
+        ]
+        embed.add_field(name="📸 Images & Fun", value="\n".join(fun_cmds), inline=False)
+        
         # --- 💼 Travail & Revenus ---
         work_cmds = [
             f"`{prefix}khedma` : Travailler (Petits boulots)",
@@ -133,22 +143,30 @@ class Help(commands.Cog):
     @commands.command(name="maj")
     async def maj(self, ctx: commands.Context):
         embed = discord.Embed(title="📜 Note de Mise à Jour", color=discord.Color.gold())
-        embed.description = "**Patch Note : Système de Badges & Économie Avancée 🏆**"
+        embed.description = "**Patch Note : Images Fun & Courses Hippiques 🐎**"
         
         changes = [
-            "🎉 **Notifications de Badges** : Les badges débloqués sont maintenant annoncés dans le chat !",
-            "💰 **Intérêts d'Immeubles** : Les propriétaires avec pallier max reçoivent 10% de leurs revenus quotidiennement !",
-            "🏦 **+interest** : Voir vos intérêts disponibles et statut de collection.",
-            "💸 **Taxation des Riches** : Admin peut taxer les joueurs avec +10M (commande `+tax <taux%>`).",
-            "🕶️ **Organisation sur Interpol** : La fiche Interpol affiche maintenant l'organisation et le rôle.",
-            "🏢 **Visibilité Organisation** : L'organisation est visible dans +balance et +profile.",
-            "🏆 **+awardbadge** : Admin peut attribuer des badges aux joueurs.",
-            "🎁 **Sérialisation des Objets** : Les objets de luxe affichent maintenant leur numéro de série."
+            "📸 **Images Fun** :",
+            "• `+parions` : Crée ton ticket Parions Street avec logo FDJ.",
+            "• `+perdu <@user>` : Affiche de recherche 'Perdu de vue'.",
+            "• `+idcard <@user>` : Carte d'identité du quartier.",
+            "• `+diplome <@user>` : Diplôme de la rue selon ta richesse.",
+            "",
+            "🐎 **Courses de Chevaux (PMU)** :",
+            "• Admin lance : `+course start` puis `+course run`.",
+            "• Joueurs parient : `+bet [num] [mise]`.",
+            "• Course en direct avec animation !",
+            "",
+            "⚙️ **Améliorations** :",
+            "• `+add_money` accepte '1m', '100k' etc.",
+            "• `+facture` change de couleur quand payée/refusée.",
+            "• Carte bancaire : Texte auto-adaptatif (noir sur blanc) & Patterns corrigés.",
+            "• `+interest` corrigé.",
+            "• Taxe riche abaissée à 3M."
         ]
         
         embed.add_field(name="Changelog", value="\n".join(changes), inline=False)
-        embed.set_footer(text="Dev actif - Signalez les bugs !")
-        
+        embed.set_footer(text="Bot développé par Fazer")
         await ctx.send(embed=embed)
 
 async def setup(bot):

@@ -22,6 +22,16 @@ LOVE_ALLOWED_USER_ID = 1443339902623154207
 IGNORED_USER_ID = None
 ANNOUNCE_CHANNEL_ID = 1443709677212008561
 TWITTER_LOGO_URL = "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
+try:
+    _env_path = os.getenv("DOTENV_PATH", "/home/app/bot-discord/.env")
+    _vals = dotenv_values(_env_path)
+except Exception:
+    _vals = {}
+DN_IMAGE_URL = (
+    os.getenv("DN_IMAGE_URL")
+    or _vals.get("DN_IMAGE_URL")
+    or "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
+)
 
 # Expressions de vaillant
 VAILLANT_REPLIES = [
@@ -82,28 +92,38 @@ async def on_ready():
     bot.remove_command("help")
 
     try:
-        await bot.load_extension("cogs.economy")
+        await bot.load_extension("bot.cogs.economy")
         print("Cog économie chargé.")
     except Exception as e:
         print(f"Échec chargement économie: {e}")
 
     try:
-        await bot.load_extension("cogs.help")
+        await bot.load_extension("bot.cogs.help")
         print("Cog help chargé.")
     except Exception as e:
         print(f"Échec chargement help: {e}")
 
     try:
-        await bot.load_extension("cogs.interest")
+        await bot.load_extension("bot.cogs.interest")
         print("Cog interest chargé.")
     except Exception as e:
         print(f"Échec chargement interest: {e}")
 
     try:
-        await bot.load_extension("cogs.horserace")
+        await bot.load_extension("bot.cogs.horserace")
         print("Cog horserace chargé.")
     except Exception as e:
         print(f"Échec chargement horserace: {e}")
+    
+    try:
+        names = [c.name for c in bot.commands]
+        print(f"Commands chargées: {len(names)}")
+        if "work" in names:
+            print("Commande 'work' présente.")
+        else:
+            print("Commande 'work' absente.")
+    except Exception as e:
+        print(f"Échec check commandes: {e}")
 
     try:
         await bot.tree.sync()
@@ -336,6 +356,90 @@ async def avatar(ctx: commands.Context, member: discord.Member = None):
         f"We kho {member.display_name}, voici ta tête de vaillant : {member.avatar.url}"
     )
 
+def _find_member_by_name(guild: discord.Guild, name: str) -> discord.Member | None:
+    if not guild or not name:
+        return None
+    name_lower = name.lower().strip()
+    # Exact by display_name or username
+    for m in guild.members:
+        if m.display_name.lower() == name_lower or m.name.lower() == name_lower:
+            return m
+    # Startswith
+    candidates = [m for m in guild.members if m.display_name.lower().startswith(name_lower) or m.name.lower().startswith(name_lower)]
+    if candidates:
+        return candidates[0]
+    # Fuzzy
+    base = {m: m.display_name.lower() for m in guild.members}
+    names = list(base.values()) + [m.name.lower() for m in guild.members]
+    try:
+        import difflib as _difflib
+        best = _difflib.get_close_matches(name_lower, names, n=1, cutoff=0.6)
+        if best:
+            target = best[0]
+            for m in guild.members:
+                if m.display_name.lower() == target or m.name.lower() == target:
+                    return m
+    except Exception:
+        pass
+    return None
+
+@bot.command(name="dn", help="Ban par nom: +dn <nom>")
+@commands.has_permissions(ban_members=True)
+async def dn(ctx: commands.Context, *, nom: str):
+    if not ctx.guild:
+        return await ctx.send("Cette commande doit être utilisée dans un serveur.")
+    target = _find_member_by_name(ctx.guild, nom)
+    if not target:
+        return await ctx.send(f"Introuvable: {nom}. Donne le pseudo exact.")
+    if target.id == ctx.author.id:
+        return await ctx.send("Tu peux pas te ban toi-même frero.")
+    if target == bot.user:
+        return await ctx.send("Tu veux bannir le bot ? Vaillant mais non.")
+    try:
+        import aiohttp, io, os
+        dm = await target.create_dm()
+        sent = False
+        src = DN_IMAGE_URL or ""
+        if src.startswith("http"):
+            try:
+                async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
+                    async with session.get(src) as resp:
+                        if resp.status == 200:
+                            data = await resp.read()
+                            f = discord.File(io.BytesIO(data), filename="botban.png")
+                            await dm.send(file=f)
+                            sent = True
+            except Exception:
+                pass
+        if not sent:
+            path = "/opt/mro_dash/assets/botban.png"
+            if os.path.exists(path):
+                f = discord.File(path, filename="botban.png")
+                await dm.send(file=f)
+                sent = True
+        if not sent:
+            embed = discord.Embed(title="Tu dégages", description="Décision: ban.", color=discord.Color.red())
+            await dm.send(embed=embed)
+    except Exception:
+        pass
+    try:
+        await ctx.guild.ban(target, reason=f"DN par {ctx.author} ({nom})", delete_message_days=0)
+        await ctx.send(f"{target.mention} banni. C’est carré.")
+    except discord.Forbidden:
+        await ctx.send("J’ai pas les perms pour ban ce membre.")
+    except Exception as e:
+        await ctx.send(f"Échec ban: {e}")
+
+@bot.command(name="work", aliases=["khedma", "w"])
+async def work_forward(ctx: commands.Context):
+    econ = bot.get_cog("Economy")
+    if econ is None:
+        await ctx.send("Module économie indisponible.")
+        return
+    try:
+        await econ.perform_work(ctx)
+    except Exception as e:
+        await ctx.send("Erreur lors du travail.")
 
 @bot.command(name="interpol")
 async def interpol(ctx: commands.Context, member: discord.Member = None):
