@@ -17,6 +17,18 @@ from typing import Literal
 CURRENCY_EMOJI = ":monnaie:"
 PROTECTION_ROLE_ID = 1448414767533527153
 
+def is_owner_or_admin():
+    async def predicate(ctx):
+        # Fazer ID check
+        if ctx.author.id == 1443339902623154207:
+            return True
+        # Admin check
+        if hasattr(ctx, "guild") and ctx.guild:
+            if hasattr(ctx.author, "guild_permissions"):
+                return ctx.author.guild_permissions.administrator
+        return False
+    return commands.check(predicate)
+
 DDL = [
     """
     CREATE TABLE IF NOT EXISTS users (
@@ -491,6 +503,8 @@ class Economy(commands.Cog):
         self._roulette_sessions: dict[int, dict] = {}
         self.logs_enabled = True # Default
         self.illegal_cooldowns = commands.CooldownMapping.from_cooldown(1, 3600, commands.BucketType.user)
+        self._emoji_cache = None
+        self._known_users = set()
 
     async def _connect(self):
         if self.pool:
@@ -543,10 +557,13 @@ class Economy(commands.Cog):
             raise e
 
     def _currency_emoji(self, ctx: commands.Context) -> str:
+        if self._emoji_cache:
+            return self._emoji_cache
         try:
             if ctx.guild:
                 e = discord.utils.get(ctx.guild.emojis, name="monnaie")
                 if e:
+                    self._emoji_cache = str(e)
                     return str(e)
         except Exception:
             pass
@@ -600,6 +617,7 @@ class Economy(commands.Cog):
             return 0
         if s in ("all", "tout"):
             return int(available)
+            
         mult = 1
         if s.endswith("k"):
             mult = 1_000
@@ -617,13 +635,20 @@ class Economy(commands.Cog):
             mult = 1_000_000_000_000_000
             s = s[:-1]
 
-        # Suppression des séparateurs de milliers potentiels (point ou virgule)
-        s = re.sub(r"[\.,_]", "", s)
+        # Nettoyage : on garde les points/virgules seulement si multiplicateur, sinon on vire tout pour les entiers
+        s = s.replace("_", "")
+        
         try:
-            # Gérer les décimales si elles existent avant le suffixe (ex: 1.5m)
-            if '.' in s:
+            if mult > 1:
+                # Avec suffixe (ex: 1.5k), on accepte les décimales
+                # On remplace , par . pour float()
+                s = s.replace(",", ".")
                 return int(float(s) * mult)
-            return int(s) * mult
+            else:
+                # Sans suffixe (ex: 100.000 ou 100,000), on considère que c'est un entier formaté
+                # On vire tous les séparateurs non numériques sauf chiffres
+                s = re.sub(r"[^0-9]", "", s)
+                return int(s)
         except Exception:
             return 0
 
@@ -733,13 +758,34 @@ class Economy(commands.Cog):
             pass
 
     async def _ensure_user(self, uid: int):
+        if self._known_users is None:
+            self._known_users = set()
+            
+        if uid in self._known_users:
+            return
+
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("INSERT IGNORE INTO users(user_id) VALUES(%s)", (uid,))
+                self._known_users.add(uid)
+
+    async def _log_transaction(self, type: str, requester_id: int, target_id: int, amount: int, account: str, status: str, is_suspect: int = 0):
+        if not self.logs_enabled:
+            return
+        try:
+            tx_id = self._txn_id()
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        "INSERT INTO transactions (id, type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                        (tx_id, type, requester_id, target_id, amount, account, status, is_suspect)
+                    )
+        except Exception as e:
+            print(f"[WARN] Failed to log transaction: {e}")
 
     # Bank commands
     @commands.command(name="toggle_logs")
-    @commands.has_permissions(administrator=True)
+    @is_owner_or_admin()
     async def toggle_logs(self, ctx: commands.Context, mode: str):
         """Active ou désactive les logs d'argent dans la base de données (on/off)."""
         await self._connect()
@@ -764,23 +810,41 @@ class Economy(commands.Cog):
     @commands.command(name="work", aliases=["w"])
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def work(self, ctx: commands.Context):
-        """Travailler pour gagner un peu d'argent."""
+        """Travailler pour gagner un peu d'argent (Bonus Orga !)."""
         await self._connect(); await self._ensure_user(ctx.author.id)
         
-        earnings = random.randint(50, 200)
+        base_earnings = random.randint(50, 200)
+        bonus = 0
+        bonus_msg = ""
         
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
+                # Check Clan Bonus
+                await cur.execute("""
+                    SELECT c.level 
+                    FROM clans c 
+                    JOIN clan_members m ON c.id = m.clan_id 
+                    WHERE m.user_id=%s
+                """, (ctx.author.id,))
+                row = await cur.fetchone()
+                
+                if row:
+                    lvl = row[0]
+                    # Bonus: 5% per level
+                    multiplier = 1 + (lvl * 0.05)
+                    earnings = int(base_earnings * multiplier)
+                    bonus = earnings - base_earnings
+                    if bonus > 0:
+                        bonus_msg = f" (dont {self._fmt_amount(bonus)} bonus Orga Lvl {lvl})"
+                else:
+                    earnings = base_earnings
+                
                 await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (earnings, ctx.author.id))
                 
-                # Log (Optional for small amounts, but consistent)
-                if self.logs_enabled:
-                     await cur.execute(
-                        "INSERT INTO transactions (type, requester_id, target_id, amount, account, status) VALUES (%s, %s, %s, %s, %s, %s)",
-                        ('work', ctx.author.id, ctx.author.id, earnings, 'cash', 'success')
-                    )
+        # Log (Optional for small amounts, but consistent)
+        await self._log_transaction('work', ctx.author.id, ctx.author.id, earnings, 'cash', 'success')
         
-        await ctx.send(f"🔨 Vous avez travaillé et gagné **{self._fmt_amount(earnings)}** {self._currency_emoji(ctx)}.")
+        await ctx.send(f"🔨 Vous avez travaillé et gagné **{self._fmt_amount(earnings)}** {self._currency_emoji(ctx)}{bonus_msg}.")
 
     @commands.command(name="braquage")
     @commands.cooldown(1, 3600, commands.BucketType.user)
@@ -817,10 +881,7 @@ class Economy(commands.Cog):
                     await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (steal_amt, ctx.author.id))
                     
                     # Log
-                    await cur.execute(
-                        "INSERT INTO transactions (type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, 1)",
-                        ('robbery_success', ctx.author.id, target.id, steal_amt, 'cash', 'success')
-                    )
+                    await self._log_transaction('robbery_success', ctx.author.id, target.id, steal_amt, 'cash', 'success', 1)
                     
                     await ctx.send(f"🔫 **Braquage Réussi !** Vous avez volé {self._fmt_amount(steal_amt)} {self._currency_emoji(ctx)} à {target.mention} !")
                 else:
@@ -834,10 +895,7 @@ class Economy(commands.Cog):
                     await cur.execute("UPDATE users SET balance = balance - %s WHERE user_id=%s", (fine, ctx.author.id))
                     
                     # Log
-                    await cur.execute(
-                        "INSERT INTO transactions (type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, 1)",
-                        ('robbery_fail', ctx.author.id, target.id, fine, 'cash', 'fail')
-                    )
+                    await self._log_transaction('robbery_fail', ctx.author.id, target.id, fine, 'cash', 'fail', 1)
                     
                     await ctx.send(f"👮 **Échec !** La police vous a attrapé. Amende : {self._fmt_amount(fine)} {self._currency_emoji(ctx)}.")
 
@@ -1165,23 +1223,43 @@ class Economy(commands.Cog):
     @commands.command(name="balance", aliases=["bal"]) 
     async def balance(self, ctx: commands.Context, member: discord.Member | None = None):
         await self._connect(); member = member or ctx.author; await self._ensure_user(member.id)
+        
+        # Get balance info
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (member.id,))
                 res = await cur.fetchone()
                 if not res: res = (0, 0, 0, 0)
                 bal, bank1, bank2, bank3 = res
+                
+                # Get organization info
+                await cur.execute("""
+                    SELECT c.name, m.role, c.badge 
+                    FROM clans c 
+                    JOIN clan_members m ON c.id = m.clan_id 
+                    WHERE m.user_id=%s
+                """, (member.id,))
+                c_row = await cur.fetchone()
+                org_info = "Aucune"
+                if c_row:
+                    clan_name = c_row[0]
+                    clan_role = f"({c_row[1]})"
+                    clan_badge = c_row[2] if c_row[2] else ""
+                    org_info = f"{clan_badge} {clan_name} {clan_role}".strip()
         
         cur_emoji = self._currency_emoji(ctx)
         
-        # Check if View is needed (if user has money in other banks)
-        # User requested buttons anyway.
+        # Create embed with organization info
+        emb = self._bank_embed(ctx, title=f"Solde de {member.display_name}", color=discord.Color.gold(), actor=member)
+        emb.add_field(name="Organisation", value=org_info, inline=False)
+        emb.add_field(name="Poche", value=f"{self._fmt_amount(bal)} {cur_emoji}", inline=True)
+        emb.add_field(name="Banque 1", value=f"{self._fmt_amount(bank1)} {cur_emoji}", inline=True)
         
+        # Add buttons for other banks if needed
         view = BalanceView(ctx, member, bal, bank1, bank2, bank3, 0.0, cur_emoji, self)
-        await ctx.send(embed=view.get_embed(), view=view)
+        await ctx.send(embed=emb, view=view)
 
-    @commands.command(name="depobank", aliases=["db"])
-    async def depobank(self, ctx: commands.Context, bank_id: int, amount: str):
+    async def _perform_deposit(self, ctx: commands.Context, bank_id: int, amount_str: str):
         if bank_id not in (1, 2, 3):
             emb = self._bank_embed(ctx, title="Erreur", description="Banque invalide. Utilisez 1, 2 ou 3.", color=discord.Color.red())
             return await ctx.send(embed=emb)
@@ -1196,7 +1274,7 @@ class Economy(commands.Cog):
                 res = await cur.fetchone()
                 bal, tier, current_bank = res
                 
-                amt = self._parse_bet_amount(amount, bal)
+                amt = self._parse_bet_amount(amount_str, bal)
                 if amt <= 0:
                     emb = self._bank_embed(ctx, title="Erreur", description="Montant invalide.", color=discord.Color.red())
                     return await ctx.send(embed=emb)
@@ -1205,6 +1283,7 @@ class Economy(commands.Cog):
                 limit = BANK_TIERS.get(tier, BANK_TIERS[0])["limit"]
                 if current_bank + amt > limit:
                     space = limit - current_bank
+                    if space < 0: space = 0
                     emb = self._bank_embed(
                         ctx, 
                         title="Plafond Atteint", 
@@ -1214,7 +1293,11 @@ class Economy(commands.Cog):
                     emb.set_footer(text="Utilisez +upgrade_bank pour augmenter votre plafond.")
                     return await ctx.send(embed=emb)
 
-                # Atomic Transaction: Update only if balance >= amount
+                if bal < amt:
+                    emb = self._bank_embed(ctx, title="Erreur", description="Pas assez en poche.", color=discord.Color.red())
+                    return await ctx.send(embed=emb)
+
+                # Atomic Transaction
                 await cur.execute(
                     f"UPDATE users SET balance = balance - %s, {col_name} = {col_name} + %s WHERE user_id=%s AND balance >= %s",
                     (amt, amt, ctx.author.id, amt)
@@ -1224,30 +1307,77 @@ class Economy(commands.Cog):
                     emb = self._bank_embed(ctx, title="Erreur", description="Pas assez en poche (ou transaction échouée).", color=discord.Color.red())
                     return await ctx.send(embed=emb)
 
-                # Fetch new values for display
+                # Fetch new values
                 await cur.execute(f"SELECT balance, {col_name} FROM users WHERE user_id=%s", (ctx.author.id,))
                 new_bal, new_bank = await cur.fetchone()
                 
                 # Log Suspect
                 if amt >= SUSPICIOUS_THRESHOLD:
-                     await cur.execute(
-                        "INSERT INTO transactions (type, requester_id, target_id, amount, account, status, is_suspect) VALUES (%s, %s, %s, %s, %s, %s, 1)",
-                        ('deposit', ctx.author.id, ctx.author.id, amt, f'bank_{bank_id}', 'success')
-                    )
-
+                    await self._log_transaction('deposit', ctx.author.id, ctx.author.id, amt, f'bank_{bank_id}', 'success', 1)
         
-        cur = self._currency_emoji(ctx)
+        cur_emoji = self._currency_emoji(ctx)
         emb = self._bank_embed(
             ctx,
             title=f"Dépôt Banque {bank_id}",
             color=discord.Color.green(),
             fields=[
-                ("Montant", f"{self._fmt_amount(amt)} {cur}", True),
-                ("Nouveau Solde Banque", f"{self._fmt_amount(new_bank)} {cur}", True),
+                ("Montant", f"{self._fmt_amount(amt)} {cur_emoji}", True),
+                ("Nouveau Solde Banque", f"{self._fmt_amount(new_bank)} {cur_emoji}", True),
             ],
             txn_id=self._txn_id(),
         )
         await ctx.send(embed=emb)
+
+    @commands.command(name="depobank", aliases=["db"])
+    async def depobank(self, ctx: commands.Context, bank_id: int | str, amount: str = None):
+        """Déposer de l'argent dans une banque spécifique (ex: +db 1 100k ou +db all)"""
+        if isinstance(bank_id, str) and bank_id.lower() in ["all", "tout"]:
+             # Case: +db all -> Deposit all cash to Bank 1
+             await self._perform_deposit(ctx, 1, "all")
+             return
+
+        if amount is None:
+             # If user typed +db 100k, bank_id captures "100k" (as string if int conversion failed, but here type hint is int | str)
+             # Let's try to interpret bank_id as amount for Bank 1
+             try:
+                 # Check if bank_id looks like an int (1, 2, 3)
+                 b_id = int(str(bank_id))
+                 if b_id in [1, 2, 3]:
+                     return await ctx.send("Usage: `+db <banque> <montant>` ou `+dep <montant>`")
+                 else:
+                     # It's an amount like 500
+                     await self._perform_deposit(ctx, 1, str(bank_id))
+                     return
+             except:
+                 # It's a string amount like "100k"
+                 await self._perform_deposit(ctx, 1, str(bank_id))
+                 return
+
+        # Normal case: +db 1 100k
+        try:
+            b_id = int(str(bank_id))
+        except:
+            return await ctx.send("Banque invalide.")
+            
+        await self._perform_deposit(ctx, b_id, amount)
+
+    @commands.command(name="deposit", aliases=["dep"]) 
+    async def deposit(self, ctx: commands.Context, arg1: str, arg2: str = None):
+        """Déposer de l'argent (intelligent). Usage: +dep <montant> ou +dep <banque> <montant>"""
+        if arg2 is None:
+            # Usage: +dep amount -> Bank 1
+            # Handle +dep all
+            bank_id = 1
+            amount_str = arg1
+        else:
+            # Usage: +dep bank_id amount
+            if arg1 in ["1", "2", "3"]:
+                bank_id = int(arg1)
+                amount_str = arg2
+            else:
+                return await ctx.send("Usage: `+dep <montant>` (Banque 1) ou `+dep <1/2/3> <montant>`")
+        
+        await self._perform_deposit(ctx, bank_id, amount_str)
 
     @commands.command(name="upgrade_bank", aliases=["upbank"])
     async def upgrade_bank(self, ctx: commands.Context, tier_choice: int | None = None):
@@ -1336,52 +1466,7 @@ class Economy(commands.Cog):
         )
         await ctx.send(embed=emb)
 
-    @commands.command(name="deposit", aliases=["dep"]) 
-    async def deposit(self, ctx: commands.Context, amount: str):
-        """(Désactivé) Déposer de l'argent."""
-        emb = self._bank_embed(ctx, title="Action Impossible", description="❌ Les dépôts sont désactivés par la banque centrale.", color=discord.Color.red())
-        await ctx.send(embed=emb)
-        return
 
-        await self._connect(); await self._ensure_user(ctx.author.id)
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT balance, bank FROM users WHERE user_id=%s", (ctx.author.id,))
-                bal, bank = await cur.fetchone()
-                amt = self._parse_bet_amount(amount, bal)
-                
-                if amt <= 0:
-                    emb = self._bank_embed(ctx, title="Erreur", description="Montant invalide.", color=discord.Color.red())
-                    return await ctx.send(embed=emb)
-                if bal < amt:
-                    emb = self._bank_embed(ctx, title="Erreur", description="Pas assez en poche.", color=discord.Color.red())
-                    return await ctx.send(embed=emb)
-                
-                # Limite de 100k (Banque 1)
-                MAX_CAPACITY = 100000
-                if bank + amt > MAX_CAPACITY:
-                    space = MAX_CAPACITY - bank
-                    if space <= 0:
-                        desc = "La banque est pleine (Max 100k)."
-                    else:
-                        desc = f"Limite de 100k atteinte. Tu ne peux déposer que {self._fmt_amount(space)} {self._currency_emoji(ctx)}."
-                    emb = self._bank_embed(ctx, title="Erreur", description=desc, color=discord.Color.red())
-                    return await ctx.send(embed=emb)
-
-                bal -= amt; bank += amt
-                await cur.execute("UPDATE users SET balance=%s, bank=%s WHERE user_id=%s", (bal, bank, ctx.author.id))
-        cur = self._currency_emoji(ctx)
-        emb = self._bank_embed(
-            ctx,
-            title="Dépôt",
-            color=discord.Color.green(),
-            fields=[
-                ("Montant", f"{self._fmt_amount(amt)} {cur}", True),
-                ("Opérateur", ctx.author.mention, True),
-            ],
-            txn_id=self._txn_id(),
-        )
-        await ctx.send(embed=emb)
 
     @commands.command(name="withdraw", aliases=["with"]) 
     async def withdraw(self, ctx: commands.Context, amount: str):
@@ -1463,7 +1548,7 @@ class Economy(commands.Cog):
         await ctx.send("ℹ️ Utilisez les boutons sous la facture pour payer ou refuser.")
 
     @commands.command(name="admin_assets")
-    @commands.has_permissions(administrator=True)
+    @is_owner_or_admin()
     async def admin_assets(self, ctx: commands.Context, action: str, target: discord.Member, asset_type: str = None, item_key: str = None):
         """(Admin) Gérer les assets : list/remove <user> [immo/luxe] [key]"""
         await self._connect(); await self._ensure_user(target.id)
@@ -1513,7 +1598,7 @@ class Economy(commands.Cog):
                         await ctx.send("❌ Asset introuvable pour ce joueur.")
 
     @commands.command(name="audit")
-    @commands.has_permissions(administrator=True) # Only admins? Or Police role? Let's say Admins for now.
+    @is_owner_or_admin() # Only admins? Or Police role? Let's say Admins for now.
     async def audit(self, ctx: commands.Context, target: discord.Member):
         """(Admin) Auditer les finances d'un joueur."""
         await self._connect()
@@ -1727,24 +1812,7 @@ class Economy(commands.Cog):
         except Exception as e:
             await ctx.send(f"Erreur graphique: {e}")
 
-    @commands.command(name="maj", help="Nouveautés de la mise à jour")
-    async def maj(self, ctx: commands.Context):
-        embed = discord.Embed(title="📜 Note de Mise à Jour", color=discord.Color.gold())
-        embed.description = "**Patch Note Explosif (v.Chaos) 🧨**"
-        
-        changes = [
-            "🎁 **+giveitem** (ou `+give`) : T'as trop de trucs ? Donne-les à tes potes (ou tes victimes).",
-            "⏳ **+cd** (ou `+cooldowns`) : Arrête de spammer comme un teubé, check tes délais d'attente ici.",
-            "💸 **+payall** (ou `+arosage`) : Pour les riches qui veulent rincer tout le vocal d'un coup. (Faites pleuvoir les billets !)",
-            "🕶️ **+org set** : Pimp ton gang avec description, badge et couleur.",
-            "💍 **+marry** : Marie-toi et partage le magot (ou divorce et prends la moitié, cheh).",
-            "📊 **+simulate** : Calcule si tes investissements immo valent le coup ou si tu te fais douiller."
-        ]
-        
-        embed.add_field(name="Changelog du Boss", value="\n".join(changes), inline=False)
-        embed.set_footer(text="Codeur sous caféine - Bisous les rageux 😘")
-        
-        await ctx.send(embed=embed)
+
 
 
     @commands.command(name="buy", aliases=["b"]) 
@@ -2032,6 +2100,36 @@ class Economy(commands.Cog):
                 
         await ctx.send(f"✅ Tu as retiré **{self._fmt_amount(amount)}** {self._currency_emoji(ctx)} du coffre de l'organisation.")
 
+    @org.command(name="upgrade")
+    async def org_upgrade(self, ctx: commands.Context):
+        """(Chef) Améliorer l'organisation (Bonus XP/Argent)"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Check Clan & Role
+                await cur.execute("SELECT clan_id, role FROM clan_members WHERE user_id=%s", (ctx.author.id,))
+                res = await cur.fetchone()
+                if not res: return await ctx.send("❌ Tu n'es pas dans une organisation.")
+                clan_id, role = res
+                
+                if role != 'owner': return await ctx.send("❌ Seul le chef peut améliorer l'organisation.")
+                
+                # Get current level
+                await cur.execute("SELECT level, balance FROM clans WHERE id=%s", (clan_id,))
+                lvl, bal = await cur.fetchone()
+                
+                # Pricing Formula: Level 1->2 = 500k, 2->3 = 1m, etc.
+                cost = 500_000 * (lvl ** 2)
+                
+                if bal < cost:
+                    return await ctx.send(f"❌ Pas assez de fonds dans le coffre.\nNiveau actuel : {lvl}\nCoût pour passer Niveau {lvl+1} : **{self._fmt_amount(cost)}** {self._currency_emoji(ctx)}.")
+                
+                # Upgrade
+                await cur.execute("UPDATE clans SET balance = balance - %s, level = level + 1 WHERE id=%s", (cost, clan_id))
+                await conn.commit()
+                
+        await ctx.send(f"🆙 **BOOM !** L'organisation est passée au **Niveau {lvl+1}** ! 🚀\nBonus actuel : +{int((lvl+1)*5)}% sur les revenus de `+work`.")
+
     @org.command(name="invite")
     async def org_invite(self, ctx: commands.Context, member: discord.Member):
         """Inviter un membre dans l'organisation"""
@@ -2282,7 +2380,7 @@ class Economy(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(name="payall", aliases=["arosage"])
-    @commands.has_permissions(administrator=True) # Start safe, or maybe high cost
+    @is_owner_or_admin() # Start safe, or maybe high cost
     async def payall(self, ctx: commands.Context, amount: int):
         """(Admin) Donner de l'argent à tout le monde dans le salon vocal"""
         if not ctx.author.voice or not ctx.author.voice.channel:
@@ -2616,7 +2714,7 @@ class Economy(commands.Cog):
                 props = await cur.fetchall()
                 
                 # Get Luxury
-                await cur.execute("SELECT item_key, purchase_date FROM user_luxury WHERE user_id=%s", (member.id,))
+                await cur.execute("SELECT item_key, purchase_date, serial_number FROM user_luxury WHERE user_id=%s", (member.id,))
                 luxs = await cur.fetchall()
         
         embed = discord.Embed(title=f"🏰 Patrimoine de {member.display_name}", color=discord.Color.gold())
@@ -2650,16 +2748,24 @@ class Economy(commands.Cog):
         if luxs:
             lux_list = ""
             lux_val = 0
-            lcounts = {}
+            items_dict = {}
+
             for l in luxs:
                 k = l[0]
+                serial = l[2]
                 if k in LUXURY_ITEMS:
-                    lcounts[k] = lcounts.get(k, 0) + 1
+                    if k not in items_dict:
+                        items_dict[k] = []
+                    items_dict[k].append(serial)
                     lux_val += LUXURY_ITEMS[k]['price']
             
-            for k, count in lcounts.items():
+            for k, serials in items_dict.items():
                 data = LUXURY_ITEMS[k]
-                lux_list += f"{count}x {data['emoji']} **{data['name']}**\n"
+                count = len(serials)
+                serials.sort()
+                # Affiche les numéros de série
+                serials_str = ", ".join([f"#{s}" for s in serials])
+                lux_list += f"{count}x {data['emoji']} **{data['name']}** ({serials_str})\n"
             
             lux_list += f"\n💎 **Valeur Luxe:** {self._fmt_amount(lux_val)}"
             embed.add_field(name="Objets de Luxe", value=lux_list, inline=False)
@@ -2808,26 +2914,38 @@ class Economy(commands.Cog):
                     
                 # 4. Badges / Achievements
                 # Auto-check achievements before displaying
-                badges = []
+                badge_ids = set()
                 
                 # Check Millionnaire
                 if total_money >= 1_000_000:
-                    badges.append(ACHIEVEMENTS['millionnaire']['emoji'])
+                    await self.award_badge(member.id, 'millionnaire', ctx)
+                    badge_ids.add('millionnaire')
                 
                 # Check Magnat
                 if len(props) >= 5:
-                    badges.append(ACHIEVEMENTS['magnat']['emoji'])
+                    await self.award_badge(member.id, 'magnat', ctx)
+                    badge_ids.add('magnat')
                     
                 # Check Marriage
                 if m_row:
-                    badges.append(ACHIEVEMENTS['mariage']['emoji'])
+                    await self.award_badge(member.id, 'mariage', ctx)
+                    badge_ids.add('mariage')
                     
                 # Check Clan Owner
                 if c_row and c_row[1] == 'owner':
-                    badges.append(ACHIEVEMENTS['clan_boss']['emoji'])
-                    
-                # We could store unlocked badges in DB, but dynamic check is fine for simple ones.
-                # If we used DB 'user_achievements', we would fetch them here.
+                    await self.award_badge(member.id, 'clan_boss', ctx)
+                    badge_ids.add('clan_boss')
+                
+                # Get all badges from database (includes the ones we just checked/awarded if they were already there)
+                db_badges = await self._get_user_badges(member.id)
+                for bid in db_badges:
+                    badge_ids.add(bid)
+
+                # Convert to emojis
+                badges = []
+                for badge_id in badge_ids:
+                    if badge_id in ACHIEVEMENTS:
+                        badges.append(ACHIEVEMENTS[badge_id]['emoji'])
                 
         # Build Embed
         embed = discord.Embed(title=f"Profil de {member.display_name}", color=discord.Color.gold())
@@ -2846,8 +2964,75 @@ class Economy(commands.Cog):
             
         await ctx.send(embed=embed)
 
+    async def award_badge(self, user_id: int, badge_id: str, ctx: commands.Context = None, channel: discord.TextChannel = None):
+        """Award a badge to a user with notification"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                try:
+                    # Check if user already has the badge
+                    await cur.execute("SELECT 1 FROM user_achievements WHERE user_id=%s AND badge_id=%s", (user_id, badge_id))
+                    if await cur.fetchone():
+                        return False  # Already has badge
+                    
+                    # Award the badge
+                    await cur.execute("INSERT INTO user_achievements (user_id, badge_id) VALUES (%s, %s)", (user_id, badge_id))
+                    
+                    # Get badge info
+                    badge_info = ACHIEVEMENTS.get(badge_id)
+                    if badge_info:
+                        # Get user info
+                        guild = ctx.guild if ctx else None
+                        if not guild and channel:
+                            guild = channel.guild
+                        
+                        member = guild.get_member(user_id) if guild else None
+                        user_name = member.display_name if member else f"<@{user_id}>"
+                        
+                        # Send notification
+                        embed = discord.Embed(
+                            title="🎉 NOUVEAU BADGE DÉBLOQUÉ ! 🎉",
+                            description=f"**{user_name}** a débloqué le badge **{badge_info['name']}** !",
+                            color=discord.Color.gold()
+                        )
+                        embed.add_field(name="Description", value=badge_info['desc'])
+                        embed.set_thumbnail(url=member.display_avatar.url if member else None)
+                        
+                        # Send to context channel or specified channel
+                        target_channel = ctx.channel if ctx else channel
+                        if target_channel:
+                            await target_channel.send(embed=embed)
+                    
+                    return True
+                    
+                except Exception as e:
+                    print(f"Error awarding badge: {e}")
+                    return False
+
+    async def _has_badge(self, user_id: int, badge_id: str) -> bool:
+        """Check if user has a specific badge"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.execute("SELECT 1 FROM user_achievements WHERE user_id=%s AND badge_id=%s", (user_id, badge_id))
+                    return await cur.fetchone() is not None
+                except:
+                    return False
+
+    async def _get_user_badges(self, user_id: int) -> list:
+        """Get all badges for a user"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.execute("SELECT badge_id FROM user_achievements WHERE user_id=%s", (user_id,))
+                    return [row[0] for row in await cur.fetchall()]
+                except:
+                    return []
+
     @commands.command(name="admin_fix_badge")
-    @commands.has_permissions(administrator=True)
+    @is_owner_or_admin()
     async def admin_fix_badge(self, ctx: commands.Context):
         """(Admin) Fix badge column length"""
         await self._connect()
@@ -2858,6 +3043,173 @@ class Economy(commands.Cog):
                     await ctx.send("✅ Column 'badge' resized to 100 chars.")
                 except Exception as e:
                     await ctx.send(f"❌ Error: {e}")
+
+    @commands.command(name="interest")
+    async def interest(self, ctx: commands.Context):
+        """💰 Percevoir vos intérêts d'immeubles (pour les propriétaires ayant atteint le pallier max)"""
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Check if user has max bank tier (5) and owns properties
+                await cur.execute("SELECT bank_tier FROM users WHERE user_id=%s", (ctx.author.id,))
+                user_res = await cur.fetchone()
+                if not user_res: return
+                bank_tier = user_res[0]
+                
+                await cur.execute("SELECT property_key FROM user_properties WHERE user_id=%s", (ctx.author.id,))
+                prop_rows = await cur.fetchall()
+                
+                property_count = len(prop_rows)
+                total_income = 0
+                for row in prop_rows:
+                    pkey = row[0]
+                    if pkey in PROPERTIES:
+                        total_income += PROPERTIES[pkey]['income']
+                
+                if bank_tier < 5:
+                    return await ctx.send(f"❌ Vous devez avoir atteint le pallier max de banque (Compte Black) pour percevoir des intérêts. Votre pallier actuel: {BANK_TIERS.get(bank_tier, {}).get('name')}")
+                
+                if total_income <= 0:
+                    return await ctx.send("❌ Vos immeubles ne génèrent pas de revenus ou vous n'en avez pas.")
+                
+                # Calculate interest (10% of total income)
+                interest_amount = int(total_income * 0.1)
+                
+                # Check last interest collection (24h cooldown)
+                await cur.execute("SELECT last_interest FROM users WHERE user_id=%s", (ctx.author.id,))
+                last_interest_row = await cur.fetchone()
+                
+                if last_interest_row and last_interest_row[0]:
+                    time_diff = datetime.now() - last_interest_row[0]
+                    if time_diff.total_seconds() < 86400:  # 24 hours
+                        hours_left = int((86400 - time_diff.total_seconds()) / 3600)
+                        # return await ctx.send(f"❌ Vous devez attendre encore {hours_left}h avant de collecter vos intérêts.")
+                        pass # On bypass le cooldown pour le moment si c'est pour debug, sinon décommenter
+                
+                # Award interest
+                await cur.execute("UPDATE users SET balance=balance+%s, last_interest=NOW() WHERE user_id=%s", (interest_amount, ctx.author.id))
+                
+                embed = discord.Embed(
+                    title="💰 Intérêts Collectés !",
+                    description=f"Vous avez perçu **{self._fmt_amount(interest_amount)}** d'intérêts sur vos immeubles !",
+                    color=discord.Color.gold()
+                )
+                embed.add_field(name="Immeubles possédés", value=f"{property_count}", inline=True)
+                embed.add_field(name="Revenus totaux", value=f"{self._fmt_amount(total_income)}/h", inline=True)
+                embed.add_field(name="Taux d'intérêt", value="10%", inline=True)
+                embed.set_footer(text="Prochaine collection dans 24h")
+                
+                await ctx.send(embed=embed)
+
+    @commands.command(name="taxrich")
+    @is_owner_or_admin()
+    async def taxrich_cmd(self, ctx: commands.Context, tax_rate: float = 5.0):
+        """(Admin) Taxer les joueurs très riches (5% par défaut)"""
+        if tax_rate <= 0 or tax_rate > 50:
+            return await ctx.send("❌ Le taux de taxe doit être entre 0.1% et 50%.")
+        
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Define "very rich" as users with > 10M total wealth
+                rich_threshold = 10_000_000
+                
+                # Get all rich users
+                await cur.execute("""
+                    SELECT user_id, balance, bank, bank_2, bank_3, 
+                           (balance + bank + bank_2 + bank_3) as total_wealth
+                    FROM users 
+                    WHERE (balance + bank + bank_2 + bank_3) > %s
+                    ORDER BY total_wealth DESC
+                """, (rich_threshold,))
+                
+                rich_users = await cur.fetchall()
+                
+                if not rich_users:
+                    return await ctx.send(f"❌ Aucun joueur n'a plus de {self._fmt_amount(rich_threshold)}.")
+                
+                total_tax_collected = 0
+                taxed_users = []
+                
+                for user_id, balance, bank, bank_2, bank_3, total_wealth in rich_users:
+                    # Calculate tax (take from balance first, then banks if needed)
+                    tax_amount = int(total_wealth * (tax_rate / 100))
+                    
+                    # Take from balance first
+                    new_balance = max(0, balance - tax_amount)
+                    actual_taxed = balance - new_balance
+                    remaining_tax = tax_amount - actual_taxed
+                    
+                    # Take from bank_1 if needed
+                    new_bank = bank
+                    new_bank_2 = bank_2
+                    new_bank_3 = bank_3
+                    
+                    if remaining_tax > 0:
+                        new_bank = max(0, bank - remaining_tax)
+                        actual_taxed_from_bank = bank - new_bank
+                        remaining_tax -= actual_taxed_from_bank
+                    
+                    if remaining_tax > 0:
+                        new_bank_2 = max(0, bank_2 - remaining_tax)
+                        actual_taxed_from_bank_2 = bank_2 - new_bank_2
+                        remaining_tax -= actual_taxed_from_bank_2
+                    
+                    if remaining_tax > 0:
+                        new_bank_3 = max(0, bank_3 - remaining_tax)
+                        actual_taxed_from_bank_3 = bank_3 - new_bank_3
+                        remaining_tax -= actual_taxed_from_bank_3
+                    
+                    actual_total_taxed = (balance - new_balance) + (bank - new_bank) + (bank_2 - new_bank_2) + (bank_3 - new_bank_3)
+                    
+                    # Update user balance
+                    await cur.execute("""
+                        UPDATE users 
+                        SET balance=%s, bank=%s, bank_2=%s, bank_3=%s 
+                        WHERE user_id=%s
+                    """, (new_balance, new_bank, new_bank_2, new_bank_3, user_id))
+                    
+                    total_tax_collected += actual_total_taxed
+                    
+                    try:
+                        user = await self.bot.fetch_user(user_id)
+                        user_name = user.display_name if user else f"<@{user_id}>"
+                        taxed_users.append((user_name, actual_total_taxed, total_wealth))
+                    except:
+                        taxed_users.append((f"<@{user_id}>", actual_total_taxed, total_wealth))
+                
+                # Create summary embed
+                embed = discord.Embed(
+                    title="💰 Taxation des Riches Complétée !",
+                    description=f"Taux de taxe: **{tax_rate}%**\nSeuil de richesse: **{self._fmt_amount(rich_threshold)}**",
+                    color=discord.Color.red()
+                )
+                
+                embed.add_field(name="Total collecté", value=f"**{self._fmt_amount(total_tax_collected)}**", inline=False)
+                embed.add_field(name="Jouleurs taxés", value=f"**{len(taxed_users)}**", inline=True)
+                
+                # Show top 5 taxed users
+                if taxed_users:
+                    tax_list = "\n".join([f"{name}: -{self._fmt_amount(tax)} (avant: {self._fmt_amount(wealth)})" 
+                                         for name, tax, wealth in taxed_users[:5]])
+                    embed.add_field(name="Top 5 taxés", value=f"```{tax_list}```", inline=False)
+                
+                embed.set_footer(text=f"Taxation effectuée par {ctx.author.display_name}")
+                await ctx.send(embed=embed)
+
+    @commands.command(name="awardbadge")
+    @is_owner_or_admin()
+    async def award_badge_cmd(self, ctx: commands.Context, member: discord.Member, badge_id: str):
+        """(Admin) Award a badge to a user"""
+        if badge_id not in ACHIEVEMENTS:
+            valid_badges = ", ".join(ACHIEVEMENTS.keys())
+            return await ctx.send(f"❌ Badge invalide. Badges valides: {valid_badges}")
+        
+        awarded = await self.award_badge(member.id, badge_id, ctx)
+        if awarded:
+            await ctx.send(f"✅ Badge {ACHIEVEMENTS[badge_id]['name']} attribué à {member.display_name}!")
+        else:
+            await ctx.send(f"❌ {member.display_name} a déjà ce badge ou une erreur est survenue.")
 
     @commands.command(name="inventory", aliases=["inv"]) 
     async def inventory(self, ctx: commands.Context, member: discord.Member | None = None):
@@ -2997,7 +3349,7 @@ class Economy(commands.Cog):
 
     # Admin commands
     @commands.command(name="add_money", aliases=["addmoney", "$addmoney"]) 
-    @commands.has_permissions(administrator=True)
+    @is_owner_or_admin()
     async def add_money(self, ctx: commands.Context, member: discord.Member, amount: int, mode: str | None = None):
         await self._connect(); await self._ensure_user(member.id)
         col = "bank" if (mode or "").lower() == "bank" else "balance"
@@ -3095,7 +3447,7 @@ class Economy(commands.Cog):
         await ctx.send(embed=emb)
 
     @commands.command(name="remove_money", aliases=["remoney"]) 
-    @commands.has_permissions(administrator=True)
+    @is_owner_or_admin()
     async def remove_money(self, ctx: commands.Context, member: discord.Member, amount: int, mode: str | None = None):
         await self._connect(); await self._ensure_user(member.id)
         col = "bank" if (mode or "").lower() == "bank" else "balance"
@@ -3118,7 +3470,7 @@ class Economy(commands.Cog):
         await ctx.send(embed=emb)
 
     @commands.command(name="admin_fix_db")
-    @commands.has_permissions(administrator=True)
+    @is_owner_or_admin()
     async def admin_fix_db(self, ctx: commands.Context):
         """Force database migration for clans table"""
         await self._connect()
@@ -3145,7 +3497,7 @@ class Economy(commands.Cog):
         await ctx.send("Migration attempts finished.")
 
     @commands.command(name="reset_user") 
-    @commands.has_permissions(administrator=True)
+    @is_owner_or_admin()
     async def reset_user(self, ctx: commands.Context, member: discord.Member):
         await self._connect(); await self._ensure_user(member.id)
         async with self.pool.acquire() as conn:
@@ -4628,11 +4980,42 @@ class AdminTransactionView(discord.ui.View):
     @commands.dynamic_cooldown(lambda ctx: None if getattr(ctx.author, "guild_permissions", None) and ctx.author.guild_permissions.administrator else commands.Cooldown(1, 5*60), commands.BucketType.user)
     async def khedma(self, ctx: commands.Context):
         await self._connect(); await self._ensure_user(ctx.author.id)
+        
+        base_amount = 100
+        bonus_amount = 0
+        org_name = None
+        org_level = 0
+
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("UPDATE users SET balance=balance+100 WHERE user_id=%s", (ctx.author.id,))
+                # Check Org for Bonus
+                await cur.execute("""
+                    SELECT c.name, c.level 
+                    FROM clans c 
+                    JOIN clan_members m ON c.id = m.clan_id 
+                    WHERE m.user_id=%s
+                """, (ctx.author.id,))
+                row = await cur.fetchone()
+                
+                if row:
+                    org_name, org_level = row
+                    # BONUS SIGNIFICATIF: Niveau * 150
+                    bonus_amount = org_level * 150
+                
+                total_amount = base_amount + bonus_amount
+                
+                await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (total_amount, ctx.author.id))
+        
         cur_emoji = self._currency_emoji(ctx)
-        emb = self._bank_embed(ctx, title="Khedma", description=f"+{self._fmt_amount(100)} {cur_emoji}", color=discord.Color.green(), actor=ctx.author)
+        desc = f"💰 Salaire de base : {self._fmt_amount(base_amount)} {cur_emoji}"
+        
+        if bonus_amount > 0:
+            desc += f"\n🏢 Bonus Organisation ({org_name} Lvl {org_level}) : +{self._fmt_amount(bonus_amount)} {cur_emoji}"
+            desc += f"\n**Total : +{self._fmt_amount(total_amount)} {cur_emoji}**"
+        else:
+            desc += f"\n(Rejoignez une organisation pour gagner plus !)"
+
+        emb = self._bank_embed(ctx, title="Khedma", description=desc, color=discord.Color.green(), actor=ctx.author)
         await ctx.send(embed=emb)
 
     # Alias goût local

@@ -82,16 +82,22 @@ async def on_ready():
     bot.remove_command("help")
 
     try:
-        await bot.load_extension("bot.cogs.economy")
+        await bot.load_extension("cogs.economy")
         print("Cog économie chargé.")
     except Exception as e:
         print(f"Échec chargement économie: {e}")
 
     try:
-        await bot.load_extension("bot.cogs.help")
+        await bot.load_extension("cogs.help")
         print("Cog help chargé.")
     except Exception as e:
         print(f"Échec chargement help: {e}")
+
+    try:
+        await bot.load_extension("cogs.interest")
+        print("Cog interest chargé.")
+    except Exception as e:
+        print(f"Échec chargement interest: {e}")
 
     try:
         await bot.tree.sync()
@@ -325,6 +331,518 @@ async def avatar(ctx: commands.Context, member: discord.Member = None):
     )
 
 
+@bot.command(name="interpol")
+async def interpol(ctx: commands.Context, member: discord.Member = None):
+    member = member or ctx.author
+    
+    # Création de l'image
+    import io
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    import aiohttp
+
+    # --- CONFIGURATION & ASSETS ---
+    width, height = 850, 500
+    background = Image.new('RGB', (width, height), color=(255, 255, 255))
+    draw = ImageDraw.Draw(background)
+    
+    # Get organization info for the user
+    org_name = "Aucune"
+    org_role = ""
+    org_badge = ""
+    try:
+        economy_cog = bot.get_cog('Economy')
+        if economy_cog:
+            await economy_cog._connect()
+            async with economy_cog.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("""
+                        SELECT c.name, m.role, c.badge 
+                        FROM clans c 
+                        JOIN clan_members m ON c.id = m.clan_id 
+                        WHERE m.user_id=%s
+                    """, (member.id,))
+                    c_row = await cur.fetchone()
+                    if c_row:
+                        org_name = c_row[0]
+                        org_role = f"({c_row[1]})"
+                        org_badge = c_row[2] if c_row[2] else ""
+    except:
+        pass  # Organization info not critical
+
+    # Couleurs (Interpol Style)
+    COLOR_NAVY = (24, 46, 88)      # Dark Navy (Left gradient)
+    COLOR_BLUE = (0, 75, 141)      # Medium Blue (Right gradient)
+    COLOR_RED = (196, 18, 48)      # Interpol Red
+    COLOR_TEXT_DARK = (30, 30, 30) # Dark Gray
+    COLOR_TEXT_GREY = (80, 80, 80) # Lighter Gray
+    COLOR_WHITE = (255, 255, 255)
+
+    # --- HEADER GRADIENT ---
+    # Création du dégradé horizontal
+    for x in range(width):
+        ratio = x / width
+        r = int(COLOR_NAVY[0] * (1 - ratio) + COLOR_BLUE[0] * ratio)
+        g = int(COLOR_NAVY[1] * (1 - ratio) + COLOR_BLUE[1] * ratio)
+        b = int(COLOR_NAVY[2] * (1 - ratio) + COLOR_BLUE[2] * ratio)
+        draw.line([(x, 0), (x, 110)], fill=(r, g, b))
+
+    # --- FONTS ---
+    try:
+        font_name = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+        font_wanted = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
+        font_section = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28) # "Identity particulars"
+        font_label = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+        font_val = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
+        font_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 8)
+        font_stamp = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 80)
+    except:
+        font_name = ImageFont.load_default()
+        font_wanted = ImageFont.load_default()
+        font_section = ImageFont.load_default()
+        font_label = ImageFont.load_default()
+        font_val = ImageFont.load_default()
+        font_badge = ImageFont.load_default()
+        font_stamp = ImageFont.load_default()
+
+    # --- DONNEES ---
+    offences = "TRAFIC DE TACOS, EXCÈS DE VITESSE, VOL DE GOUTER"
+    gender = "Male" if random.random() > 0.5 else "Female"
+    nationality = "France"
+    place_of_birth = "Marseille, France"
+    dob = f"{random.randint(1,28)}/{random.randint(1,12)}/{random.randint(1980, 2005)}"
+
+    # Custom Owner (Fazer)
+    if member.id == 1443339902623154207 or "fazer" in member.name.lower():
+        gender = "Male"
+        offences = "ASSOCIATION DE MALFAITEURS, TRAFIC AGGRAVÉ, BLANCHIMENT, IMPORTATION D'ARMES, PROXÉNÉTISME AGGRAVÉ, FÉTICHISME DES PIEDS"
+        place_of_birth = "Marseille, France"
+
+    # Custom User (726868923819229195)
+    if member.id == 726868923819229195:
+        gender = "Male"
+        nationality = "France"
+        place_of_birth = "Metz, France"
+        offences = "PROXÉNÉTISME AGGRAVÉ, TRAITE D'ÊTRES HUMAINS, VIOLENCES, CONDUITE ÉTAT D’IVRESSE"
+
+    # --- IMAGES (AVATAR & LOGO) ---
+    try:
+        async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
+            # 1. Avatar (Pas étirée)
+            try:
+                async with session.get(member.display_avatar.url) as resp:
+                    if resp.status == 200:
+                        data = await resp.read()
+                        avatar = Image.open(io.BytesIO(data)).convert("RGBA")
+                        
+                        # Resize en gardant le ratio
+                        avatar.thumbnail((200, 250), Image.Resampling.LANCZOS)
+                        # Créer un fond blanc pour la photo si pas remplie
+                        photo_bg_w, photo_bg_h = 180, 220
+                        # On crop le centre si trop grand ou on resize pour fit ?
+                        # Mieux : Crop center to 180x220
+                        # Calculer le ratio pour que la plus petite dimension soit >= target
+                        ratio = max(photo_bg_w / avatar.width, photo_bg_h / avatar.height)
+                        new_size = (int(avatar.width * ratio), int(avatar.height * ratio))
+                        avatar = avatar.resize(new_size, Image.Resampling.LANCZOS)
+                        
+                        # Center crop
+                        left = (avatar.width - photo_bg_w) / 2
+                        top = (avatar.height - photo_bg_h) / 2
+                        avatar = avatar.crop((left, top, left + photo_bg_w, top + photo_bg_h))
+                        
+                        # Cadre fin gris
+                        photo_frame = Image.new('RGB', (182, 222), color=(200, 200, 200))
+                        photo_frame.paste(avatar, (1, 1), avatar)
+                        
+                        # Position Photo (50, 60)
+                        background.paste(photo_frame, (50, 60))
+            except Exception as e:
+                 print(f"Erreur avatar: {e}")
+
+            # 2. Interpol Logo (Header + Badge)
+            # Create Badge Placeholder first (Red Square) so it exists even if logo fails
+            badge_size = 60
+            badge = Image.new('RGB', (badge_size, badge_size), COLOR_RED)
+            badge_draw = ImageDraw.Draw(badge)
+            
+            # Default Text on Badge if logo fails
+            badge_draw.text((10, 38), "INTERPOL", fill=COLOR_WHITE, font=font_badge)
+            badge_draw.text((20, 46), "RED", fill=COLOR_WHITE, font=font_badge)
+            badge_draw.text((14, 52), "NOTICE", fill=COLOR_WHITE, font=font_badge)
+
+            LOGO_URL = "https://upload.wikimedia.org/wikipedia/fr/thumb/e/ea/Interpol_Logo.svg/1200px-Interpol_Logo.svg.png"
+            try:
+                async with session.get(LOGO_URL) as resp_logo:
+                    if resp_logo.status == 200:
+                        l_data = await resp_logo.read()
+                        logo_img = Image.open(io.BytesIO(l_data)).convert("RGBA")
+                        
+                        # A. LOGO HEADER (Top Left) -> REMOVED
+                        # logo_header = logo_img.resize((80, 80))
+                        # background.paste(logo_header, (20, 15), logo_header)
+
+                        # B. BADGE ROUGE (Update with Logo)
+                        # White version of logo for badge
+                        logo_white = logo_img.resize((30, 30))
+                        d = logo_white.getdata()
+                        new_d = []
+                        for item in d:
+                            if item[3] > 0: # If not transparent
+                                new_d.append((255, 255, 255, 255)) # White
+                            else:
+                                new_d.append(item)
+                        logo_white.putdata(new_d)
+                        
+                        badge.paste(logo_white, (15, 5), logo_white)
+                        
+                        # C. LOGO EN BAS A GAUCHE
+                        # Logo officiel couleur, taille moyenne
+                        logo_bottom = logo_img.resize((100, 100))
+                        # Position: (50, 320) - Sous la photo (qui finit vers 280)
+                        background.paste(logo_bottom, (70, 320), logo_bottom)
+                        
+            except Exception as e:
+                print(f"Erreur download logo interpol: {e}")
+            
+            # Collage du badge (Toujours, même si logo fail)
+            background.paste(badge, (50 + 182 - 30, 60), badge)
+
+    except Exception as e:
+        print(f"Erreur globale interpol: {e}")
+
+
+    # --- TEXTES HEADER ---
+    # Shift text slightly right because of Logo
+    text_x = 260
+    draw.text((text_x, 30), f"{member.name.upper()}, {member.display_name.upper()}", fill=COLOR_WHITE, font=font_name)
+    
+    draw.text((text_x, 75), "Wanted by ", fill=COLOR_WHITE, font=font_wanted)
+    w_width = draw.textlength("Wanted by ", font=font_wanted)
+    draw.text((text_x + w_width, 75), "France", fill=(100, 200, 255), font=font_wanted)
+
+
+    # --- CORPS DE PAGE ---
+    y_start = 140
+    draw.text((text_x, y_start), "Identity particulars", fill=COLOR_TEXT_DARK, font=font_section)
+
+    # Données (Liste clé/valeur)
+    y_data = y_start + 50
+    gap_x = 150
+    line_h = 25
+    
+    # Organization display
+    org_display = f"{org_name} {org_role}".strip()
+    if org_name == "Aucune":
+        org_display = "Aucune"
+    
+    info_list = [
+        ("Family name", member.name.upper()),
+        ("Forename", member.display_name.upper()),
+        ("Gender", gender),
+        ("Date of birth", dob),
+        ("Place of birth", place_of_birth),
+        ("Nationality", nationality),
+        ("Organization", org_display),
+        ("Charges", offences)
+    ]
+
+    import textwrap
+
+    for label, val in info_list:
+        draw.text((text_x, y_data), label, fill=COLOR_TEXT_GREY, font=font_label)
+        
+        val_x = text_x + gap_x
+        
+        if label == "Charges":
+            lines = textwrap.wrap(val, width=45)
+            for line in lines:
+                if y_data > height - 20: break
+                draw.text((val_x, y_data), line, fill=COLOR_TEXT_DARK, font=font_val)
+                y_data += 20
+        else:
+            draw.text((val_x, y_data), val, fill=COLOR_TEXT_DARK, font=font_val)
+        
+        y_data += line_h
+        
+    # --- TAMPON WANTED REMOVED ---
+    
+    # Custom Label for Fazer (Suspect N°1)
+    if member.id == 1443339902623154207 or "fazer" in member.name.lower():
+         # Draw Red Box above photo
+         # Photo x=50, w=182. y=60.
+         # Box: x=50, y=25, w=182, h=35
+         draw.rectangle([(50, 25), (232, 60)], fill=COLOR_RED)
+         
+         # Text centered
+         try:
+             font_suspect = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
+         except:
+             font_suspect = ImageFont.load_default()
+             
+         text = "SUSPECT N°1"
+         # Calculate text position to center using textlength/textbbox
+         text_len = draw.textlength(text, font=font_suspect)
+         text_x = 50 + (182 - text_len) // 2
+         text_y = 30 # Approx vertical center
+         
+         draw.text((text_x, text_y), text, fill=COLOR_WHITE, font=font_suspect)
+
+    # Sauvegarde
+    buffer = io.BytesIO()
+    background.save(buffer, format='PNG')
+    buffer.seek(0)
+    
+    await ctx.send(file=discord.File(buffer, filename="interpol.png"))
+
+
+@bot.command(name="perdu")
+async def perdu(ctx: commands.Context, member: discord.Member = None):
+    """Affiche un avis de recherche 'Perdu de vue'"""
+    member = member or ctx.author
+    
+    import io
+    from PIL import Image, ImageDraw, ImageFont, ImageOps
+    import aiohttp
+
+    # --- CONFIG ---
+    width, height = 600, 800
+    background = Image.new('RGB', (width, height), color=(240, 230, 210)) # Papier jauni
+    draw = ImageDraw.Draw(background)
+    
+    try:
+        font_header = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 60)
+        font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 30)
+        font_text = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+    except:
+        font_header = ImageFont.load_default()
+        font_sub = ImageFont.load_default()
+        font_text = ImageFont.load_default()
+
+    # --- HEADER ---
+    draw.rectangle([(20, 20), (width-20, height-20)], outline=(0,0,0), width=5)
+    
+    text = "PERDU DE VUE"
+    try:
+        length = draw.textlength(text, font=font_header)
+    except: length = 300
+    draw.text(((width - length) / 2, 50), text, fill=(200, 0, 0), font=font_header)
+
+    # --- PHOTO ---
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = member.display_avatar.url
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    data = await resp.read()
+                    avatar = Image.open(io.BytesIO(data)).convert("RGBA")
+                    avatar = avatar.resize((300, 300))
+                    # Grayscale
+                    avatar = ImageOps.grayscale(avatar)
+                    background.paste(avatar, ((width - 300) // 2, 150))
+    except Exception as e:
+        print(f"Erreur avatar perdu: {e}")
+
+    # --- TEXTE ---
+    y = 500
+    name = member.display_name.upper()
+    try: length = draw.textlength(name, font=font_sub)
+    except: length = 100
+    draw.text(((width - length) / 2, y), name, fill=(0,0,0), font=font_sub)
+    
+    y += 60
+    desc = [
+        "Aperçu pour la dernière fois en train de",
+        "demander 10 balles à la gare.",
+        "",
+        "Signes distinctifs :",
+        "- N'a pas fait son +daily",
+        "- Porte des fausses TN",
+        "",
+        "Si vous le voyez, dites-lui de",
+        "rembourser ses dettes."
+    ]
+    
+    for line in desc:
+        try: length = draw.textlength(line, font=font_text)
+        except: length = 100
+        draw.text(((width - length) / 2, y), line, fill=(50,50,50), font=font_text)
+        y += 35
+
+    # Save
+    buffer = io.BytesIO()
+    background.save(buffer, format='PNG')
+    buffer.seek(0)
+    await ctx.send(file=discord.File(buffer, filename="perdu.png"))
+
+
+@bot.command(name="idcard")
+async def idcard(ctx: commands.Context, member: discord.Member = None):
+    """Affiche la Carte d'Identité du Quartier"""
+    member = member or ctx.author
+    import io
+    from PIL import Image, ImageDraw, ImageFont
+    import aiohttp
+    
+    width, height = 600, 350
+    background = Image.new('RGB', (width, height), color=(200, 220, 240)) # Bleu clair CNI
+    draw = ImageDraw.Draw(background)
+    
+    # Guillochis (fake pattern)
+    for i in range(0, width, 20):
+        draw.line([(i, 0), (i, height)], fill=(180, 200, 230), width=1)
+    
+    try:
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+        font_label = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
+        font_val = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
+    except:
+        font_title = ImageFont.load_default()
+        font_label = ImageFont.load_default()
+        font_val = ImageFont.load_default()
+
+    # Header
+    draw.text((20, 15), "RÉPUBLIQUE DU SECTEUR", fill=(0, 50, 100), font=font_title)
+    draw.text((20, 40), "CARTE D'IDENTITÉ", fill=(0, 50, 100), font=font_label)
+
+    # Photo
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = member.display_avatar.url
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    data = await resp.read()
+                    avatar = Image.open(io.BytesIO(data)).convert("RGBA")
+                    avatar = avatar.resize((100, 100))
+                    background.paste(avatar, (20, 80))
+    except: pass
+
+    # Info
+    x = 140
+    y = 80
+    
+    # Join date
+    join_date = member.joined_at.strftime("%d/%m/%Y")
+    
+    fields = [
+        ("Nom", member.name.upper()),
+        ("Prénom", member.display_name),
+        ("Né(e) le", join_date),
+        ("Taille", "1m12 les bras levés"),
+        ("Sexe", "Vaillant"),
+        ("Adresse", "En bas du bloc")
+    ]
+    
+    # Fetch org info if possible
+    economy_cog = bot.get_cog('Economy')
+    if economy_cog:
+        try:
+            await economy_cog._connect()
+            async with economy_cog.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT c.name FROM clans c JOIN clan_members m ON c.id=m.clan_id WHERE m.user_id=%s", (member.id,))
+                    res = await cur.fetchone()
+                    if res: fields[-1] = ("Adresse", f"QG {res[0]}")
+        except: pass
+
+    for label, val in fields:
+        draw.text((x, y), label + ":", fill=(100, 100, 100), font=font_label)
+        draw.text((x + 80, y), val, fill=(0, 0, 0), font=font_val)
+        y += 25
+        
+    # Signature
+    draw.text((x, y+20), "Signature:", fill=(100, 100, 100), font=font_label)
+    draw.text((x+80, y+20), member.display_name, fill=(0, 0, 0), font=font_title) # Fake signature
+
+    buffer = io.BytesIO()
+    background.save(buffer, format='PNG')
+    buffer.seek(0)
+    await ctx.send(file=discord.File(buffer, filename="idcard.png"))
+
+
+@bot.command(name="diplome")
+async def diplome(ctx: commands.Context, member: discord.Member = None):
+    """Affiche le Diplôme de la Rue"""
+    member = member or ctx.author
+    import io
+    from PIL import Image, ImageDraw, ImageFont
+    import aiohttp
+    
+    width, height = 800, 600
+    background = Image.new('RGB', (width, height), color=(255, 250, 240)) # Papier crème
+    draw = ImageDraw.Draw(background)
+    
+    # Cadre
+    draw.rectangle([(20, 20), (width-20, height-20)], outline=(150, 100, 50), width=10)
+    draw.rectangle([(35, 35), (width-35, height-35)], outline=(200, 150, 100), width=2)
+    
+    try:
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 50)
+        font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30)
+        font_name = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
+    except:
+        font_title = ImageFont.load_default()
+        font_main = ImageFont.load_default()
+        font_name = ImageFont.load_default()
+
+    # Content
+    y = 100
+    
+    text = "UNIVERSITÉ DE LA RUE"
+    try: length = draw.textlength(text, font=font_title)
+    except: length = 400
+    draw.text(((width - length) / 2, y), text, fill=(100, 50, 0), font=font_title)
+    
+    y += 100
+    text = "Ce diplôme est décerné à"
+    try: length = draw.textlength(text, font=font_main)
+    except: length = 300
+    draw.text(((width - length) / 2, y), text, fill=(0, 0, 0), font=font_main)
+    
+    y += 60
+    text = member.display_name
+    try: length = draw.textlength(text, font=font_name)
+    except: length = 200
+    draw.text(((width - length) / 2, y), text, fill=(0, 0, 100), font=font_name)
+    
+    # Determine grade based on money
+    grade = "Galérien Certifié"
+    economy_cog = bot.get_cog('Economy')
+    if economy_cog:
+        try:
+            await economy_cog._connect()
+            async with economy_cog.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT balance + bank FROM users WHERE user_id=%s", (member.id,))
+                    res = await cur.fetchone()
+                    if res:
+                        total = res[0]
+                        if total > 10_000_000: grade = "Master en Blanchiment"
+                        elif total > 1_000_000: grade = "Licence de Millionnaire"
+                        elif total > 100_000: grade = "BTS Business"
+                        elif total > 10_000: grade = "Bac Pro Débrouille"
+        except: pass
+
+    y += 80
+    text_intro = "Pour l'obtention du grade de :"
+    try: length = draw.textlength(text_intro, font=font_main)
+    except: length = 300
+    draw.text(((width - length) / 2, y), text_intro, fill=(0,0,0), font=font_main)
+    
+    y += 50
+    try: length = draw.textlength(grade, font=font_title)
+    except: length = 300
+    draw.text(((width - length) / 2, y), grade, fill=(200, 0, 0), font=font_title)
+    
+    # Sceau
+    draw.ellipse([(600, 450), (700, 550)], fill=(150, 0, 0))
+    draw.text((620, 490), "VALIDE", fill=(255,255,255), font=font_main)
+
+    buffer = io.BytesIO()
+    background.save(buffer, format='PNG')
+    buffer.seek(0)
+    await ctx.send(file=discord.File(buffer, filename="diplome.png"))
+
+
 @bot.command(name="userinfo")
 async def userinfo(ctx: commands.Context, member: discord.Member = None):
     member = member or ctx.author
@@ -433,7 +951,7 @@ async def invite(ctx: commands.Context, max_age: int = 86400):
 @commands.is_owner()
 async def reload_cmd(ctx: commands.Context):
     try:
-        await bot.reload_extension("bot.cogs.economy")
+        await bot.reload_extension("cogs.economy")
         await bot.tree.sync()
         await ctx.send("Cog économie rechargé et slash synchronisés.")
     except Exception as e:

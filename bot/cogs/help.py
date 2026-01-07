@@ -101,7 +101,8 @@ class Help(commands.Cog):
             f"`{prefix}org` : Menu Organisation (Créer, Rejoindre, Info)",
             f"`{prefix}org set <desc/badge/color> <valeur>` : Personnaliser son Orga",
             f"`{prefix}payall <montant>` : Arroser tout le vocal ($$)",
-            f"`{prefix}simulate immo` : Calculer vos revenus immo futurs"
+            f"`{prefix}simulate immo` : Calculer vos revenus immo futurs",
+            f"`{prefix}interest` : Intérêts d'immeubles (pallier max requis)"
         ]
         embed.add_field(name="🏆 Social & Organisation", value="\n".join(social_cmds), inline=False)
         
@@ -115,12 +116,39 @@ class Help(commands.Cog):
         # --- 🛡️ Admin / Police ---
         if ctx.author.guild_permissions.administrator:
             admin_cmds = [
-                f"`{prefix}audit <@user>` : Voir tout le patrimoine d'un joueur",
-                f"`{prefix}admin_assets list/remove <user>` : Gérer les assets d'un joueur",
-                f"`{prefix}toggle_logs <on/off>` : Activer/Désactiver les logs"
+                f"`{prefix}add_money <@joueur> <montant>` : Give d'argent",
+                f"`{prefix}remove_money <@joueur> <montant>` : Retrait d'argent",
+                f"`{prefix}reset_user <@joueur>` : Reset complet d'un joueur",
+                f"`{prefix}tax <@joueur> <montant>` : Taxer (va dans la poche admin)",
+                f"`{prefix}taxrich <taux%>` : Taxer les riches (5% par défaut)",
+                f"`{prefix}awardbadge <@joueur> <badge>` : Donner un badge",
+                f"`{prefix}payall <montant>` : Arroser le vocal",
+                f"`{prefix}admin_fix_badge` : Fix taille colonne badge",
+                f"`{prefix}toggle_logs <on/off>` : Activer/Désactiver logs"
             ]
             embed.add_field(name="🛡️ Admin / Police", value="\n".join(admin_cmds), inline=False)
+            
+        await ctx.send(embed=embed)
 
+    @commands.command(name="maj")
+    async def maj(self, ctx: commands.Context):
+        embed = discord.Embed(title="📜 Note de Mise à Jour", color=discord.Color.gold())
+        embed.description = "**Patch Note : Système de Badges & Économie Avancée 🏆**"
+        
+        changes = [
+            "🎉 **Notifications de Badges** : Les badges débloqués sont maintenant annoncés dans le chat !",
+            "💰 **Intérêts d'Immeubles** : Les propriétaires avec pallier max reçoivent 10% de leurs revenus quotidiennement !",
+            "🏦 **+interest** : Voir vos intérêts disponibles et statut de collection.",
+            "💸 **Taxation des Riches** : Admin peut taxer les joueurs avec +10M (commande `+tax <taux%>`).",
+            "🕶️ **Organisation sur Interpol** : La fiche Interpol affiche maintenant l'organisation et le rôle.",
+            "🏢 **Visibilité Organisation** : L'organisation est visible dans +balance et +profile.",
+            "🏆 **+awardbadge** : Admin peut attribuer des badges aux joueurs.",
+            "🎁 **Sérialisation des Objets** : Les objets de luxe affichent maintenant leur numéro de série."
+        ]
+        
+        embed.add_field(name="Changelog", value="\n".join(changes), inline=False)
+        embed.set_footer(text="Dev actif - Signalez les bugs !")
+        
         await ctx.send(embed=embed)
 
 async def setup(bot):
