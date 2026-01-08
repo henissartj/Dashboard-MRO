@@ -478,7 +478,7 @@ async def dn(ctx: commands.Context, *, nom: str):
             except Exception:
                 pass
         if not sent:
-            path = "/opt/mro_dash/assets/botban.png"
+            path = "/opt/mro_dash/images/botban.png"
             if os.path.exists(path):
                 f = discord.File(path, filename="botban.png")
                 await dm.send(file=f)

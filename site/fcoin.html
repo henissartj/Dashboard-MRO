@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fcoin — Bot de Fazer</title>
+    <link rel="stylesheet" href="/assets/style.css">
+    <style>
+      .hero{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+      .muted{color:#9aa0a6}
+      .chart{background:#151922;border:1px solid #2a2f3a;border-radius:10px;padding:12px}
+      .row{display:flex;gap:16px}
+      .row .card{flex:1}
+      .conv{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+      .conv .item{background:#151922;border:1px solid #2a2f3a;border-radius:10px;padding:12px}
+      input,select{background:#0f1115;border:1px solid #2a2f3a;border-radius:8px;color:#e7e9ea;padding:8px;width:100%}
+      .value{font-size:18px}
+      .green{color:#22c55e}.red{color:#ef4444}
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <div class="hero">
+        <h1>Fcoin</h1>
+        <a class="button" href="/">Accueil</a>
+      </div>
+      <section class="chart">
+        <svg id="chart" viewBox="0 0 900 240" width="100%" height="240"></svg>
+      </section>
+      <div class="row" style="margin-top:16px">
+        <section class="card">
+          <h2>Statistiques</h2>
+          <p class="stat">Prix actuel: <b id="current"></b></p>
+          <p class="stat">Min/Max: <span id="min"></span> — <span id="max"></span></p>
+          <p class="stat">Moyenne: <span id="avg"></span></p>
+          <p class="stat">Variation 24h: <span id="chg"></span> (<span id="chgpct"></span>%)</p>
+          <p class="stat">Points: <span id="points"></span></p>
+          <p class="stat">Mise à jour: <span id="updated"></span></p>
+        </section>
+        <section class="card">
+          <h2>Convertisseur</h2>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <label class="stat">Montant (Fcoin)</label>
+              <input id="amount" type="number" min="0" value="50"/>
+            </div>
+            <div>
+              <label class="stat">Devise</label>
+              <select id="currency">
+                <option value="EUR">Euro (EUR)</option>
+                <option value="USD">Dollar (USD)</option>
+                <option value="DZD">Dinar Algérien (DZD)</option>
+                <option value="MAD">Dirham Marocain (MAD)</option>
+                <option value="TND">Dinar Tunisien (TND)</option>
+                <option value="GBP">Livre Sterling (GBP)</option>
+              </select>
+            </div>
+          </div>
+          <p class="muted" style="margin-top:8px">Valeur estimée:</p>
+          <p class="value"><b id="converted"></b></p>
+        </section>
+      </div>
+      <section class="conv" style="margin-top:16px">
+        <div class="item"><b>EUR</b><div id="eur_val" class="muted"></div></div>
+        <div class="item"><b>USD</b><div id="usd_val" class="muted"></div></div>
+        <div class="item"><b>DZD</b><div id="dzd_val" class="muted"></div></div>
+        <div class="item"><b>MAD</b><div id="mad_val" class="muted"></div></div>
+        <div class="item"><b>TND</b><div id="tnd_val" class="muted"></div></div>
+        <div class="item"><b>GBP</b><div id="gbp_val" class="muted"></div></div>
+      </section>
+    </main>
+    <script>
+      const url = '/data/fcoin.json';
+      let data = null;
+      function fmt(n){return Number(n).toLocaleString('fr-FR',{maximumFractionDigits:4})}
+      function drawChart(series){
+        const svg = document.getElementById('chart');
+        const width = svg.viewBox.baseVal.width;
+        const height = svg.viewBox.baseVal.height;
+        const pad = 24;
+        if(!series || series.length<2){svg.innerHTML='';return;}
+        const vals = series.map(s=>s.v);
+        const vmin = Math.min(...vals), vmax = Math.max(...vals);
+        const rng = (vmax!==vmin)?(vmax-vmin):1;
+        const cw = width - pad*2, ch = height - pad*2;
+        const stepX = cw / (series.length-1 || 1);
+        const pts = series.map((s,i)=>{
+          const x = pad + stepX*i;
+          const y = pad + ch - ((s.v - vmin)/rng)*ch;
+          return `${x.toFixed(2)} ${y.toFixed(2)}`;
+        });
+        const grid = [];
+        for(let g=0; g<5; g++){
+          const gy = pad + ch*g/4;
+          grid.push(`<line x1="${pad}" y1="${gy.toFixed(2)}" x2="${(width-pad).toFixed(2)}" y2="${gy.toFixed(2)}" stroke="#2a2f3a" stroke-width="1"/>`);
+        }
+        svg.innerHTML = `<rect x="0" y="0" width="${width}" height="${height}" fill="#0f1115"/>${grid.join('')}<path d="M ${pts.join(' L ')}" fill="none" stroke="#22c55e" stroke-width="2"/>`;
+      }
+      function updateUI(){
+        if(!data) return;
+        const s = data.stats, fx = data.fx || {};
+        const changeClass = s.change_24h>=0?'green':'red';
+        document.getElementById('current').innerHTML = `<span class="${changeClass}">${fmt(s.current)}</span>`;
+        document.getElementById('min').textContent = fmt(s.min);
+        document.getElementById('max').textContent = fmt(s.max);
+        document.getElementById('avg').textContent = fmt(s.avg);
+        document.getElementById('chg').textContent = fmt(s.change_24h);
+        document.getElementById('chgpct').textContent = fmt(s.change_24h_pct);
+        document.getElementById('points').textContent = s.points;
+        document.getElementById('updated').textContent = s.updated_at;
+        drawChart(data.series || []);
+        const amount = parseFloat(document.getElementById('amount').value||'0');
+        const cur = document.getElementById('currency').value;
+        const eurValue = amount * s.current;
+        const conv = eurValue * (fx[cur] || 1);
+        document.getElementById('converted').textContent = fmt(conv) + ' ' + cur;
+        document.getElementById('eur_val').textContent = fmt(eurValue) + ' EUR';
+        document.getElementById('usd_val').textContent = fmt(eurValue*(fx['USD']||1)) + ' USD';
+        document.getElementById('dzd_val').textContent = fmt(eurValue*(fx['DZD']||1)) + ' DZD';
+        document.getElementById('mad_val').textContent = fmt(eurValue*(fx['MAD']||1)) + ' MAD';
+        document.getElementById('tnd_val').textContent = fmt(eurValue*(fx['TND']||1)) + ' TND';
+        document.getElementById('gbp_val').textContent = fmt(eurValue*(fx['GBP']||1)) + ' GBP';
+      }
+      async function load(){
+        try{
+          const r = await fetch(url, {cache:'no-store'});
+          data = await r.json();
+          updateUI();
+        }catch(e){}
+      }
+      document.getElementById('amount').addEventListener('input', updateUI);
+      document.getElementById('currency').addEventListener('change', updateUI);
+      load();
+      setInterval(load, 30000);
+    </script>
+  </body>
+</html>
