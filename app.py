@@ -18,7 +18,7 @@ def home():
 
 @app.route("/images/<path:filename>")
 def serve_images(filename):
-    images_path = os.path.join(os.path.dirname(__file__), "images")
+    images_path = os.path.join(os.path.dirname(__file__), "site", "images")
     return send_from_directory(images_path, filename)
 
 
