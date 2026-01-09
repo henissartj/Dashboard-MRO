@@ -9,6 +9,8 @@ import re
 import asyncio
 import random
 import io
+import json
+import time
 from PIL import Image, ImageDraw, ImageFont
 import plotly.graph_objects as go
 from zoneinfo import ZoneInfo
@@ -196,26 +198,86 @@ DDL = [
     """
 ]
 
-# --- REAL ESTATE DATA ---
-PROPERTIES = {
-    "studio": {"name": "Studio miteux", "price": 50_000, "income": 500, "emoji": "🏚️", "desc": "Un petit trou à rat, mais c'est chez toi."},
-    "appartement": {"name": "Appartement Centre", "price": 200_000, "income": 2_500, "emoji": "🏢", "desc": "Un T3 sympa en centre-ville."},
-    "maison": {"name": "Maison de Banlieue", "price": 1_000_000, "income": 15_000, "emoji": "🏡", "desc": "Jardin, garage et barbecue le dimanche."},
-    "villa": {"name": "Villa de Luxe", "price": 5_000_000, "income": 80_000, "emoji": "🌴", "desc": "Piscine à débordement et vue sur la mer."},
-    "immeuble": {"name": "Gratte-ciel", "price": 20_000_000, "income": 350_000, "emoji": "🏙️", "desc": "Tu possèdes la skyline. Le patron."}
+# --- REAL ESTATE & LUXURY DATA (NOW DYNAMIC) ---
+# Base prices, will be multiplied by Fcoin rate
+PROPERTIES_BASE = {
+    "studio": {"name": "Studio miteux", "base_price": 500_000, "income": 2_500, "emoji": "🏚️", "desc": "Un petit trou à rat, mais c'est chez toi."},
+    "appartement": {"name": "Appartement Centre", "base_price": 2_000_000, "income": 12_000, "emoji": "🏢", "desc": "Un T3 sympa en centre-ville."},
+    "maison": {"name": "Maison de Banlieue", "base_price": 8_000_000, "income": 60_000, "emoji": "🏡", "desc": "Jardin, garage et barbecue le dimanche."},
+    "villa": {"name": "Villa de Luxe", "base_price": 40_000_000, "income": 350_000, "emoji": "🌴", "desc": "Piscine à débordement et vue sur la mer."},
+    "immeuble": {"name": "Gratte-ciel", "base_price": 350_000_000, "income": 2_500_000, "emoji": "🏙️", "desc": "Tu possèdes la skyline. Le patron."}
 }
 
-# --- LUXURY SHOP DATA ---
-LUXURY_ITEMS = {
-    "rolex": {"name": "Montre en Or", "price": 20_000, "emoji": "⌚", "type": "Accessoire"},
-    "sac": {"name": "Sac de Luxe", "price": 15_000, "emoji": "👜", "type": "Accessoire"},
-    "costume": {"name": "Costume Sur-Mesure", "price": 10_000, "emoji": "👔", "type": "Vêtement"},
-    "sportcar": {"name": "Voiture de Sport", "price": 150_000, "emoji": "🏎️", "type": "Véhicule"},
-    "supercar": {"name": "Supercar", "price": 2_000_000, "emoji": "🚀", "type": "Véhicule"},
-    "yacht": {"name": "Yacht Privé", "price": 10_000_000, "emoji": "🛥️", "type": "Véhicule"},
-    "jet": {"name": "Jet Privé", "price": 50_000_000, "emoji": "✈️", "type": "Véhicule"},
-    "island": {"name": "Île Privée", "price": 500_000_000, "emoji": "🏝️", "type": "Immobilier"}
+LUXURY_ITEMS_BASE = {
+    "rolex": {"name": "Montre en Or", "base_price": 40_000, "emoji": "⌚", "type": "Accessoire"},
+    "sac": {"name": "Sac de Luxe", "base_price": 30_000, "emoji": "👜", "type": "Accessoire"},
+    "costume": {"name": "Costume Sur-Mesure", "base_price": 20_000, "emoji": "👔", "type": "Vêtement"},
+    "sportcar": {"name": "Voiture de Sport", "base_price": 300_000, "emoji": "🏎️", "type": "Véhicule"},
+    "supercar": {"name": "Supercar", "base_price": 4_000_000, "emoji": "🚀", "type": "Véhicule"},
+    "yacht": {"name": "Yacht Privé", "base_price": 22_000_000, "emoji": "🛥️", "type": "Véhicule"},
+    "jet": {"name": "Jet Privé", "base_price": 110_000_000, "emoji": "✈️", "type": "Véhicule"},
+    "island": {"name": "Île Privée", "base_price": 1_000_000_000, "emoji": "🏝️", "type": "Immobilier"}
 }
+
+class AssetManager:
+    def __init__(self, fcoin_path='/opt/mro_dash/site/data/fcoin.json'):
+        self.fcoin_path = fcoin_path
+        self.fcoin_price = 0.5  # Default fallback
+        self.fcoin_stats = {}
+        self.last_load_time = 0
+        self.cache_duration = 300  # 5 minutes
+        self.load_fcoin_price()
+
+        self.PROPERTIES = {}
+        self.LUXURY_ITEMS = {}
+        self.update_asset_prices()
+
+    def load_fcoin_price(self):
+        current_time = time.time()
+        if current_time - self.last_load_time > self.cache_duration:
+            try:
+                with open(self.fcoin_path, 'r') as f:
+                    data = json.load(f)
+                    self.fcoin_stats = data.get('stats', {})
+                    self.fcoin_price = self.fcoin_stats.get('current', self.fcoin_price)
+                self.last_load_time = current_time
+            except (FileNotFoundError, json.JSONDecodeError):
+                # Keep the old price if the file is not available
+                pass
+
+    def update_asset_prices(self):
+        self.load_fcoin_price()
+        # The core logic: price is base_price multiplied by the Fcoin rate.
+        # We add a floor to the fcoin price to avoid prices becoming too low.
+        fcoin_multiplier = max(0.2, self.fcoin_price)
+
+        for key, data in PROPERTIES_BASE.items():
+            self.PROPERTIES[key] = data.copy()
+            self.PROPERTIES[key]['price'] = int(data['base_price'] * fcoin_multiplier)
+            if 'income' in data:
+                self.PROPERTIES[key]['income'] = int(data['income'] * fcoin_multiplier)
+
+        for key, data in LUXURY_ITEMS_BASE.items():
+            self.LUXURY_ITEMS[key] = data.copy()
+            self.LUXURY_ITEMS[key]['price'] = int(data['base_price'] * fcoin_multiplier)
+
+    def get_fcoin_stats(self):
+        self.load_fcoin_price()
+        return self.fcoin_stats
+
+    def get_properties(self):
+        self.update_asset_prices()
+        return self.PROPERTIES
+
+    def get_luxury_items(self):
+        self.update_asset_prices()
+        return self.LUXURY_ITEMS
+
+# Initialize the asset manager
+asset_manager = AssetManager()
+PROPERTIES = asset_manager.get_properties()
+LUXURY_ITEMS = asset_manager.get_luxury_items()
+
 
 # --- ACHIEVEMENTS ---
 ACHIEVEMENTS = {
@@ -544,6 +606,49 @@ class InvoiceView(discord.ui.View):
         else:
             await interaction.followup.edit_message(message_id=interaction.message.id, view=self)
 
+def _generate_ticket_image_sync(inv_id, payer_name, receiver_name, amt_txt, reason, status, created_at_dt):
+    import io, datetime
+    from PIL import Image, ImageDraw, ImageFont
+    
+    width, height = 650, 360
+    img = Image.new("RGB", (width, height), (245, 245, 245))
+    draw = ImageDraw.Draw(img)
+    try:
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+        font_text = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
+        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+    except Exception:
+        font_title = ImageFont.load_default()
+        font_text = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+
+    # Header
+    draw.rectangle([(0,0),(width,70)], fill=(33, 150, 243))
+    title = f"Ticket de Paiement — Facture #{inv_id}"
+    draw.text((20, 20), title, fill=(255,255,255), font=font_title)
+    
+    # Body
+    now_txt = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+    created_txt = created_at_dt.strftime("%d/%m/%Y %H:%M") if created_at_dt else now_txt
+    
+    y = 95
+    draw.text((20, y), f"Payé par: {payer_name}", fill=(20,20,20), font=font_text); y+=28
+    draw.text((20, y), f"Destinataire: {receiver_name}", fill=(20,20,20), font=font_text); y+=28
+    draw.text((20, y), f"Montant: {amt_txt}", fill=(20,20,20), font=font_text); y+=28
+    draw.text((20, y), f"Motif: {reason}", fill=(20,20,20), font=font_text); y+=28
+    draw.text((20, y), f"Statut: {status.upper()}", fill=(20,120,20), font=font_text); y+=28
+    draw.text((20, y), f"Émise le: {created_txt}", fill=(80,80,80), font=font_small); y+=22
+    draw.text((20, y), f"Imprimé le: {now_txt}", fill=(80,80,80), font=font_small)
+    
+    # Footer
+    draw.rectangle([(0,height-40),(width,height)], fill=(230,230,230))
+    draw.text((20, height-30), "Merci pour votre paiement — Bot de Fazer", fill=(60,60,60), font=font_small)
+    
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
 class PrintTicketView(discord.ui.View):
     def __init__(self, ctx, inv_id, amount, sender_id, cog):
         super().__init__(timeout=300)
@@ -570,45 +675,27 @@ class PrintTicketView(discord.ui.View):
                         reason, status, created_at = row
         except Exception:
             pass
-        # Build receipt image
-        import io, datetime
-        from PIL import Image, ImageDraw, ImageFont
-        width, height = 650, 360
-        img = Image.new("RGB", (width, height), (245, 245, 245))
-        draw = ImageDraw.Draw(img)
-        try:
-            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
-            font_text = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
-            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
-        except Exception:
-            font_title = None; font_text = None; font_small = None
-        # Header
-        draw.rectangle([(0,0),(width,70)], fill=(33, 150, 243))
-        title = f"Ticket de Paiement — Facture #{self.inv_id}"
-        draw.text((20, 20), title, fill=(255,255,255), font=font_title or None)
-        # Body
+        
+        # Build receipt image (Async)
         payer = interaction.user.display_name
         receiver_user = interaction.guild.get_member(self.sender_id) if interaction.guild else None
         receiver = receiver_user.display_name if receiver_user else f"ID:{self.sender_id}"
         cur = self.cog._currency_emoji(self.ctx)
         amt_txt = f"{self.cog._fmt_amount(self.amount)} {cur}"
-        now_txt = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-        created_txt = created_at.strftime("%d/%m/%Y %H:%M") if created_at else now_txt
-        y = 95
-        draw.text((20, y), f"Payé par: {payer}", fill=(20,20,20), font=font_text or None); y+=28
-        draw.text((20, y), f"Destinataire: {receiver}", fill=(20,20,20), font=font_text or None); y+=28
-        draw.text((20, y), f"Montant: {amt_txt}", fill=(20,20,20), font=font_text or None); y+=28
-        draw.text((20, y), f"Motif: {reason}", fill=(20,20,20), font=font_text or None); y+=28
-        draw.text((20, y), f"Statut: {status.upper()}", fill=(20,120,20), font=font_text or None); y+=28
-        draw.text((20, y), f"Émise le: {created_txt}", fill=(80,80,80), font=font_small or None); y+=22
-        draw.text((20, y), f"Imprimé le: {now_txt}", fill=(80,80,80), font=font_small or None)
-        # Footer
-        draw.rectangle([(0,height-40),(width,height)], fill=(230,230,230))
-        draw.text((20, height-30), "Merci pour votre paiement — Bot de Fazer", fill=(60,60,60), font=font_small or None)
-        # Send image
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        buf.seek(0)
+        
+        # Run sync image generation in executor
+        buf = await self.bot.loop.run_in_executor(
+            None, 
+            _generate_ticket_image_sync, 
+            self.inv_id, 
+            payer, 
+            receiver, 
+            amt_txt, 
+            reason, 
+            status, 
+            created_at
+        )
+        
         file = discord.File(buf, filename=f"ticket_facture_{self.inv_id}.png")
         await interaction.followup.send(file=file)
 
@@ -616,6 +703,7 @@ class PrintTicketView(discord.ui.View):
 class Economy(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.asset_manager = AssetManager()
         self.pool: aiomysql.Pool | None = None
         self._last_prices: dict[int, int] = {}
         self._prev_prices: dict[int, int] = {}
@@ -664,6 +752,16 @@ class Economy(commands.Cog):
                         pass
                     try:
                         await cur.execute("ALTER TABLE transactions ADD COLUMN is_suspect TINYINT DEFAULT 0")
+                    except Exception:
+                        pass
+
+                    # --- INDEX OPTIMIZATION ---
+                    try:
+                        await cur.execute("CREATE INDEX idx_transactions_created_at ON transactions(created_at)")
+                    except Exception:
+                        pass
+                    try:
+                        await cur.execute("CREATE INDEX idx_transactions_type_created ON transactions(type, created_at)")
                     except Exception:
                         pass
                     
@@ -1247,14 +1345,16 @@ class Economy(commands.Cog):
                 # Real Estate
                 await cur.execute("SELECT property_key FROM user_properties WHERE user_id=%s", (member.id,))
                 props = await cur.fetchall()
+                properties = self.asset_manager.get_properties()
                 for p in props:
-                    if p[0] in PROPERTIES: assets_val += PROPERTIES[p[0]]['price']
+                    if p[0] in properties: assets_val += properties[p[0]]['price']
                 
                 # Luxury
                 await cur.execute("SELECT item_key FROM user_luxury WHERE user_id=%s", (member.id,))
                 luxs = await cur.fetchall()
+                luxury_items = self.asset_manager.get_luxury_items()
                 for l in luxs:
-                    if l[0] in LUXURY_ITEMS: assets_val += LUXURY_ITEMS[l[0]]['price']
+                    if l[0] in luxury_items: assets_val += luxury_items[l[0]]['price']
 
                 # Get Customization
                 await cur.execute("SELECT bg_color_start, bg_color_end, border_color, text_color, pattern_overlay FROM user_card_customization WHERE user_id=%s", (member.id,))
@@ -1757,11 +1857,13 @@ class Economy(commands.Cog):
                 # Assets
                 await cur.execute("SELECT property_key FROM user_properties WHERE user_id=%s", (target.id,))
                 props = await cur.fetchall()
-                prop_val = sum(PROPERTIES[p[0]]['price'] for p in props if p[0] in PROPERTIES)
+                properties = self.asset_manager.get_properties()
+                prop_val = sum(properties[p[0]]['price'] for p in props if p[0] in properties)
                 
                 await cur.execute("SELECT item_key FROM user_luxury WHERE user_id=%s", (target.id,))
                 luxs = await cur.fetchall()
-                lux_val = sum(LUXURY_ITEMS[l[0]]['price'] for l in luxs if l[0] in LUXURY_ITEMS)
+                luxury_items = self.asset_manager.get_luxury_items()
+                lux_val = sum(luxury_items[l[0]]['price'] for l in luxs if l[0] in luxury_items)
                 
                 embed.add_field(name="🏰 Patrimoine", value=f"Immobilier: {self._fmt_amount(prop_val)}\nLuxe: {self._fmt_amount(lux_val)}", inline=False)
 
@@ -1808,12 +1910,14 @@ class Economy(commands.Cog):
                 # Real Estate Value
                 await cur.execute("SELECT property_key FROM user_properties")
                 all_props = await cur.fetchall()
-                prop_val = sum(PROPERTIES[p[0]]['price'] for p in all_props if p[0] in PROPERTIES)
+                properties = self.asset_manager.get_properties()
+                prop_val = sum(properties[p[0]]['price'] for p in all_props if p[0] in properties)
                 
                 # Luxury Value
                 await cur.execute("SELECT item_key FROM user_luxury")
                 all_lux = await cur.fetchall()
-                lux_val = sum(LUXURY_ITEMS[l[0]]['price'] for l in all_lux if l[0] in LUXURY_ITEMS)
+                luxury_items = self.asset_manager.get_luxury_items()
+                lux_val = sum(luxury_items[l[0]]['price'] for l in all_lux if l[0] in luxury_items)
                 
                 # GDP (Gross Domestic Product - approximated by Total Wealth)
                 gdp = m1 + prop_val + lux_val
@@ -2562,7 +2666,8 @@ class Economy(commands.Cog):
         
         if not action or action.lower() == "list":
             embed = discord.Embed(title="🏢 Agence Immobilière", color=discord.Color.blue())
-            for key, data in PROPERTIES.items():
+            properties = self.asset_manager.get_properties()
+            for key, data in properties.items():
                 embed.add_field(
                     name=f"{data['emoji']} {data['name']}",
                     value=f"**Prix:** {self._fmt_amount(data['price'])} {cur_emoji}\n**Revenu:** {self._fmt_amount(data['income'])} {cur_emoji}/jour\n*{data['desc']}*",
@@ -2575,12 +2680,13 @@ class Economy(commands.Cog):
             if not name:
                 return await ctx.send(f"❌ Indique le nom du bien à vendre (ex: `{ctx.prefix}immo sell studio`).")
             
+            properties = self.asset_manager.get_properties()
             # Find property
-            prop_key = next((k for k in PROPERTIES if k.lower() == name.lower() or PROPERTIES[k]['name'].lower() == name.lower()), None)
+            prop_key = next((k for k, v in properties.items() if k.lower() == name.lower() or v['name'].lower() == name.lower()), None)
             if not prop_key:
                 return await ctx.send("❌ Ce bien n'existe pas.")
             
-            prop_data = PROPERTIES[prop_key]
+            prop_data = properties[prop_key]
             sell_price = int(prop_data['price'] * 0.7)
             
             async with self.pool.acquire() as conn:
@@ -2608,12 +2714,13 @@ class Economy(commands.Cog):
             if not name:
                 return await ctx.send(f"❌ Indique le nom du bien à acheter (ex: `{ctx.prefix}immo buy studio`).")
             
+            properties = self.asset_manager.get_properties()
             # Find property
-            prop_key = next((k for k in PROPERTIES if k.lower() == name.lower() or PROPERTIES[k]['name'].lower() == name.lower()), None)
+            prop_key = next((k for k, v in properties.items() if k.lower() == name.lower() or v['name'].lower() == name.lower()), None)
             if not prop_key:
                 return await ctx.send("❌ Ce bien n'existe pas. Regarde `+immo list`.")
             
-            prop_data = PROPERTIES[prop_key]
+            prop_data = properties[prop_key]
             price = prop_data['price']
             
             async with self.pool.acquire() as conn:
@@ -2683,6 +2790,7 @@ class Economy(commands.Cog):
             return
 
         if action.lower() == "collect":
+            properties = self.asset_manager.get_properties()
             async with self.pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute("SELECT id, property_key, last_collected FROM user_properties WHERE user_id=%s", (ctx.author.id,))
@@ -2697,13 +2805,13 @@ class Economy(commands.Cog):
                     
                     for row in rows:
                         pid, key, last = row
-                        if key not in PROPERTIES: continue
+                        if key not in properties: continue
                         
                         # Check 24h cooldown
                         if last and (now - last).total_seconds() < 86400:
                             continue
                             
-                        income = PROPERTIES[key]['income']
+                        income = properties[key]['income']
                         total_income += income
                         collected_count += 1
                         
@@ -2730,7 +2838,8 @@ class Economy(commands.Cog):
             
             # Group by type
             categories = {}
-            for k, v in LUXURY_ITEMS.items():
+            luxury_items = self.asset_manager.get_luxury_items()
+            for k, v in luxury_items.items():
                 t = v.get('type', 'Autre')
                 if t not in categories: categories[t] = []
                 categories[t].append(v)
@@ -2738,7 +2847,7 @@ class Economy(commands.Cog):
             for cat, items in categories.items():
                 desc = ""
                 for data in items:
-                    key = next(k for k, v in LUXURY_ITEMS.items() if v == data)
+                    key = next(k for k, v in luxury_items.items() if v == data)
                     desc += f"{data['emoji']} **{data['name']}** - {self._fmt_amount(data['price'])} {cur_emoji} (`{key}`)\n"
                 embed.add_field(name=f"--- {cat} ---", value=desc, inline=False)
                 
@@ -2749,11 +2858,12 @@ class Economy(commands.Cog):
             if not item_name:
                 return await ctx.send("❌ Qu'est-ce que tu veux acheter ?")
             
-            item_key = next((k for k in LUXURY_ITEMS if k.lower() == item_name.lower() or LUXURY_ITEMS[k]['name'].lower() == item_name.lower()), None)
+            luxury_items = self.asset_manager.get_luxury_items()
+            item_key = next((k for k in luxury_items if k.lower() == item_name.lower() or luxury_items[k]['name'].lower() == item_name.lower()), None)
             if not item_key:
                 return await ctx.send("❌ Cet article n'existe pas.")
             
-            data = LUXURY_ITEMS[item_key]
+            data = luxury_items[item_key]
             price = data['price']
             
             async with self.pool.acquire() as conn:
@@ -2823,7 +2933,8 @@ class Economy(commands.Cog):
             if target.bot or target.id == ctx.author.id:
                 return await ctx.send("❌ Cible invalide.")
                 
-            item_key = next((k for k in LUXURY_ITEMS if k.lower() == real_item_name.lower() or LUXURY_ITEMS[k]['name'].lower() == real_item_name.lower()), None)
+            luxury_items = self.asset_manager.get_luxury_items()
+            item_key = next((k for k in luxury_items if k.lower() == real_item_name.lower() or luxury_items[k]['name'].lower() == real_item_name.lower()), None)
             if not item_key:
                 return await ctx.send("❌ Cet article n'existe pas.")
 
@@ -2838,7 +2949,7 @@ class Economy(commands.Cog):
                     await cur.execute("UPDATE user_luxury SET user_id=%s WHERE id=%s", (target.id, lid))
                     await conn.commit()
             
-            await ctx.send(f"✅ Tu as donné **{LUXURY_ITEMS[item_key]['name']}** à {target.mention} ! C'est beau la générosité.")
+            await ctx.send(f"✅ Tu as donné **{luxury_items[item_key]['name']}** à {target.mention} ! C'est beau la générosité.")
             return
 
     @commands.command(name="assets", aliases=["biens", "patrimoine"])
@@ -2872,16 +2983,17 @@ class Economy(commands.Cog):
             total_income = 0
             prop_val = 0
             counts = {}
+            properties = self.asset_manager.get_properties()
             
             for p in props:
                 k = p[0]
-                if k in PROPERTIES:
+                if k in properties:
                     counts[k] = counts.get(k, 0) + 1
-                    total_income += PROPERTIES[k]['income']
-                    prop_val += PROPERTIES[k]['price']
+                    total_income += properties[k]['income']
+                    prop_val += properties[k]['price']
             
             for k, count in counts.items():
-                data = PROPERTIES[k]
+                data = properties[k]
                 prop_list += f"{count}x {data['emoji']} **{data['name']}**\n"
             
             prop_list += f"\n💰 **Revenu total:** {self._fmt_amount(total_income)}/jour"
@@ -2896,18 +3008,19 @@ class Economy(commands.Cog):
             lux_list = ""
             lux_val = 0
             items_dict = {}
+            luxury_items = self.asset_manager.get_luxury_items()
 
             for l in luxs:
                 k = l[0]
                 serial = l[2]
-                if k in LUXURY_ITEMS:
+                if k in luxury_items:
                     if k not in items_dict:
                         items_dict[k] = []
                     items_dict[k].append(serial)
-                    lux_val += LUXURY_ITEMS[k]['price']
+                    lux_val += luxury_items[k]['price']
             
             for k, serials in items_dict.items():
-                data = LUXURY_ITEMS[k]
+                data = luxury_items[k]
                 count = len(serials)
                 serials.sort()
                 # Affiche les numéros de série
@@ -2942,7 +3055,13 @@ class Economy(commands.Cog):
         
         if not category:
             # Main Menu
+            stats = self.asset_manager.get_fcoin_stats()
+            fcoin_price = stats.get('current', 0.5)
+            change_24h_pct = stats.get('change_24h_pct', 0.0)
+            trend_emoji = "📈" if change_24h_pct >= 0 else "📉"
+
             embed = discord.Embed(title="🏪 Market Place", description="Bienvenue au marché. Choisis une catégorie :", color=discord.Color.blue())
+            embed.add_field(name=f"{trend_emoji} Cours Fcoin", value=f"**{fcoin_price} €** ({change_24h_pct:+.2f}%)", inline=False)
             embed.add_field(name="🏠 Immobilier", value=f"`{ctx.prefix}market immo` (ou `{ctx.prefix}immo`)", inline=True)
             embed.add_field(name="💎 Luxe", value=f"`{ctx.prefix}market luxe` (ou `{ctx.prefix}luxury`)", inline=True)
             embed.add_field(name="📦 Objets", value=f"`{ctx.prefix}market items` (ou `{ctx.prefix}buy`)", inline=True)
@@ -2991,11 +3110,13 @@ class Economy(commands.Cog):
         elif cat == "buy":
              if not arg: return await ctx.send("Quoi acheter ?")
              
-             if any(k.lower() == arg.lower() or v['name'].lower() == arg.lower() for k,v in PROPERTIES.items()):
+             properties = self.asset_manager.get_properties()
+             if any(k.lower() == arg.lower() or v['name'].lower() == arg.lower() for k,v in properties.items()):
                  await self.immo(ctx, "buy", arg)
                  return
              
-             if any(k.lower() == arg.lower() or v['name'].lower() == arg.lower() for k,v in LUXURY_ITEMS.items()):
+             luxury_items = self.asset_manager.get_luxury_items()
+             if any(k.lower() == arg.lower() or v['name'].lower() == arg.lower() for k,v in luxury_items.items()):
                  await self.luxury(ctx, "buy", arg)
                  return
                  
@@ -3003,7 +3124,8 @@ class Economy(commands.Cog):
              
         elif cat == "sell":
              if not arg: return await ctx.send("Quoi vendre ?")
-             if any(k.lower() == arg.lower() or v['name'].lower() == arg.lower() for k,v in PROPERTIES.items()):
+             properties = self.asset_manager.get_properties()
+             if any(k.lower() == arg.lower() or v['name'].lower() == arg.lower() for k,v in properties.items()):
                  await self.immo(ctx, "sell", arg)
                  return
              await self.sell(ctx, arg)
@@ -3029,14 +3151,16 @@ class Economy(commands.Cog):
                 prop_val = 0
                 await cur.execute("SELECT property_key FROM user_properties WHERE user_id=%s", (member.id,))
                 props = await cur.fetchall()
+                properties = self.asset_manager.get_properties()
                 for p in props:
-                    if p[0] in PROPERTIES: prop_val += PROPERTIES[p[0]]['price']
+                    if p[0] in properties: prop_val += properties[p[0]]['price']
                     
                 lux_val = 0
                 await cur.execute("SELECT item_key FROM user_luxury WHERE user_id=%s", (member.id,))
                 luxs = await cur.fetchall()
+                luxury_items = self.asset_manager.get_luxury_items()
                 for l in luxs:
-                    if l[0] in LUXURY_ITEMS: lux_val += LUXURY_ITEMS[l[0]]['price']
+                    if l[0] in luxury_items: lux_val += luxury_items[l[0]]['price']
                     
                 # 3. Social (Marriage, Clan)
                 # Marriage
@@ -3220,10 +3344,11 @@ class Economy(commands.Cog):
                 
                 property_count = len(prop_rows)
                 total_income = 0
+                properties = self.asset_manager.get_properties()
                 for row in prop_rows:
                     pkey = row[0]
-                    if pkey in PROPERTIES:
-                        total_income += PROPERTIES[pkey]['income']
+                    if pkey in properties:
+                        total_income += properties[pkey]['income']
                 
                 if bank_tier < 5:
                     return await ctx.send(f"❌ Vous devez avoir atteint le pallier max de banque (Compte Black) pour percevoir des intérêts. Votre pallier actuel: {BANK_TIERS.get(bank_tier, {}).get('name')}")

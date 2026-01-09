@@ -771,15 +771,10 @@ async def interpol(ctx: commands.Context, member: discord.Member = None):
     await ctx.send(file=discord.File(buffer, filename="interpol.png"))
 
 
-@bot.command(name="perdu")
-async def perdu(ctx: commands.Context, member: discord.Member = None):
-    """Affiche un avis de recherche 'Perdu de vue'"""
-    member = member or ctx.author
-    
+def _generate_perdu_image_sync(avatar_bytes, member_name):
     import io
     from PIL import Image, ImageDraw, ImageFont, ImageOps
-    import aiohttp
-
+    
     # --- CONFIG ---
     width, height = 600, 800
     background = Image.new('RGB', (width, height), color=(240, 230, 210)) # Papier jauni
@@ -804,23 +799,19 @@ async def perdu(ctx: commands.Context, member: discord.Member = None):
     draw.text(((width - length) / 2, 50), text, fill=(200, 0, 0), font=font_header)
 
     # --- PHOTO ---
-    try:
-        async with aiohttp.ClientSession() as session:
-            url = member.display_avatar.url
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    data = await resp.read()
-                    avatar = Image.open(io.BytesIO(data)).convert("RGBA")
-                    avatar = avatar.resize((300, 300))
-                    # Grayscale
-                    avatar = ImageOps.grayscale(avatar)
-                    background.paste(avatar, ((width - 300) // 2, 150))
-    except Exception as e:
-        print(f"Erreur avatar perdu: {e}")
+    if avatar_bytes:
+        try:
+            avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
+            avatar = avatar.resize((300, 300))
+            # Grayscale
+            avatar = ImageOps.grayscale(avatar)
+            background.paste(avatar, ((width - 300) // 2, 150))
+        except Exception as e:
+            print(f"Erreur avatar perdu: {e}")
 
     # --- TEXTE ---
     y = 500
-    name = member.display_name.upper()
+    name = member_name.upper()
     try: length = draw.textlength(name, font=font_sub)
     except: length = 100
     draw.text(((width - length) / 2, y), name, fill=(0,0,0), font=font_sub)
@@ -848,16 +839,11 @@ async def perdu(ctx: commands.Context, member: discord.Member = None):
     buffer = io.BytesIO()
     background.save(buffer, format='PNG')
     buffer.seek(0)
-    await ctx.send(file=discord.File(buffer, filename="perdu.png"))
+    return buffer
 
-
-@bot.command(name="idcard")
-async def idcard(ctx: commands.Context, member: discord.Member = None):
-    """Affiche la Carte d'Identité du Quartier"""
-    member = member or ctx.author
+def _generate_idcard_image_sync(avatar_bytes, member_name, member_display_name, join_date, address):
     import io
     from PIL import Image, ImageDraw, ImageFont
-    import aiohttp
     
     width, height = 600, 350
     background = Image.new('RGB', (width, height), color=(200, 220, 240)) # Bleu clair CNI
@@ -875,40 +861,92 @@ async def idcard(ctx: commands.Context, member: discord.Member = None):
         font_title = ImageFont.load_default()
         font_label = ImageFont.load_default()
         font_val = ImageFont.load_default()
-
+        
     # Header
     draw.text((20, 15), "RÉPUBLIQUE DU SECTEUR", fill=(0, 50, 100), font=font_title)
     draw.text((20, 40), "CARTE D'IDENTITÉ", fill=(0, 50, 100), font=font_label)
+    
+    # Photo frame
+    if avatar_bytes:
+        try:
+            avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
+            avatar = avatar.resize((100, 100))
+            background.paste(avatar, (20, 80), avatar)
+        except: pass
+        
+    # Info
+    x = 140
+    y = 80
+    
+    fields = [
+        ("Nom", member_name),
+        ("Prénom", member_display_name),
+        ("Né(e) le", join_date),
+        ("Taille", "1m12 les bras levés"),
+        ("Sexe", "Vaillant"),
+        ("Adresse", address)
+    ]
+    
+    for label, val in fields:
+        draw.text((x, y), label + ":", fill=(100, 100, 100), font=font_label)
+        draw.text((x + 80, y), val, fill=(0, 0, 0), font=font_val)
+        y += 25
+        
+    # Signature
+    draw.text((x, y+20), "Signature:", fill=(100, 100, 100), font=font_label)
+    draw.text((x+80, y+20), member_display_name, fill=(0, 0, 0), font=font_title)
 
-    # Photo
+    buffer = io.BytesIO()
+    background.save(buffer, format='PNG')
+    buffer.seek(0)
+    return buffer
+
+
+@bot.command(name="perdu")
+async def perdu(ctx: commands.Context, member: discord.Member = None):
+    """Affiche un avis de recherche 'Perdu de vue'"""
+    member = member or ctx.author
+    
+    import aiohttp
+
+    # --- PHOTO (Async) ---
+    avatar_bytes = None
     try:
         async with aiohttp.ClientSession() as session:
             url = member.display_avatar.url
             async with session.get(url) as resp:
                 if resp.status == 200:
-                    data = await resp.read()
-                    avatar = Image.open(io.BytesIO(data)).convert("RGBA")
-                    avatar = avatar.resize((100, 100))
-                    background.paste(avatar, (20, 80))
-    except: pass
+                    avatar_bytes = await resp.read()
+    except Exception as e:
+        print(f"Erreur avatar perdu: {e}")
 
-    # Info
-    x = 140
-    y = 80
+    # --- GENERATION (Sync in Executor) ---
+    import io
+    buffer = await bot.loop.run_in_executor(None, _generate_perdu_image_sync, avatar_bytes, member.display_name)
     
-    # Join date
-    join_date = member.joined_at.strftime("%d/%m/%Y")
+    await ctx.send(file=discord.File(buffer, filename="perdu.png"))
+
+
+@bot.command(name="idcard")
+async def idcard(ctx: commands.Context, member: discord.Member = None):
+    """Affiche la Carte d'Identité du Quartier"""
+    member = member or ctx.author
     
-    fields = [
-        ("Nom", member.name.upper()),
-        ("Prénom", member.display_name),
-        ("Né(e) le", join_date),
-        ("Taille", "1m12 les bras levés"),
-        ("Sexe", "Vaillant"),
-        ("Adresse", "En bas du bloc")
-    ]
+    import aiohttp
     
-    # Fetch org info if possible
+    # --- PHOTO (Async) ---
+    avatar_bytes = None
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = member.display_avatar.url
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    avatar_bytes = await resp.read()
+    except Exception:
+        pass
+        
+    # --- DB INFO (Async) ---
+    address = "En bas du bloc"
     economy_cog = bot.get_cog('Economy')
     if economy_cog:
         try:
@@ -917,22 +955,25 @@ async def idcard(ctx: commands.Context, member: discord.Member = None):
                 async with conn.cursor() as cur:
                     await cur.execute("SELECT c.name FROM clans c JOIN clan_members m ON c.id=m.clan_id WHERE m.user_id=%s", (member.id,))
                     res = await cur.fetchone()
-                    if res: fields[-1] = ("Adresse", f"QG {res[0]}")
-        except: pass
+                    if res:
+                        address = f"QG {res[0]}"
+        except Exception: pass
 
-    for label, val in fields:
-        draw.text((x, y), label + ":", fill=(100, 100, 100), font=font_label)
-        draw.text((x + 80, y), val, fill=(0, 0, 0), font=font_val)
-        y += 25
-        
-    # Signature
-    draw.text((x, y+20), "Signature:", fill=(100, 100, 100), font=font_label)
-    draw.text((x+80, y+20), member.display_name, fill=(0, 0, 0), font=font_title) # Fake signature
+    # --- GENERATION (Sync in Executor) ---
+    join_date = member.joined_at.strftime("%d/%m/%Y") if member.joined_at else "??/??/????"
+    
+    import io
+    buffer = await bot.loop.run_in_executor(
+        None, 
+        _generate_idcard_image_sync, 
+        avatar_bytes, 
+        member.name.upper(), 
+        member.display_name, 
+        join_date, 
+        address
+    )
 
-    buffer = io.BytesIO()
-    background.save(buffer, format='PNG')
-    buffer.seek(0)
-    await ctx.send(file=discord.File(buffer, filename="idcard.png"))
+    await ctx.send(file=discord.File(buffer, filename="cni.png"))
 
 
 @bot.command(name="diplome")

@@ -3,50 +3,241 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Bot de Fazer — Accueil</title>
-    <link rel="stylesheet" href="/assets/style.css">
+    <title>Bot de Fazer</title>
+    <link rel="icon" type="image/png" href="/images/favicon.png">
+    <meta name="description" content="Le meilleur Bot Discord.">
+
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://botdefazer.duckdns.org/">
+    <meta property="og:title" content="Bot de Fazer">
+    <meta property="og:description" content="Site officiel du Bot de Fazer. Accédez aux commandes ou inviter le sur votre serveur.">
+    <meta property="og:image" content="/images/videos.gif">
+    <meta name="theme-color" content="#facc15">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Bot de Fazer">
+    <meta name="twitter:description" content="Site officiel du Bot de Fazer. Accédez aux commandes ou inviter le sur votre serveur.">
+    <meta name="twitter:image" content="/images/video.gif">
+
+    <link rel="stylesheet" href="assets/style.css">
   </head>
   <body>
-    <header class="header">
-      <div class="container header-inner">
-        <h1>Bot de Fazer</h1>
-        <div class="actions">
-          <a class="button" href="https://discord.com/oauth2/authorize?client_id=1448011692867977266&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Inviter le bot</a>
-          <a class="button secondary" href="/fcoin">Fcoin</a>
+    <a class="skiplink" href="#commandes">Aller aux commandes</a>
+
+    <div class="fixed-invite" aria-label="Invitation du bot">
+      <a
+        class="btn btn-primary"
+        href="https://discord.com/oauth2/authorize?client_id=1448011692867977266&permissions=8&integration_type=0&scope=bot"
+        target="_blank"
+        rel="noopener"
+      >
+        Inviter le bot
+      </a>
+    </div>
+
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-title">Bot de Fazer</div>
+          <div class="brand-sub">Validé par le secteur</div>
+        </div>
+        <div class="top-actions">
+          <a class="btn btn-sm" href="https://ko-fi.com/fz1000" target="_blank" rel="noopener">
+            Buy Me a Coffee
+          </a>
+          <div class="pill">
+            <span class="pill-dot" aria-hidden="true"></span>
+            <span>En ligne</span>
+          </div>
         </div>
       </div>
     </header>
+
     <main class="container">
-      <div class="grid">
-        <section class="card">
-          <h2>Présentation</h2>
-          <p>Bienvenue sur le site du <b>Bot de Fazer</b>. Retrouvez les commandes populaires et l’état du Fcoin.</p>
-        </section>
-        <section class="card">
-          <h2>Dernières mises à jour</h2>
-          <ul>
-            <li>HTTPS activé sur botdefazer.duckdns.org</li>
-            <li>Nouveau site statique HTML/CSS</li>
-            <li>Page Fcoin dédiée</li>
-          </ul>
-        </section>
-      </div>
-      <section class="card" style="margin-top:24px">
-        <h2>Commandes populaires</h2>
-        <ul class="cols">
-          <li>+balance — Voir votre solde</li>
-          <li>+send @user montant — Envoyer</li>
-          <li>+facture @user montant [motif]</li>
-          <li>+payfacture id — Payer facture</li>
-          <li>+work — Travailler</li>
-          <li>+immo — Immobilier</li>
-          <li>+luxury — Boutique de luxe</li>
-          <li>+fcoin — Cours du Fcoin</li>
-        </ul>
+      <section class="hero" aria-label="Accueil">
+        <div>
+          <h1>
+            Le bot du quartier.
+          </h1>
+          <p>
+            Page d’accueil.
+            En bas: toutes les commandes du bot.
+          </p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="https://discord.com/oauth2/authorize?client_id=1448011692867977266&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">
+              Inviter maintenant
+            </a>
+            <a class="btn" href="#commandes">
+              Descendre aux commandes
+            </a>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Ambiance</div>
+            <div class="cards">
+              <div class="card">
+                <h3>Fluide ta3 les ouf</h3>
+                <p>Le bot il est plus fluide que ta 5G gros fatigué.</p>
+              </div>
+              <div class="card">
+                <h3>Meilleur Bot de France</h3>
+                <p>Couronné par le gérant de Felix Pyat</p>
+              </div>
+              <div class="card">
+                <h3>Que pour les vaillants</h3>
+                <p>Il détecte ton niveau de vaillance.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-art" aria-label="Visuels">
+          <div class="art-bg" aria-hidden="true"></div>
+          <div class="art-grid">
+            <div class="art-tile">
+              <img src="/images/liberez.png" alt="Libérez visuel">
+              <div class="art-caption">Développé par Fazer</div>
+            </div>
+            <div class="art-tile">
+              <img src="/images/sassobanc.png" alt="Sasso banc visuel">
+              <div class="art-caption">Système de casino</div>
+            </div>
+            <div class="art-tile">
+              <img src="/images/video.gif" alt="Inspiration visuel">
+              <div class="art-caption">Système de modération</div>
+            </div>
+            <div class="art-tile">
+              <img src="/images/snapchat.png" alt="Snapchat visuel">
+              <div class="art-caption">Commandes fun</div>
+            </div>
+          </div>
+        </div>
       </section>
+
+      <section id="commandes" class="commands" aria-label="Commandes">
+        <div class="commands-head">
+          <div>
+            <div class="section-title">Tout le catalogue</div>
+            <h2>Commandes du bot</h2>
+            <div class="muted" id="cmdCount">Chargement…</div>
+          </div>
+          <div class="commands-toolbar">
+            <input class="input" id="cmdSearch" type="search" placeholder="Rechercher une commande…" autocomplete="off">
+            <div class="tabs" role="group" aria-label="Filtre commandes">
+              <button class="tab" id="tabAll" aria-pressed="true" type="button">Toutes</button>
+              <button class="tab" id="tabPrefix" aria-pressed="false" type="button">Préfixe</button>
+              <button class="tab" id="tabSlash" aria-pressed="false" type="button">Slash</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-grid" id="cmdGrid" aria-live="polite"></div>
+      </section>
+
       <footer class="footer">
-        <span>Domaine: botdefazer.duckdns.org</span>
+        <div class="footer-actions">
+          <a class="btn" href="#commandes">Voir toutes les commandes</a>
+          <a class="btn" href="https://discord.com/oauth2/authorize?client_id=1448011692867977266&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Inviter le bot</a>
+        </div>
       </footer>
     </main>
+
+    <script>
+      const state = {
+        filter: "all",
+        query: "",
+        commands: []
+      };
+
+      const elCount = document.getElementById("cmdCount");
+      const elGrid = document.getElementById("cmdGrid");
+      const elSearch = document.getElementById("cmdSearch");
+
+      const tabAll = document.getElementById("tabAll");
+      const tabPrefix = document.getElementById("tabPrefix");
+      const tabSlash = document.getElementById("tabSlash");
+
+      function setTab(filter) {
+        state.filter = filter;
+        tabAll.setAttribute("aria-pressed", filter === "all");
+        tabPrefix.setAttribute("aria-pressed", filter === "prefix");
+        tabSlash.setAttribute("aria-pressed", filter === "slash");
+        render();
+      }
+
+      tabAll.addEventListener("click", () => setTab("all"));
+      tabPrefix.addEventListener("click", () => setTab("prefix"));
+      tabSlash.addEventListener("click", () => setTab("slash"));
+
+      elSearch.addEventListener("input", (e) => {
+        state.query = (e.target.value || "").trim().toLowerCase();
+        render();
+      });
+
+      function matches(cmd) {
+        if (state.filter !== "all" && cmd.type !== state.filter) return false;
+        if (!state.query) return true;
+        const hay = [
+          cmd.name,
+          cmd.type,
+          cmd.description || "",
+          ...(cmd.aliases || [])
+        ].join(" ").toLowerCase();
+        return hay.includes(state.query);
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function render() {
+        const items = state.commands.filter(matches);
+        elCount.textContent = `${items.length} commande(s) affichée(s) • ${state.commands.length} au total`;
+
+        if (!items.length) {
+          elGrid.innerHTML = `<div class="cmd"><div class="cmd-top"><div class="cmd-name">Rien trouvé</div><div class="cmd-kind">Essaie un autre mot</div></div><div class="cmd-desc">Le quartier a fouillé partout, y’a rien.</div></div>`;
+          return;
+        }
+
+        elGrid.innerHTML = items.map((cmd) => {
+          const aliases = (cmd.aliases || []).slice(0, 12);
+          const aliasHtml = aliases.length
+            ? `<div class="cmd-aliases">${aliases.map(a => `<span class="chip">${escapeHtml(a)}</span>`).join("")}</div>`
+            : "";
+          const desc = cmd.description ? escapeHtml(cmd.description) : "—";
+          const kind = cmd.type === "slash" ? "slash" : "préfixe";
+          return `
+            <div class="cmd">
+              <div class="cmd-top">
+                <div class="cmd-name">${escapeHtml(cmd.type === "slash" ? "/" + cmd.name : cmd.name)}</div>
+                <div class="cmd-kind">${kind}</div>
+              </div>
+              <div class="cmd-desc">${desc}</div>
+              ${aliasHtml}
+            </div>
+          `;
+        }).join("");
+      }
+
+      async function initCommands() {
+        try {
+          const resp = await fetch("/api/commands", { cache: "no-store" });
+          if (!resp.ok) throw new Error("bad_status");
+          const data = await resp.json();
+          state.commands = Array.isArray(data.commands) ? data.commands : [];
+          render();
+        } catch (e) {
+          elCount.textContent = "Impossible de charger les commandes.";
+          elGrid.innerHTML = `<div class="cmd"><div class="cmd-top"><div class="cmd-name">Erreur</div><div class="cmd-kind">API</div></div><div class="cmd-desc">Le serveur a refusé de parler. Recharge la page.</div></div>`;
+        }
+      }
+
+      initCommands();
+    </script>
   </body>
 </html>
