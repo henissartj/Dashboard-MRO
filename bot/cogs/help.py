@@ -54,7 +54,7 @@ class Help(commands.Cog):
             f"`{prefix}immo` : Menu Immobilier (Acheter/Louer/Collecter)",
             f"`{prefix}luxury` : Boutique de Luxe (Sacs, Montres...)",
             f"`{prefix}assets` : Voir votre patrimoine (Immo & Luxe)",
-            f"`{prefix}facture <@user> <montant> <motif>` : Créer une facture",
+            f"`{prefix}facture <@user> <montant> [motif]` : Créer une facture",
             f"`{prefix}payfacture <id>` : Payer une facture reçue"
         ]
         embed.add_field(name="🏢 Immobilier & Luxe", value="\n".join(immo_cmds), inline=False)
@@ -154,30 +154,24 @@ class Help(commands.Cog):
     @commands.command(name="maj")
     async def maj(self, ctx: commands.Context):
         embed = discord.Embed(title="📜 Note de Mise à Jour", color=discord.Color.gold())
-        embed.description = "**Nouveautés : PMU Street, Travail et Admin**"
+        embed.description = "**Correctifs & Améliorations**"
         
         changes = [
-            "🐎 **PMU Street** :",
+            "✅ **Correctifs Récents** :",
+            "• `+work` : La commande est réparée et pleinement fonctionnelle.",
+            "• `+idcard` : Correction du bug d'affichage (erreur joined_at).",
+            "• `+facture` : Le paiement met désormais correctement à jour l'embed (Statut PAYÉE).",
+            "",
+            "🐎 **Rappel PMU Street** :",
             "• `+course start [durée]` ouvre les paris, `+course run` lance.",
             "• `+bet <num> <mise>` pour miser. Animation live.",
             "• `+horsebuy <nom>` pour acheter son cheval (50m).",
-            "• `+course addhorse <nom>` ajoute ton cheval à la course.",
-            "• `+horserename <ancien> <nouveau>` renomme ton cheval.",
-            "• `+horsesell <nom>` revend ton cheval (35m).",
-            "• Les propriétaires prennent 10% des mises sur leur cheval.",
-            "• L’embed des partants mentionne le propriétaire.",
-            "",
-            "💼 **Travail** :",
-            "• `+work` et `/khedma` refonctionnent. Bonus selon l’Organisation.",
             "",
             "🛡️ **Admin** :",
             "• `+dn <nom>` bannit par nom et envoie une image en DM.",
-            "• `+set_max_bet <montant>` règle la mise maximale des jeux (hors PMU).",
-            "• `+cooldown_global <secondes>` verrouille toutes les commandes temporairement.",
-            "• `+cooldown_repeat <secondes>` bloque la répétition d’une même commande.",
-            "• `+reset_all pommedeterre` réinitialise tout (owner uniquement).",
+            "• `+set_max_bet <montant>` règle la mise maximale des jeux.",
             "",
-            "le dev travaille fort pour le quartier"
+            "Le dev travaille fort pour le quartier 🔧"
         ]
         
         embed.add_field(name="Changelog", value="\n".join(changes), inline=False)

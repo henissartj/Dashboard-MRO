@@ -8,16 +8,16 @@
     <meta name="description" content="Le meilleur Bot Discord.">
 
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://botdefazer.duckdns.org/">
+    <meta property="og:url" content="http://www.fazer.city/">
     <meta property="og:title" content="Bot de Fazer">
-    <meta property="og:description" content="Site officiel du Bot de Fazer. Accédez aux commandes ou inviter le sur votre serveur.">
-    <meta property="og:image" content="https://botdefazer.duckdns.org/images/video.gif?v=3">
+    <meta property="og:description" content="Site officiel du Bot de Fazer.">
+    <meta property="og:image" content="/images/video.gif">
     <meta name="theme-color" content="#facc15">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Bot de Fazer">
-    <meta name="twitter:description" content="Site officiel du Bot de Fazer. Accédez aux commandes ou inviter le sur votre serveur.">
-    <meta name="twitter:image" content="https://botdefazer.duckdns.org/images/video.gif?v=3">
+    <meta name="twitter:description" content="Site officiel du Bot de Fazer.">
+    <meta name="twitter:image" content="images/video.gif">
 
     <link rel="stylesheet" href="assets/style.css">
   </head>
@@ -33,13 +33,17 @@
       >
         Inviter le bot
       </a>
+      <img src="/images/dessous.png" class="invite-decor" alt="" aria-hidden="true">
     </div>
 
     <header class="topbar">
       <div class="topbar-inner">
-        <div class="brand">
-          <div class="brand-title">Bot de Fazer</div>
-          <div class="brand-sub">Validé par le secteur</div>
+        <div class="brand-wrapper">
+          <img src="/images/logo.png" class="brand-logo" alt="Logo">
+          <div class="brand">
+            <div class="brand-title">Bot de Fazer</div>
+            <div class="brand-sub">Validé par le secteur</div>
+          </div>
         </div>
         <div class="top-actions">
           <a class="btn btn-sm" href="https://ko-fi.com/fz1000" target="_blank" rel="noopener">
@@ -200,28 +204,48 @@
         elCount.textContent = `${items.length} commande(s) affichée(s) • ${state.commands.length} au total`;
 
         if (!items.length) {
-          elGrid.innerHTML = `<div class="cmd"><div class="cmd-top"><div class="cmd-name">Rien trouvé</div><div class="cmd-kind">Essaie un autre mot</div></div><div class="cmd-desc">Le quartier a fouillé partout, y’a rien.</div></div>`;
+          elGrid.innerHTML = `<div class="cmd" style="grid-column:1/-1"><div class="cmd-top"><div class="cmd-name">Rien trouvé</div><div class="cmd-kind">Essaie un autre mot</div></div><div class="cmd-desc">Le quartier a fouillé partout, y’a rien.</div></div>`;
           return;
         }
 
-        elGrid.innerHTML = items.map((cmd) => {
-          const aliases = (cmd.aliases || []).slice(0, 12);
-          const aliasHtml = aliases.length
-            ? `<div class="cmd-aliases">${aliases.map(a => `<span class="chip">${escapeHtml(a)}</span>`).join("")}</div>`
-            : "";
-          const desc = cmd.description ? escapeHtml(cmd.description) : "—";
-          const kind = cmd.type === "slash" ? "slash" : "préfixe";
-          return `
-            <div class="cmd">
-              <div class="cmd-top">
-                <div class="cmd-name">${escapeHtml(cmd.type === "slash" ? "/" + cmd.name : cmd.name)}</div>
-                <div class="cmd-kind">${kind}</div>
-              </div>
-              <div class="cmd-desc">${desc}</div>
-              ${aliasHtml}
-            </div>
-          `;
-        }).join("");
+        // Group by category
+        const groups = {};
+        items.forEach(cmd => {
+            const cat = cmd.category || "Autre";
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(cmd);
+        });
+
+        const sortedCats = Object.keys(groups).sort((a, b) => {
+             if (a === "Général") return -1;
+             if (b === "Général") return 1;
+             return a.localeCompare(b);
+        });
+
+        let html = "";
+        sortedCats.forEach(cat => {
+            html += `<div class="category-header">${escapeHtml(cat)}</div>`;
+            html += groups[cat].map(cmd => {
+                const aliases = (cmd.aliases || []).slice(0, 12);
+                const aliasHtml = aliases.length
+                  ? `<div class="cmd-aliases">${aliases.map(a => `<span class="chip">${escapeHtml(a)}</span>`).join("")}</div>`
+                  : "";
+                const desc = cmd.description ? escapeHtml(cmd.description) : "—";
+                const kind = cmd.type === "slash" ? "slash" : "préfixe";
+                return `
+                  <div class="cmd">
+                    <div class="cmd-top">
+                      <div class="cmd-name">${escapeHtml(cmd.type === "slash" ? "/" + cmd.name : cmd.name)}</div>
+                      <div class="cmd-kind">${kind}</div>
+                    </div>
+                    <div class="cmd-desc">${desc}</div>
+                    ${aliasHtml}
+                  </div>
+                `;
+            }).join("");
+        });
+        
+        elGrid.innerHTML = html;
       }
 
       async function initCommands() {

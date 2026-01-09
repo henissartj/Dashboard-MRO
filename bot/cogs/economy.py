@@ -563,14 +563,14 @@ class InvoiceView(discord.ui.View):
                 embed.add_field(name="Statut", value="✅ Payée", inline=True)
                 
             try:
-                await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=PrintTicketView(self.ctx, self.inv_id, self.amount, self.sender_id, self.cog))
+                await interaction.message.edit(embed=embed, view=PrintTicketView(self.ctx, self.inv_id, self.amount, self.sender_id, self.cog))
             except Exception:
-                await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=None)
+                await interaction.message.edit(embed=embed, view=None)
         else:
             try:
-                await interaction.followup.edit_message(message_id=interaction.message.id, view=PrintTicketView(self.ctx, self.inv_id, self.amount, self.sender_id, self.cog))
+                await interaction.message.edit(view=PrintTicketView(self.ctx, self.inv_id, self.amount, self.sender_id, self.cog))
             except Exception:
-                await interaction.followup.edit_message(message_id=interaction.message.id, view=None)
+                await interaction.message.edit(view=None)
 
     @discord.ui.button(label="❌ Refuser", style=discord.ButtonStyle.red)
     async def refuse_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -602,9 +602,9 @@ class InvoiceView(discord.ui.View):
             if not field_updated:
                 embed.add_field(name="Statut", value="🚫 Refusée", inline=True)
                 
-            await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=self)
+            await interaction.message.edit(embed=embed, view=self)
         else:
-            await interaction.followup.edit_message(message_id=interaction.message.id, view=self)
+            await interaction.message.edit(view=self)
 
 def _generate_ticket_image_sync(inv_id, payer_name, receiver_name, amt_txt, reason, status, created_at_dt):
     import io, datetime
@@ -1062,7 +1062,33 @@ class Economy(commands.Cog):
         await ctx.send(msg)
 
 
-    # Old work command removed in favor of khedma/work unified logic
+    @commands.command(name="work", aliases=["khedma", "w"])
+    @commands.cooldown(1, 3600, commands.BucketType.user)
+    async def work(self, ctx: commands.Context):
+        """Travailler honnêtement pour gagner de l'argent (1h de cooldown)."""
+        await self._connect(); await self._ensure_user(ctx.author.id)
+        
+        # Jobs aléatoires
+        jobs = [
+            ("Tu as nettoyé les rues.", 500, 1000),
+            ("Tu as aidé une vieille dame.", 600, 1200),
+            ("Tu as tondu la pelouse du voisin.", 800, 1500),
+            ("Tu as fait la plonge au Kebab.", 1000, 2000),
+            ("Tu as réparé un scooter.", 1500, 2500),
+            ("Tu as livré des pizzas.", 1200, 2200),
+        ]
+        job, min_pay, max_pay = random.choice(jobs)
+        salary = random.randint(min_pay, max_pay)
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (salary, ctx.author.id))
+                
+                # Log
+                await self._log_transaction('work', ctx.author.id, ctx.author.id, salary, 'cash', 'success')
+        
+        cur_emoji = self._currency_emoji(ctx)
+        await ctx.send(f"🔨 **Travail terminé !** {job}\n💰 Gain : **{self._fmt_amount(salary)} {cur_emoji}**")
 
 
     @commands.command(name="braquage")
@@ -3137,6 +3163,24 @@ class Economy(commands.Cog):
     async def profile(self, ctx: commands.Context, member: discord.Member = None):
         """Afficher le profil complet (Stats, Assets, Badges, Social)"""
         member = member or ctx.author
+        
+        # Special Bot Profile
+        if member.bot:
+            invite_url = discord.utils.oauth_url(self.bot.user.id, permissions=discord.Permissions(administrator=True))
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(label="Site Web", url="http://www.fazer.city/", emoji="🌐"))
+            view.add_item(discord.ui.Button(label="Ajouter au serveur", url=invite_url, emoji="➕"))
+            
+            embed = discord.Embed(title="🤖 Bot de Fazer", description="Le bot du quartier. Validé par le secteur.", color=0xFFD700)
+            embed.add_field(name="Développeur", value="Fazer", inline=True)
+            embed.add_field(name="Ping", value=f"{round(self.bot.latency * 1000)}ms", inline=True)
+            embed.add_field(name="Serveurs", value=str(len(self.bot.guilds)), inline=True)
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+            embed.set_image(url="http://www.fazer.city/images/video.gif?v=3")
+            embed.set_footer(text="Ambiance, Casino, Économie & Quartier")
+            await ctx.send(embed=embed, view=view)
+            return
+
         await self._connect(); await self._ensure_user(member.id)
         
         async with self.pool.acquire() as conn:

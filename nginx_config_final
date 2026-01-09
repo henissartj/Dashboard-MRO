@@ -1,19 +1,6 @@
 server {
-    if ($host = botdefazer.duckdns.org) {
-        return 301 https://$host$request_uri;
-    }
     listen 80;
-    server_name botdefazer.duckdns.org;
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-}
-
-server {
-    listen 443 ssl;
-    server_name botdefazer.duckdns.org;
-    ssl_certificate /etc/letsencrypt/live/botdefazer.duckdns.org/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/botdefazer.duckdns.org/privkey.pem;
+    server_name www.fazer.city fazer.city;
 
     root /opt/mro_dash/site;
     index index.html;

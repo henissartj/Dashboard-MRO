@@ -1,0 +1,18 @@
+[Unit]
+Description=Web Server "Bot de Fazer"
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/mro_dash
+ExecStart=/opt/mro_dash/.venv/bin/python app.py
+Restart=always
+RestartSec=5
+User=app
+Group=app
+Environment=PORT=8000
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

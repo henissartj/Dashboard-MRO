@@ -102,10 +102,19 @@ def _extract_commands_from_file(file_path: str, repo_root: str) -> list[dict]:
                     if doc.strip()
                     else ""
                 )
+            
+            # Determine category
+            category = "Autre"
+            if "cogs" in rel:
+                category = os.path.splitext(os.path.basename(rel))[0].capitalize()
+            elif "bot_de_fazer" in rel:
+                category = "Général"
+
             commands.append(
                 {
                     "name": name,
                     "type": kind,
+                    "category": category,
                     "aliases": aliases,
                     "description": description,
                     "source": rel,

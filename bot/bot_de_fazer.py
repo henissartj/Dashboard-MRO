@@ -346,23 +346,14 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         await ctx.send("T’as pas les perms pour ça mon fils. Appelle le staff.")
         return
     if isinstance(error, commands.CommandOnCooldown):
-        try:
-            # Désactivation de l'anti-spam (cooldown bypass pour tout le monde pour l'instant)
-            # if ctx.author.guild_permissions.administrator:
-            #     pass
-            await ctx.reinvoke() # Tente de relancer la commande sans cooldown
-            return
-        except Exception:
-            pass
-        # Si le reinvoke échoue ou si on veut quand même afficher le message (commenté pour "retirer l'anti-spam")
-        # cd = int(error.retry_after)
-        # m = cd // 60
-        # s = cd % 60
-        # if m > 0:
-        #     msg = f"Doucement le spam respire un peu fils. Reviens dans {m}m {s}s."
-        # else:
-        #     msg = f"Doucement le spam respire un peu fils. Reviens dans {s}s."
-        # await ctx.send(msg)
+        cd = int(error.retry_after)
+        m = cd // 60
+        s = cd % 60
+        if m > 0:
+            msg = f"⏳ Doucement le spam ! Reviens dans {m}m {s}s."
+        else:
+            msg = f"⏳ Doucement le spam ! Reviens dans {s}s."
+        await ctx.send(msg)
         return
     print(f"[ERROR] Unhandled exception: {error}")
     import traceback
@@ -372,23 +363,12 @@ async def on_command_error(ctx: commands.Context, error: Exception):
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: Exception):
     if isinstance(error, app_commands.CommandOnCooldown):
-        try:
-            # Même logique : bypass cooldown
-            # cd = int(error.retry_after)
-            # m = cd // 60
-            # s = cd % 60
-            # if m > 0:
-            #     msg = f"Doucement le spam respire un peu fils. Reviens dans {m}m {s}s."
-            # else:
-            #     msg = f"Doucement le spam respire un peu fils. Reviens dans {s}s."
-            
-            # if interaction.response.is_done():
-            #     await interaction.followup.send(msg, ephemeral=True)
-            # else:
-            #     await interaction.response.send_message(msg, ephemeral=True)
-            pass # On ignore l'erreur silencieusement ou on pourrait tenter de relancer la commande slash mais c'est plus complexe
-        except Exception:
-            pass
+        cd = int(error.retry_after)
+        msg = f"⏳ Doucement ! Reviens dans {cd}s."
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
         return
     try:
         if interaction.response.is_done():
@@ -400,6 +380,28 @@ async def on_app_command_error(interaction: discord.Interaction, error: Exceptio
 
 
 # ------- COMMANDES DE BASE -------
+
+class BotInfoView(discord.ui.View):
+    def __init__(self, invite_url):
+        super().__init__()
+        self.add_item(discord.ui.Button(label="Site Web", url="http://www.fazer.city/", emoji="🌐"))
+        self.add_item(discord.ui.Button(label="Ajouter au serveur", url=invite_url, emoji="➕"))
+
+@bot.command(name="botinfo", aliases=["info", "bi", "bot"])
+async def botinfo(ctx: commands.Context):
+    """Affiche les infos du bot et les liens utiles."""
+    invite_url = discord.utils.oauth_url(bot.user.id, permissions=discord.Permissions(administrator=True))
+    view = BotInfoView(invite_url)
+    
+    embed = discord.Embed(title="🤖 Bot de Fazer", description="Le bot du quartier. Validé par le secteur.", color=0xFFD700)
+    embed.add_field(name="Développeur", value="Fazer", inline=True)
+    embed.add_field(name="Ping", value=f"{round(bot.latency * 1000)}ms", inline=True)
+    embed.add_field(name="Serveurs", value=str(len(bot.guilds)), inline=True)
+    embed.set_thumbnail(url=bot.user.display_avatar.url)
+    embed.set_image(url="http://www.fazer.city/images/video.gif?v=3")
+    embed.set_footer(text="Ambiance, Casino, Économie & Quartier")
+    
+    await ctx.send(embed=embed, view=view)
 
 @bot.command(name="ping")
 async def ping(ctx: commands.Context):
@@ -496,18 +498,10 @@ async def dn(ctx: commands.Context, *, nom: str):
     except Exception as e:
         await ctx.send(f"Échec ban: {e}")
 
-@bot.command(name="work", aliases=["khedma", "w"])
-async def work_forward(ctx: commands.Context):
-    econ = bot.get_cog("Economy")
-    if econ is None:
-        await ctx.send("Module économie indisponible.")
-        return
-    try:
-        await econ.work(ctx)
-    except Exception:
-        await ctx.send("Erreur lors du travail.")
+
 
 @bot.command(name="interpol")
+@commands.cooldown(1, 10, commands.BucketType.user)
 async def interpol(ctx: commands.Context, member: discord.Member = None):
     member = member or ctx.author
     
@@ -871,8 +865,12 @@ def _generate_idcard_image_sync(avatar_bytes, member_name, member_display_name, 
         try:
             avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
             avatar = avatar.resize((100, 100))
-            background.paste(avatar, (20, 80), avatar)
-        except: pass
+            # Extract alpha channel for mask
+            mask = avatar.split()[3]
+            background.paste(avatar, (20, 80), mask)
+        except Exception as e:
+            print(f"Erreur avatar idcard: {e}")
+            pass
         
     # Info
     x = 140
@@ -903,6 +901,7 @@ def _generate_idcard_image_sync(avatar_bytes, member_name, member_display_name, 
 
 
 @bot.command(name="perdu")
+@commands.cooldown(1, 10, commands.BucketType.user)
 async def perdu(ctx: commands.Context, member: discord.Member = None):
     """Affiche un avis de recherche 'Perdu de vue'"""
     member = member or ctx.author
@@ -928,6 +927,7 @@ async def perdu(ctx: commands.Context, member: discord.Member = None):
 
 
 @bot.command(name="idcard")
+@commands.cooldown(1, 10, commands.BucketType.user)
 async def idcard(ctx: commands.Context, member: discord.Member = None):
     """Affiche la Carte d'Identité du Quartier"""
     member = member or ctx.author
@@ -960,7 +960,11 @@ async def idcard(ctx: commands.Context, member: discord.Member = None):
         except Exception: pass
 
     # --- GENERATION (Sync in Executor) ---
-    join_date = member.joined_at.strftime("%d/%m/%Y") if member.joined_at else "??/??/????"
+    joined_at = getattr(member, "joined_at", None)
+    if joined_at:
+        join_date = joined_at.strftime("%d/%m/%Y")
+    else:
+        join_date = "??/??/????"
     
     import io
     buffer = await bot.loop.run_in_executor(
@@ -977,6 +981,7 @@ async def idcard(ctx: commands.Context, member: discord.Member = None):
 
 
 @bot.command(name="diplome")
+@commands.cooldown(1, 10, commands.BucketType.user)
 async def diplome(ctx: commands.Context, member: discord.Member = None):
     """Affiche le Diplôme de la Rue"""
     member = member or ctx.author
@@ -1061,6 +1066,7 @@ async def diplome(ctx: commands.Context, member: discord.Member = None):
 
 
 @bot.command(name="parions")
+@commands.cooldown(1, 10, commands.BucketType.user)
 async def parions(ctx: commands.Context):
     """Génère un ticket de pari sportif fun"""
     import io
