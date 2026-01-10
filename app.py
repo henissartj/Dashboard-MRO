@@ -1,7 +1,11 @@
 import ast
 import os
+import pymysql
+from dotenv import load_dotenv
 
 from flask import Flask, jsonify, send_from_directory
+
+load_dotenv()
 
 app = Flask(__name__, static_folder="site/assets", static_url_path="/assets")
 
@@ -95,6 +99,10 @@ def _extract_commands_from_file(file_path: str, repo_root: str) -> list[dict]:
             if not isinstance(aliases, list):
                 aliases = []
             aliases = [a for a in aliases if isinstance(a, str) and a.strip()]
+            usage = kws.get("usage")
+            if usage and not isinstance(usage, str):
+                usage = None
+            
             description = kws.get("help")
             if not isinstance(description, str) or not description.strip():
                 description = (
@@ -117,6 +125,7 @@ def _extract_commands_from_file(file_path: str, repo_root: str) -> list[dict]:
                     "category": category,
                     "aliases": aliases,
                     "description": description,
+                    "usage": usage,
                     "source": rel,
                     "line": getattr(node, "lineno", None),
                 }
@@ -146,6 +155,36 @@ def api_commands():
 
     all_cmds.sort(key=sort_key)
     return jsonify({"count": len(all_cmds), "commands": all_cmds})
+
+
+@app.route("/api/stats")
+def api_stats():
+    try:
+        conn = pymysql.connect(
+            host=os.getenv("DB_HOST", "127.0.0.1"),
+            user=os.getenv("DB_USER", "botfazer"),
+            password=os.getenv("DB_PASSWORD", ""),
+            database=os.getenv("DB_NAME", "bot_fazer"),
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) as count FROM users")
+                users = cur.fetchone()["count"]
+                
+                cur.execute("SELECT SUM(balance + bank + bank_2 + bank_3) as total FROM users")
+                row = cur.fetchone()
+                money = int(row["total"]) if row and row["total"] else 0
+                
+        return jsonify({
+            "users": users,
+            "money": money,
+            "servers": 2
+        })
+    except Exception as e:
+        print(f"Stats Error: {e}")
+        # Return dummy data on error to avoid breaking UI
+        return jsonify({"users": 0, "money": 0, "servers": 2})
 
 
 if __name__ == "__main__":

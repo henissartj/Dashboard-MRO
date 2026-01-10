@@ -19,10 +19,13 @@
     <meta name="twitter:description" content="Site officiel du Bot de Fazer.">
     <meta name="twitter:image" content="images/video.gif">
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
   </head>
   <body>
-    <a class="skiplink" href="#commandes">Aller aux commandes</a>
+    <a class="skiplink" href="#main-content">Aller au contenu principal</a>
 
     <div class="fixed-invite" aria-label="Invitation du bot">
       <a
@@ -64,33 +67,30 @@
             Le bot du quartier.
           </h1>
           <p>
-            Page d’accueil.
-            En bas: toutes les commandes du bot.
+            Tout ce qu'il faut pour votre serveur.
           </p>
           <div class="hero-cta">
-            <a class="btn btn-primary" href="https://discord.com/oauth2/authorize?client_id=1448011692867977266&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">
-              Inviter maintenant
+            <a class="btn btn-primary" href="#commandes">
+              <span>Voir les commandes</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
             </a>
-            <a class="btn" href="#commandes">
-              Descendre aux commandes
+            <a class="btn" href="https://discord.com/oauth2/authorize?client_id=1448011692867977266&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">
+              <span>Inviter le bot</span>
             </a>
           </div>
 
-          <div class="section">
-            <div class="section-title">Ambiance</div>
-            <div class="cards">
-              <div class="card">
-                <h3>Fluide ta3 les ouf</h3>
-                <p>Le bot il est plus fluide que ta 5G gros fatigué.</p>
-              </div>
-              <div class="card">
-                <h3>Meilleur Bot de France</h3>
-                <p>Couronné par le gérant de Felix Pyat</p>
-              </div>
-              <div class="card">
-                <h3>Que pour les vaillants</h3>
-                <p>Il détecte ton niveau de vaillance.</p>
-              </div>
+          <div class="stats-bar">
+            <div class="stat-item">
+              <div class="stat-value" id="statUsers">-</div>
+              <div class="stat-label">Citoyens</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="statMoney">-</div>
+              <div class="stat-label">Fcoins en circulation</div>
+            </div>
+            <div class="stat-item clickable" id="btnServers">
+              <div class="stat-value" id="statServers">-</div>
+              <div class="stat-label">Serveurs</div>
             </div>
           </div>
         </div>
@@ -99,19 +99,19 @@
           <div class="art-bg" aria-hidden="true"></div>
           <div class="art-grid">
             <div class="art-tile">
-              <img src="/images/liberez.png" alt="Libérez visuel">
+              <img src="/images/liberez.png" alt="Libérez visuel" loading="lazy">
               <div class="art-caption">Développé par Fazer</div>
             </div>
             <div class="art-tile">
-              <img src="/images/sassobanc.png" alt="Sasso banc visuel">
+              <img src="/images/sassobanc.png" alt="Sasso banc visuel" loading="lazy">
               <div class="art-caption">Système de casino</div>
             </div>
             <div class="art-tile">
-              <img src="/images/video.gif" alt="Inspiration visuel">
+              <img src="/images/video.gif" alt="Inspiration visuel" loading="lazy">
               <div class="art-caption">Système de modération</div>
             </div>
             <div class="art-tile">
-              <img src="/images/snapchat.png" alt="Snapchat visuel">
+              <img src="/images/snapchat.png" alt="Snapchat visuel" loading="lazy">
               <div class="art-caption">Commandes fun</div>
             </div>
           </div>
@@ -126,11 +126,17 @@
             <div class="muted" id="cmdCount">Chargement…</div>
           </div>
           <div class="commands-toolbar">
+            <label for="cmdSearch" class="sr-only">Rechercher une commande</label>
             <input class="input" id="cmdSearch" type="search" placeholder="Rechercher une commande…" autocomplete="off">
-            <div class="tabs" role="group" aria-label="Filtre commandes">
-              <button class="tab" id="tabAll" aria-pressed="true" type="button">Toutes</button>
-              <button class="tab" id="tabPrefix" aria-pressed="false" type="button">Préfixe</button>
-              <button class="tab" id="tabSlash" aria-pressed="false" type="button">Slash</button>
+            <div class="select-wrapper">
+              <select id="catSelect" class="input" aria-label="Filtrer par catégorie">
+                <option value="all">Toutes les catégories</option>
+              </select>
+            </div>
+            <div class="tabs" role="tablist" aria-label="Filtre des types de commandes">
+              <button class="tab" id="tabAll" role="tab" aria-selected="true" aria-controls="cmdGrid" type="button">Toutes</button>
+              <button class="tab" id="tabPrefix" role="tab" aria-selected="false" aria-controls="cmdGrid" type="button">Préfixe</button>
+              <button class="tab" id="tabSlash" role="tab" aria-selected="false" aria-controls="cmdGrid" type="button">Slash</button>
             </div>
           </div>
         </div>
@@ -138,130 +144,55 @@
         <div class="cmd-grid" id="cmdGrid" aria-live="polite"></div>
       </section>
 
-      <footer class="footer">
+      <footer class="site-footer">
         <div class="footer-actions">
           <a class="btn" href="#commandes">Voir toutes les commandes</a>
           <a class="btn" href="https://discord.com/oauth2/authorize?client_id=1448011692867977266&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Inviter le bot</a>
         </div>
+        <div class="supporters-marquee">
+          <div class="marquee-content">
+            Merci aux supporters : aurianavvlt, 4y0pl41t, mr.korrnichon, amaeeel._., an333.back, fgddfgdfsgfsd, marwanleboss, beaucouptropcon, nyrt.kc
+          </div>
+        </div>
       </footer>
+
+      <button id="backToTop" class="back-to-top" aria-label="Retour en haut">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+      </button>
     </main>
 
-    <script>
-      const state = {
-        filter: "all",
-        query: "",
-        commands: []
-      };
+    <div id="toast"></div>
 
-      const elCount = document.getElementById("cmdCount");
-      const elGrid = document.getElementById("cmdGrid");
-      const elSearch = document.getElementById("cmdSearch");
+    <div id="serversModal" class="modal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Nos Serveurs</h3>
+          <button class="modal-close" aria-label="Fermer">&times;</button>
+        </div>
+        <div class="server-list">
+          <a href="https://discord.gg/AbfM6Nasqu" target="_blank" rel="noopener" class="server-item">
+            <div class="server-info">
+              <div class="server-name">tahan et farhan #FR</div>
+              <div class="server-desc">Serveur Communautaire</div>
+            </div>
+            <div class="server-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            </div>
+          </a>
+          <a href="https://discord.gg/AbfM6Nasqu" target="_blank" rel="noopener" class="server-item">
+            <div class="server-info">
+              <div class="server-name">Serveur de Fazer</div>
+              <div class="server-desc">Serveur de développement</div>
+            </div>
+            <div class="server-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            </div>
+          </a>
+        </div>
+      </div>
+    </div>
 
-      const tabAll = document.getElementById("tabAll");
-      const tabPrefix = document.getElementById("tabPrefix");
-      const tabSlash = document.getElementById("tabSlash");
-
-      function setTab(filter) {
-        state.filter = filter;
-        tabAll.setAttribute("aria-pressed", filter === "all");
-        tabPrefix.setAttribute("aria-pressed", filter === "prefix");
-        tabSlash.setAttribute("aria-pressed", filter === "slash");
-        render();
-      }
-
-      tabAll.addEventListener("click", () => setTab("all"));
-      tabPrefix.addEventListener("click", () => setTab("prefix"));
-      tabSlash.addEventListener("click", () => setTab("slash"));
-
-      elSearch.addEventListener("input", (e) => {
-        state.query = (e.target.value || "").trim().toLowerCase();
-        render();
-      });
-
-      function matches(cmd) {
-        if (state.filter !== "all" && cmd.type !== state.filter) return false;
-        if (!state.query) return true;
-        const hay = [
-          cmd.name,
-          cmd.type,
-          cmd.description || "",
-          ...(cmd.aliases || [])
-        ].join(" ").toLowerCase();
-        return hay.includes(state.query);
-      }
-
-      function escapeHtml(s) {
-        return String(s)
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;")
-          .replaceAll("'", "&#039;");
-      }
-
-      function render() {
-        const items = state.commands.filter(matches);
-        elCount.textContent = `${items.length} commande(s) affichée(s) • ${state.commands.length} au total`;
-
-        if (!items.length) {
-          elGrid.innerHTML = `<div class="cmd" style="grid-column:1/-1"><div class="cmd-top"><div class="cmd-name">Rien trouvé</div><div class="cmd-kind">Essaie un autre mot</div></div><div class="cmd-desc">Le quartier a fouillé partout, y’a rien.</div></div>`;
-          return;
-        }
-
-        // Group by category
-        const groups = {};
-        items.forEach(cmd => {
-            const cat = cmd.category || "Autre";
-            if (!groups[cat]) groups[cat] = [];
-            groups[cat].push(cmd);
-        });
-
-        const sortedCats = Object.keys(groups).sort((a, b) => {
-             if (a === "Général") return -1;
-             if (b === "Général") return 1;
-             return a.localeCompare(b);
-        });
-
-        let html = "";
-        sortedCats.forEach(cat => {
-            html += `<div class="category-header">${escapeHtml(cat)}</div>`;
-            html += groups[cat].map(cmd => {
-                const aliases = (cmd.aliases || []).slice(0, 12);
-                const aliasHtml = aliases.length
-                  ? `<div class="cmd-aliases">${aliases.map(a => `<span class="chip">${escapeHtml(a)}</span>`).join("")}</div>`
-                  : "";
-                const desc = cmd.description ? escapeHtml(cmd.description) : "—";
-                const kind = cmd.type === "slash" ? "slash" : "préfixe";
-                return `
-                  <div class="cmd">
-                    <div class="cmd-top">
-                      <div class="cmd-name">${escapeHtml(cmd.type === "slash" ? "/" + cmd.name : cmd.name)}</div>
-                      <div class="cmd-kind">${kind}</div>
-                    </div>
-                    <div class="cmd-desc">${desc}</div>
-                    ${aliasHtml}
-                  </div>
-                `;
-            }).join("");
-        });
-        
-        elGrid.innerHTML = html;
-      }
-
-      async function initCommands() {
-        try {
-          const resp = await fetch("/api/commands", { cache: "no-store" });
-          if (!resp.ok) throw new Error("bad_status");
-          const data = await resp.json();
-          state.commands = Array.isArray(data.commands) ? data.commands : [];
-          render();
-        } catch (e) {
-          elCount.textContent = "Impossible de charger les commandes.";
-          elGrid.innerHTML = `<div class="cmd"><div class="cmd-top"><div class="cmd-name">Erreur</div><div class="cmd-kind">API</div></div><div class="cmd-desc">Le serveur a refusé de parler. Recharge la page.</div></div>`;
-        }
-      }
-
-      initCommands();
-    </script>
+    <script src="/assets/script.js" defer></script>
   </body>
 </html>

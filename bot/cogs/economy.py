@@ -1062,36 +1062,10 @@ class Economy(commands.Cog):
         await ctx.send(msg)
 
 
-    @commands.command(name="work", aliases=["khedma", "w"])
-    @commands.cooldown(1, 3600, commands.BucketType.user)
-    async def work(self, ctx: commands.Context):
-        """Travailler honnêtement pour gagner de l'argent (1h de cooldown)."""
-        await self._connect(); await self._ensure_user(ctx.author.id)
-        
-        # Jobs aléatoires
-        jobs = [
-            ("Tu as nettoyé les rues.", 500, 1000),
-            ("Tu as aidé une vieille dame.", 600, 1200),
-            ("Tu as tondu la pelouse du voisin.", 800, 1500),
-            ("Tu as fait la plonge au Kebab.", 1000, 2000),
-            ("Tu as réparé un scooter.", 1500, 2500),
-            ("Tu as livré des pizzas.", 1200, 2200),
-        ]
-        job, min_pay, max_pay = random.choice(jobs)
-        salary = random.randint(min_pay, max_pay)
-        
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (salary, ctx.author.id))
-                
-                # Log
-                await self._log_transaction('work', ctx.author.id, ctx.author.id, salary, 'cash', 'success')
-        
-        cur_emoji = self._currency_emoji(ctx)
-        await ctx.send(f"🔨 **Travail terminé !** {job}\n💰 Gain : **{self._fmt_amount(salary)} {cur_emoji}**")
 
 
-    @commands.command(name="braquage")
+
+    @commands.command(name="braquage", usage="braquage <joueur>")
     @commands.cooldown(1, 3600, commands.BucketType.user)
     async def braquage(self, ctx: commands.Context, target: discord.Member):
         """(Illégal) Tenter de braquer un joueur."""
@@ -1144,7 +1118,7 @@ class Economy(commands.Cog):
                     
                     await ctx.send(f"👮 **Échec !** La police vous a attrapé. Amende : {self._fmt_amount(fine)} {self._currency_emoji(ctx)}.")
 
-    @commands.command(name="gofast")
+    @commands.command(name="gofast", usage="gofast")
     @commands.cooldown(1, 7200, commands.BucketType.user)
     async def gofast(self, ctx: commands.Context):
         """(Illégal) Faire un Go-Fast (Risqué)."""
@@ -1354,7 +1328,7 @@ class Economy(commands.Cog):
         buffer.seek(0)
         return buffer
 
-    @commands.command(name="card", aliases=["carte"])
+    @commands.command(name="card", aliases=["carte"], usage="card [joueur]")
     async def card(self, ctx: commands.Context, member: discord.Member | None = None):
         member = member or ctx.author
         await self._connect(); await self._ensure_user(member.id)
@@ -1403,7 +1377,7 @@ class Economy(commands.Cog):
         file = discord.File(buf, filename="credit_card.png")
         await ctx.send(f"Voici la carte de {member.mention}", file=file)
 
-    @commands.command(name="customize_card", aliases=["ccard"])
+    @commands.command(name="customize_card", aliases=["ccard"], usage="customize_card <category> <choice>")
     async def customize_card(self, ctx: commands.Context, category: str = None, choice: str = None):
         """Personnaliser sa carte bancaire (Luxury)"""
         prefix = ctx.prefix
@@ -1488,6 +1462,7 @@ class Economy(commands.Cog):
 
     @commands.command(name="balance", aliases=["bal"]) 
     async def balance(self, ctx: commands.Context, member: discord.Member | None = None):
+        """Affiche le solde de ton compte (poche + banques)."""
         await self._connect(); member = member or ctx.author; await self._ensure_user(member.id)
         
         # Get balance info
@@ -1736,6 +1711,7 @@ class Economy(commands.Cog):
 
     @commands.command(name="withdraw", aliases=["with"]) 
     async def withdraw(self, ctx: commands.Context, amount: str):
+        """Retire de l'argent de ta banque vers ta poche."""
         await self._connect(); await self._ensure_user(ctx.author.id)
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -1808,7 +1784,7 @@ class Economy(commands.Cog):
         view = InvoiceView(ctx, inv_id, amt_int, ctx.author.id, self)
         await ctx.send(f"{target.mention}, vous avez reçu une facture !", embed=emb, view=view)
 
-    @commands.command(name="payfacture", aliases=["payinvoice", "pf"])
+    @commands.command(name="payfacture", aliases=["payinvoice", "pf"], usage="payfacture <id>")
     async def payfacture(self, ctx: commands.Context, invoice_id: int):
         """(Obsolète) Payer une facture (Utilisez les boutons)."""
         await ctx.send("ℹ️ Utilisez les boutons sous la facture pour payer ou refuser.")
@@ -1966,6 +1942,7 @@ class Economy(commands.Cog):
 
     @commands.command(name="send", aliases=["pay", "sd"]) 
     async def send(self, ctx: commands.Context, member: discord.Member, amount: str):
+        """Envoie de l'argent à un autre membre."""
         await self._connect(); await self._ensure_user(ctx.author.id); await self._ensure_user(member.id)
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -2085,7 +2062,7 @@ class Economy(commands.Cog):
 
 
 
-    @commands.command(name="buy", aliases=["b"]) 
+    @commands.command(name="buy", aliases=["b"], usage="buy <item> [qty]") 
     async def buy(self, ctx: commands.Context, item_name: str):
         await self._connect(); await self._ensure_user(ctx.author.id)
         async with self.pool.acquire() as conn:
@@ -3538,8 +3515,9 @@ class Economy(commands.Cog):
         else:
             await ctx.send(f"❌ {member.display_name} a déjà ce badge ou une erreur est survenue.")
 
-    @commands.command(name="inventory", aliases=["inv"]) 
+    @commands.command(name="inventory", aliases=["inv"], usage="inventory [joueur]") 
     async def inventory(self, ctx: commands.Context, member: discord.Member | None = None):
+        """Affiche ton inventaire d'objets."""
         await self._connect(); member = member or ctx.author; await self._ensure_user(member.id)
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -3590,8 +3568,9 @@ class Economy(commands.Cog):
             await ctx.send(f"Erreur transactions: {e}")
 
     # cmd
-    @commands.command(name="daily", aliases=["d"])
+    @commands.command(name="daily", aliases=["d"], usage="daily")
     async def daily(self, ctx: commands.Context):
+        """Récupère ta récompense quotidienne (24h)."""
         await self._connect(); await self._ensure_user(ctx.author.id)
         
         base_reward = 5000
@@ -5361,7 +5340,7 @@ class AdminTransactionView(discord.ui.View):
         emb = self._bank_embed(ctx, title="Scoot", description=f"{ctx.author.mention} défie {member.mention}. Mise: {self._fmt_amount(amt)} {cur_emoji} chacun.", color=discord.Color.blurple())
         await ctx.send(embed=emb, view=view)
 
-    @commands.command(name="work", aliases=["khedma", "w"], help="Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.")
+    @commands.command(name="work", aliases=["khedma", "w"], help="Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.", usage="work")
     @commands.dynamic_cooldown(lambda ctx: commands.Cooldown(1, 300), commands.BucketType.user)
     async def work(self, ctx: commands.Context):
         print(f"[DEBUG] Executing work command for {ctx.author}")

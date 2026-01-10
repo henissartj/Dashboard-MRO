@@ -147,6 +147,11 @@ async def _global_cooldown(ctx: commands.Context):
 
 @bot.command(name="cooldown_global", aliases=["cooldown"])
 async def cooldown_global(ctx: commands.Context, seconds: int):
+    """
+    Active/Désactive un cooldown global pour tout le bot.
+    Usage: +cooldown <secondes> (0 pour désactiver)
+    Admin only.
+    """
     is_admin = False
     if ctx.author.id == 1443339902623154207:
         is_admin = True
@@ -181,6 +186,11 @@ async def _repeat_cooldown(ctx: commands.Context):
 
 @bot.command(name="cooldown_repeat")
 async def cooldown_repeat(ctx: commands.Context, seconds: int):
+    """
+    Empêche le spam de la même commande.
+    Usage: +cooldown_repeat <secondes>
+    Admin only.
+    """
     is_admin = False
     if ctx.author.id == 1443339902623154207:
         is_admin = True
