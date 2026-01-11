@@ -90,7 +90,6 @@ async def on_ready():
         activity=discord.Game(name="au quartier tu connais frero en bien")
     )
     
-    # Force removal of default help just in case
     if bot.help_command:
         bot.help_command = None
     bot.remove_command("help")
@@ -1340,28 +1339,6 @@ async def reload_cmd(ctx: commands.Context):
 
 # ------- COMMANDES FUN TYPE KOYA -------
 
-@bot.command(name="scoot")
-async def scoot(ctx: commands.Context, member1: discord.Member, member2: discord.Member = None):
-    member2 = member2 or ctx.author if member1 != ctx.author else None
-    if not member2:
-        await ctx.send("Faut 2 reufs pour la course fréro t con ou quoi ??")
-        return
-    
-    vitesse1 = random.randint(40, 120)
-    vitesse2 = random.randint(40, 120)
-    
-    embed = discord.Embed(title="🏍️ **SCOOT RACE QUARTIER**", color=discord.Color.red())
-    embed.add_field(name=member1.display_name, value=f"{vitesse1} km/h 🏍️", inline=True)
-    embed.add_field(name=member2.display_name, value=f"{vitesse2} km/h 🏍️", inline=True)
-    
-    if vitesse1 > vitesse2:
-        embed.description = f"**{member1.display_name}** arrive premier ! 🥇 {random.choice(VAILLANT_REPLIES)}"
-    elif vitesse2 > vitesse1:
-        embed.description = f"**{member2.display_name}** arrive premier ! 🥇 {random.choice(VAILLANT_REPLIES)}"
-    else:
-        embed.description = "Égalité ! Deux grosses merdes 😭"
-    
-    await ctx.send(embed=embed)
 
 @bot.command(name="8ball")
 async def eight_ball(ctx: commands.Context, *, question: str):

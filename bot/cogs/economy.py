@@ -37,8 +37,6 @@ DDL = [
         user_id BIGINT PRIMARY KEY,
         balance BIGINT NOT NULL DEFAULT 0,
         bank BIGINT NOT NULL DEFAULT 0,
-        bank_2 BIGINT NOT NULL DEFAULT 0,
-        bank_3 BIGINT NOT NULL DEFAULT 0,
         last_daily TIMESTAMP NULL,
         last_weekly TIMESTAMP NULL,
         last_monthly TIMESTAMP NULL
@@ -666,6 +664,1078 @@ class PrintTicketView(discord.ui.View):
         await interaction.followup.send(file=file)
 
 
+class Card:
+    def __init__(self, rank: str, suit: str):
+        self.rank = rank
+        self.suit = suit
+        self.value = self._get_value()
+        self.emoji = self._get_emoji()
+
+    def _get_value(self) -> int:
+        if self.rank.isdigit():
+            return int(self.rank)
+        elif self.rank in ["J", "Q", "K"]:
+            return 10
+        elif self.rank == "A":
+            return 11 # As commence à 11
+
+    def _get_emoji(self) -> str:
+        # Simplification des emojis pour garantir la compatibilité
+        suit_emojis = {"♥": "♥", "♦": "♦", "♣": "♣", "♠": "♠"}
+        return f"[{self.rank}{suit_emojis.get(self.suit, '')}]"
+
+    def __str__(self) -> str:
+        return self.emoji
+
+class Deck:
+    RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+    SUITS = ["♥", "♦", "♣", "♠"]
+    
+    def __init__(self):
+        self.cards = [Card(rank, suit) for rank in self.RANKS for suit in self.SUITS]
+        import random
+        random.shuffle(self.cards)
+
+    def draw(self) -> Card:
+        # S'assurer que le jeu ne plante pas s'il manque de cartes (même si peu probable en BJ)
+        if not self.cards:
+            self.__init__() # Réinitialiser/Mélanger
+        return self.cards.pop()
+
+class BlackjackGame:
+    def __init__(self, cog: "Economy", player_id: int, bet: int):
+        self.cog = cog
+        self.player_id = player_id
+        self.bet = bet
+        self.deck = Deck()
+        self.player_hand: list[Card] = []
+        self.dealer_hand: list[Card] = []
+        self.ended = False
+        self.message: discord.Message | None = None
+        self.result: str = "Jeu en cours" # 'Jeu en cours', 'Blackjack', 'Gagné', 'Perdu', 'Égalité', 'Abandon'
+        
+        # Ajout des variables pour stocker le résultat du payout
+        self.payout_details: tuple[int, int, str] | None = None # (winnings, bal_after, payout_status)
+
+    def _calculate_hand_value(self, hand: list[Card]) -> int:
+        value = sum(card.value for card in hand)
+        num_aces = sum(1 for card in hand if card.rank == "A")
+        
+        # Ajuster les As (11 -> 1) si la main dépasse 21
+        while value > 21 and num_aces > 0:
+            value -= 10
+            num_aces -= 1
+        return value
+
+    def start_game(self):
+        # Distribution initiale
+        self.player_hand.append(self.deck.draw())
+        self.dealer_hand.append(self.deck.draw())
+        self.player_hand.append(self.deck.draw())
+        self.dealer_hand.append(self.deck.draw())
+        
+        # Vérifier le Blackjack initial
+        if self.get_player_value() == 21:
+            self.end_game("Blackjack")
+            
+    def get_player_value(self) -> int:
+        return self._calculate_hand_value(self.player_hand)
+    
+    def get_dealer_value(self, reveal_all=False) -> int:
+        if reveal_all:
+            return self._calculate_hand_value(self.dealer_hand)
+        # Ne montrer que la première carte du croupier
+        return self.dealer_hand[0].value
+        
+    def hit(self):
+        if self.ended: return
+        self.player_hand.append(self.deck.draw())
+        if self.get_player_value() > 21:
+            self.end_game("Perdu") # Bust
+
+    async def stand(self):
+        if self.ended: return
+        
+        # Le croupier révèle sa deuxième carte
+        # Pas d'action spécifique nécessaire ici, juste la boucle de tirage
+        
+        # Le croupier tire jusqu'à ce que sa main vaille 17 ou plus
+        dealer_value = self._calculate_hand_value(self.dealer_hand)
+        while dealer_value < 17:
+            # Note: Le croupier tire immédiatement sans attendre l'utilisateur
+            self.dealer_hand.append(self.deck.draw())
+            dealer_value = self._calculate_hand_value(self.dealer_hand)
+
+        player_value = self.get_player_value()
+        
+        if dealer_value > 21:
+            self.end_game("Gagné") # Croupier Bust
+        elif dealer_value > player_value:
+            self.end_game("Perdu") # Croupier a une meilleure main
+        elif dealer_value < player_value:
+            self.end_game("Gagné") # Joueur a une meilleure main
+        else:
+            self.end_game("Égalité") # Push
+
+    def end_game(self, result: Literal["Blackjack", "Gagné", "Perdu", "Égalité", "Abandon"]):
+        self.ended = True
+        self.result = result
+    
+    async def process_payout(self, cog: "Economy"):
+        if not self.ended: return
+        if self.payout_details: return self.payout_details # Déjà calculé
+        
+        user_id = self.player_id
+        winnings = 0
+        payout_status = ""
+        
+        # Récupérer la balance actuelle AVANT le payout pour les logs
+        async with cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (user_id,))
+                bal_before = (await cur.fetchone())[0]
+
+        async with cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                if self.result == "Blackjack":
+                    # Payout de 1.5x la mise (mise initiale + gain de 1.5x) -> 2.5 * bet
+                    winnings = int(self.bet * 2.5) 
+                    payout_status = "Blackjack! (Gain 1.5x)"
+                elif self.result == "Gagné":
+                    # Payout de 1x la mise (mise initiale + gain de 1x) -> 2 * bet
+                    winnings = self.bet * 2
+                    payout_status = "Victoire! (Gain 1x)"
+                elif self.result == "Égalité":
+                    # Mise rendue (Push) -> 1 * bet
+                    winnings = self.bet
+                    payout_status = "Égalité (Mise rendue)"
+                elif self.result == "Perdu":
+                    # Mise déjà déduite, ne rien rendre.
+                    winnings = 0
+                    payout_status = "Défaite"
+                elif self.result == "Abandon":
+                    # Demi-mise rendue (Surrender standard)
+                    winnings = self.bet // 2
+                    payout_status = "Abandon (Demi-mise rendue)"
+                
+                # Créditer les gains (si > 0)
+                if winnings > 0:
+                    await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (winnings, user_id))
+                    
+                    # Log de la transaction (uniquement si le gain net est > 0 pour éviter le spam de transaction)
+                    gain_net = winnings - self.bet if self.result not in ["Perdu", "Abandon"] and winnings > self.bet else 0
+                    if self.result == "Blackjack":
+                        gain_net = int(self.bet * 1.5)
+                    
+                    if gain_net > 0:
+                        txid = cog._txn_id()
+                        if cog.logs_enabled:
+                            await cur.execute(
+                                "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                                (txid, "win", user_id, user_id, gain_net, "balance", "won"),
+                            )
+                    
+                # Récupérer le nouveau solde
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (user_id,))
+                bal_after = (await cur.fetchone())[0]
+        
+        self.payout_details = (winnings, bal_after, payout_status)
+        return self.payout_details
+
+    # RENDU ASYNCHRONE
+    async def get_embed(self, ctx: commands.Context, cur_emoji: str) -> discord.Embed:
+        # Affichage des cartes
+        player_cards = " ".join(str(c) for c in self.player_hand)
+        player_value = self.get_player_value()
+        
+        # Déterminer les cartes et la valeur du croupier
+        if not self.ended:
+            # En jeu: cacher la deuxième carte du croupier
+            dealer_cards = f"{self.dealer_hand[0]} [❓]"
+            dealer_value_str = f"Valeur visible : {self.dealer_hand[0].value}"
+            title = "♦️ Jeu de Blackjack en cours ♦️"
+            color = discord.Color.blurple()
+        else:
+            # Fin de jeu: montrer toutes les cartes
+            dealer_cards = " ".join(str(c) for c in self.dealer_hand)
+            dealer_value = self.get_dealer_value(reveal_all=True)
+            dealer_value_str = f"Valeur finale : **{dealer_value}**"
+            
+            if self.result == "Blackjack":
+                title = "♣️ Blackjack ! ♣️"
+                color = discord.Color.gold()
+            elif self.result == "Gagné":
+                title = "✅ Victoire du joueur ! ✅"
+                color = discord.Color.green()
+            elif self.result == "Perdu":
+                title = "❌ Défaite du joueur ! ❌"
+                color = discord.Color.red()
+            elif self.result == "Égalité":
+                title = "🤝 Égalité (Push) 🤝"
+                color = discord.Color.dark_gray()
+            else: # Abandon
+                title = "🛑 Abandon"
+                color = discord.Color.dark_gray()
+
+        description = f"**Mise : {self.cog._fmt_amount(self.bet)} {cur_emoji}**\n\n"
+        
+        embed = self.cog._bank_embed(
+            ctx,
+            title=title,
+            description=description,
+            color=color,
+            actor=ctx.author
+        )
+        
+        # Champs d'information
+        embed.add_field(name="🃏 Votre main", value=f"{player_cards}\nValeur : **{player_value}**", inline=True)
+        embed.add_field(name="💻 Main du Croupier", value=f"{dealer_cards}\n{dealer_value_str}", inline=True)
+        
+        if self.ended:
+            # Traiter le payout SEULEMENT à la fin de la partie
+            final_payout_amount, final_balance, status_text = await self.process_payout(self.cog)
+            
+            # Update stats and check achievements
+            win = self.result in ["Blackjack", "Gagné"]
+            await self.cog._update_stats(ctx.author.id, game=True, win=win, wager=self.bet, win_amount=final_payout_amount)
+            await self.cog._check_achievements(ctx, ctx.author.id)
+            
+            # Calcul du gain net pour l'affichage
+            if self.result == "Blackjack":
+                gain_net = int(self.bet * 1.5)
+            elif self.result == "Gagné":
+                gain_net = self.bet
+            elif self.result == "Égalité":
+                gain_net = 0 # Mise rendue
+            elif self.result == "Abandon":
+                gain_net = - (self.bet - final_payout_amount) # Perte de la moitié de la mise
+            else: # Perdu
+                gain_net = -self.bet
+            
+            
+            if self.result == "Perdu":
+                payout_desc = f"Vous perdez votre mise de **{self.cog._fmt_amount(self.bet)} {cur_emoji}**."
+            elif self.result == "Abandon":
+                payout_desc = f"Vous abandonnez. **{self.cog._fmt_amount(final_payout_amount)} {cur_emoji}** (demi-mise) vous est rendu."
+            elif self.result == "Égalité":
+                payout_desc = f"Égalité. Votre mise de **{self.cog._fmt_amount(self.bet)} {cur_emoji}** vous est rendue."
+            else:
+                payout_desc = f"Gain net : **{self.cog._fmt_amount(gain_net)} {cur_emoji}** (Paiement total reçu: **{self.cog._fmt_amount(final_payout_amount)} {cur_emoji}**)."
+            
+            embed.description += f"**Résultat final : {status_text}**\n{payout_desc}"
+            embed.add_field(name="💰 Solde après jeu", value=f"**{self.cog._fmt_amount(final_balance)} {cur_emoji}**", inline=False)
+            
+        return embed
+
+# --- Blackjack View ---
+
+class BlackjackView(discord.ui.View):
+    def __init__(self, cog: "Economy", game: BlackjackGame, ctx: commands.Context):
+        super().__init__(timeout=90) # Augmentation du timeout
+        self.cog = cog
+        self.game = game
+        self.ctx = ctx
+        self.cur_emoji = cog._currency_emoji(ctx)
+        
+        if game.ended:
+            for item in self.children:
+                item.disabled = True
+            self.stop() # Arrêter la vue si le jeu est déjà terminé
+
+    async def on_timeout(self) -> None:
+        if not self.game.ended:
+            self.game.end_game("Abandon")
+            try:
+                # Calcul du résultat final
+                embed = await self.game.get_embed(self.ctx, self.cur_emoji)
+                
+                # Désactiver les boutons et éditer le message
+                for item in self.children:
+                    item.disabled = True
+                await self.game.message.edit(embed=embed, view=self)
+                self.cog._blackjack_sessions.pop(self.game.player_id, None)
+            except Exception:
+                pass # Ignorer les erreurs si le message est déjà supprimé
+
+    async def update_message(self, interaction: discord.Interaction):
+        # Assurer que l'embed est asynchrone
+        embed = await self.game.get_embed(self.ctx, self.cur_emoji)
+        
+        if self.game.ended:
+            for item in self.children:
+                item.disabled = True
+            
+            # Suppression de la session de jeu du cache après la fin
+            self.cog._blackjack_sessions.pop(self.game.player_id, None)
+            
+            await interaction.response.edit_message(embed=embed, view=self)
+            self.stop()
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.game.player_id:
+            await interaction.response.send_message("Seul le joueur ayant initié la partie peut interagir.", ephemeral=True)
+            return False
+        if self.game.ended:
+            await interaction.response.send_message("La partie est terminée.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Tirer (Hit)", style=discord.ButtonStyle.green)
+    async def hit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.game.hit()
+        await self.update_message(interaction)
+
+    @discord.ui.button(label="Rester (Stand)", style=discord.ButtonStyle.red)
+    async def stand_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Le stand doit être await car il contient la logique du croupier et la fin de jeu
+        await self.game.stand()
+        await self.update_message(interaction)
+        
+    @discord.ui.button(label="Abandonner (Surrender)", style=discord.ButtonStyle.blurple)
+    async def surrender_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.game.end_game("Abandon")
+        await self.update_message(interaction)
+
+
+# --- Les autres classes du fichier (Mines, CoinFlip, etc.) ---
+
+class MinesView(discord.ui.View):
+    def __init__(self, cog: "Economy", ctx: commands.Context, session_owner_id: int):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.ctx = ctx
+        self.session_owner_id = session_owner_id
+        for i in range(25):
+            btn = discord.ui.Button(label="❓", style=discord.ButtonStyle.secondary, row=i // 5)
+            async def _cb(interaction: discord.Interaction, idx=i, b=btn):
+                if interaction.user.id != self.session_owner_id:
+                    return await interaction.response.send_message("Seul l’initiateur peut jouer.", ephemeral=True)
+                s = self.cog._mines_sessions.get(self.session_owner_id)
+                if not s or s.get("ended"):
+                    return await interaction.response.send_message("Partie terminée.")
+                if idx in s["revealed"]:
+                    return await interaction.response.send_message("Déjà révélé.")
+                s["revealed"].add(idx)
+                try:
+                    await interaction.response.defer()
+                except Exception:
+                    pass
+                if idx in s["mines_set"]:
+                    s["ended"] = True
+                    b.label = "💣"; b.disabled = True
+                    for item in list(self.children):
+                        try:
+                            item.disabled = True
+                        except Exception:
+                            pass
+                    async with self.cog.pool.acquire() as conn:
+                        async with conn.cursor() as cur:
+                            await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.session_owner_id,))
+                            bal_after = (await cur.fetchone())[0]
+                    cur_emoji = self.cog._currency_emoji(self.ctx)
+                    # Utilisation de _fmt_amount
+                    full_desc = (
+                        ":boom: __**Vous êtes tombé sur la mine !**__\n\n"
+                        f"Vous avez perdu {self.cog._fmt_amount(s['bet'])} {cur_emoji}\n\n"
+                        f"Votre solde actuel s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji}**"
+                    )
+                    emb = self.cog._bank_embed(self.ctx, title="Casino • Mines", description=full_desc, color=discord.Color.red())
+                    try:
+                        await interaction.message.edit(embed=emb, view=None)
+                    except Exception:
+                        pass
+                    cash_id = s.get("cash_message_id")
+                    try:
+                        if cash_id and interaction.channel:
+                            msg = await interaction.channel.fetch_message(cash_id)
+                            await msg.edit(view=None)
+                    except Exception:
+                        pass
+                    
+                    # Update Stats (Loss)
+                    await self.cog._update_stats(self.session_owner_id, game=True, win=False, wager=s['bet'])
+                    await self.cog._check_achievements(self.ctx, self.session_owner_id)
+                    return
+                total_rem = 25 - len(s["revealed"])
+                safe_rem = (25 - s["mines"]) - len(s["revealed"]) 
+                q = max(1e-6, safe_rem / max(1, total_rem))
+                s["mult"] *= (1.0 / q)
+                b.label = "💎"; b.disabled = True
+                cur_emoji = self.cog._currency_emoji(self.ctx)
+                potential = max(1, int(s["bet"] * s["mult"] * 0.95))
+                # Utilisation de _fmt_amount
+                desc = (
+                    f"Votre mise : {self.cog._fmt_amount(s['bet'])} {cur_emoji} • Nombre de mines : {s['mines']}\n"
+                    f"Cases révélées : {len(s['revealed'])} • Gain potentiel : {self.cog._fmt_amount(potential)} {cur_emoji}"
+                )
+                emb = self.cog._bank_embed(self.ctx, title="Casino • Mines", description=desc, color=discord.Color.blurple())
+                try:
+                    await interaction.message.edit(embed=emb, view=self)
+                except Exception:
+                    pass
+            btn.callback = _cb
+            self.add_item(btn)
+
+class MinesCashView(discord.ui.View):
+    def __init__(self, cog: "Economy", ctx: commands.Context, session_owner_id: int):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.ctx = ctx
+        self.session_owner_id = session_owner_id
+
+    @discord.ui.button(label="Encaisser", style=discord.ButtonStyle.success)
+    async def cash(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.session_owner_id:
+            return await interaction.response.send_message("Seul l’initiateur peut encaisser.", ephemeral=True)
+        s = self.cog._mines_sessions.get(self.session_owner_id)
+        if not s or s.get("ended"):
+            return await interaction.response.send_message("Partie terminée.", ephemeral=True)
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+        payout = max(1, int(s["bet"] * s["mult"] * 0.95))
+        txid = None
+        await self.cog._connect(); await self.cog._ensure_user(self.session_owner_id)
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (payout, self.session_owner_id))
+                txid = self.cog._txn_id()
+                if self.cog.logs_enabled:
+                    await cur.execute(
+                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                        (txid, "win", self.session_owner_id, self.session_owner_id, payout, "balance", "won"),
+                    )
+        self.cog._mines_sessions[self.session_owner_id]["ended"] = True
+        cur_emoji = self.cog._currency_emoji(self.ctx)
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.session_owner_id,))
+                bal_after = (await cur.fetchone())[0]
+        # Utilisation de _fmt_amount
+        full_desc = (
+            ":moneybag: __**Encaissement**__\n\n"
+            f"Vous gagnez {self.cog._fmt_amount(payout)} {cur_emoji}\n\n"
+            f"Votre solde actuel s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji}**"
+        )
+        emb = self.cog._bank_embed(self.ctx, title="Casino • Mines", description=full_desc, color=discord.Color.green(), txn_id=txid)
+        try:
+            await interaction.message.edit(embed=emb, view=None)
+        except Exception:
+            pass
+        try:
+            cash_id = self.cog._mines_sessions[self.session_owner_id].get("cash_message_id")
+            if cash_id and interaction.channel:
+                msg = await interaction.channel.fetch_message(cash_id)
+                await msg.edit(view=None)
+        except Exception:
+            pass
+
+        # Update Stats (Win)
+        await self.cog._update_stats(self.session_owner_id, game=True, win=True, wager=s['bet'], win_amount=payout)
+        await self.cog._check_achievements(self.ctx, self.session_owner_id)
+
+    @discord.ui.button(label="Annuler", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.session_owner_id:
+            return await interaction.response.send_message("Seul l’initiateur peut annuler.", ephemeral=True)
+        s = self.cog._mines_sessions.get(self.session_owner_id)
+        if not s or s.get("ended"):
+            return await interaction.response.send_message("Partie terminée.", ephemeral=True)
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+        self.cog._mines_sessions[self.session_owner_id]["ended"] = True
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.session_owner_id,))
+                bal_after = (await cur.fetchone())[0]
+        cur_emoji = self.cog._currency_emoji(self.ctx)
+        # Utilisation de _fmt_amount
+        full_desc = (
+            ":stop_sign: __**Partie annulée**__\n\n"
+            f"Votre solde actuel s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji}**"
+        )
+        emb = self.cog._bank_embed(self.ctx, title="Casino • Mines", description=full_desc, color=discord.Color.dark_gray())
+        try:
+            await interaction.message.edit(embed=emb, view=None)
+        except Exception:
+            pass
+        try:
+            cash_id = self.cog._mines_sessions[self.session_owner_id].get("cash_message_id")
+            if cash_id and interaction.channel:
+                msg = await interaction.channel.fetch_message(cash_id)
+                await msg.edit(view=None)
+        except Exception:
+            pass
+
+class CoinFlipView(discord.ui.View):
+    def __init__(self, cog: "Economy", ctx: commands.Context):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.ctx = ctx
+        self.side: str | None = None
+        self.amount: int = 10
+
+    @discord.ui.button(label="Pile", style=discord.ButtonStyle.primary)
+    async def pile(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.side = "pile"
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Coin Flip", description=f"Choix: Pile • Mise: {self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="Face", style=discord.ButtonStyle.primary)
+    async def face(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.side = "face"
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Coin Flip", description=f"Choix: Face • Mise: {self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="10", style=discord.ButtonStyle.secondary)
+    async def bet10(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.amount = 10
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Coin Flip", description=f"Mise: {self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="50", style=discord.ButtonStyle.secondary)
+    async def bet50(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.amount = 50
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Coin Flip", description=f"Mise: {self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="100", style=discord.ButtonStyle.secondary)
+    async def bet100(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.amount = 100
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Coin Flip", description=f"Mise: {self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="Jouer", style=discord.ButtonStyle.success)
+    async def play(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.ctx.author.id:
+            return await interaction.response.send_message("Seul l’initiateur peut jouer.", ephemeral=True)
+        if not self.side:
+            return await interaction.response.send_message("Choisis Pile ou Face.")
+        ctx = self.ctx
+        await self.cog._ensure_user(ctx.author.id)
+        import random
+        txid = None
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                bal = (await cur.fetchone())[0]
+                if bal < self.amount:
+                    return await interaction.response.send_message("Pas assez en poche.")
+                flip = random.choice(["pile", "face"])
+                if flip == self.side:
+                    await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (self.amount, ctx.author.id))
+                    txid = self.cog._txn_id()
+                    if self.cog.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", ctx.author.id, ctx.author.id, self.amount, "balance", "won"),
+                        )
+                    desc = f"Coin flip: {flip}. Gagné +{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(ctx)}"
+                    color = discord.Color.green()
+                else:
+                    await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (self.amount, ctx.author.id))
+                    desc = f"Coin flip: {flip}. Perdu -{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(ctx)}"
+                    color = discord.Color.red()
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur2:
+                await cur2.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                bal_after = (await cur2.fetchone())[0]
+        cur_emoji = self.cog._currency_emoji(ctx)
+        # Utilisation de _fmt_amount
+        outcome_line = f":tada: __**Vous avez gagné {self.cog._fmt_amount(self.amount)} {cur_emoji} Fcoins !**__" if txid else f":x: **Vous avez perdu {self.cog._fmt_amount(self.amount)} {cur_emoji} Fcoins**"
+        extra_id = f"\n\nID: {txid}" if txid else ""
+        full_desc = f"Tirage: {flip}\n\n{outcome_line}\n\nVotre solde s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji} Fcoins**{extra_id}"
+        emb = self.cog._bank_embed(self.ctx, title="Casino • Pile ou Face", description=full_desc, color=color, txn_id=txid)
+        try:
+            await interaction.message.edit(embed=emb, view=None)
+        except Exception:
+            pass
+        
+        # Update Stats
+        win = (txid is not None)
+        await self.cog._update_stats(ctx.author.id, game=True, win=win, wager=self.amount, win_amount=(self.amount * 2) if win else 0)
+        await self.cog._check_achievements(self.ctx, ctx.author.id)
+
+class ScootRaceView(discord.ui.View):
+    def __init__(self, cog: "Economy", ctx: commands.Context, target: discord.Member, amount: int):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.ctx = ctx
+        self.target = target
+        self.amount = amount
+
+    @discord.ui.button(label="Accepter", style=discord.ButtonStyle.success)
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.target.id:
+            return await interaction.response.send_message("Seule la personne ping peut répondre.", ephemeral=True)
+        await self.cog._ensure_user(self.ctx.author.id); await self.cog._ensure_user(self.target.id)
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.ctx.author.id,))
+                a_bal = (await cur.fetchone())[0]
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.target.id,))
+                t_bal = (await cur.fetchone())[0]
+                if a_bal < self.amount or t_bal < self.amount:
+                    return await interaction.response.send_message("Solde insuffisant pour l’un des deux.")
+                await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (self.amount, self.ctx.author.id))
+                await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (self.amount, self.target.id))
+        import random
+        winner = self.ctx.author if random.random() < 0.5 else self.target
+        gain = self.amount * 2
+        txid = None
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (gain, winner.id))
+                txid = self.cog._txn_id()
+                if self.cog.logs_enabled:
+                    await cur.execute(
+                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                        (txid, "win", winner.id, winner.id, gain, "balance", "won"),
+                    )
+        cur_emoji = self.cog._currency_emoji(self.ctx)
+        # Utilisation de _fmt_amount
+        desc = f"Course Scoot • Mise: {self.cog._fmt_amount(self.amount)} {cur_emoji} chacun\nGagnant: {winner.mention} (+{self.cog._fmt_amount(gain)} {cur_emoji})"
+        emb = self.cog._bank_embed(self.ctx, title="Scoot", description=desc, color=discord.Color.green(), txn_id=txid)
+        try:
+            await interaction.message.edit(embed=emb, view=None)
+        except Exception:
+            pass
+
+        # Update Stats for both
+        loser = self.target if winner.id == self.ctx.author.id else self.ctx.author
+        
+        # Winner
+        await self.cog._update_stats(winner.id, game=True, win=True, wager=self.amount, win_amount=gain)
+        await self.cog._check_achievements(self.ctx, winner.id)
+        
+        # Loser
+        await self.cog._update_stats(loser.id, game=True, win=False, wager=self.amount)
+        await self.cog._check_achievements(self.ctx, loser.id)
+
+    @discord.ui.button(label="Refuser", style=discord.ButtonStyle.danger)
+    async def refuse(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.target.id:
+            return await interaction.response.send_message("Seule la personne ping peut répondre.", ephemeral=True)
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+        emb = self.cog._bank_embed(self.ctx, title="Scoot", description=f"Refusé par {self.target.mention}", color=discord.Color.red())
+        try:
+            await interaction.message.edit(embed=emb, view=None)
+        except Exception:
+            pass
+
+class SlotsView(discord.ui.View):
+    def __init__(self, cog: "Economy", ctx: commands.Context):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.ctx = ctx
+        self.amount: int = 10
+
+    @discord.ui.button(label="10", style=discord.ButtonStyle.secondary)
+    async def bet10(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.amount = 10
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Machines à sous", description=f"🎰 Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="50", style=discord.ButtonStyle.secondary)
+    async def bet50(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.amount = 50
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Machines à sous", description=f"🎰 Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="100", style=discord.ButtonStyle.secondary)
+    async def bet100(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.amount = 100
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Machines à sous", description=f"🎰 Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="Spin", style=discord.ButtonStyle.success)
+    async def spin(self, interaction: discord.Interaction, button: discord.ui.Button):
+        ctx = self.ctx
+        await self.cog._ensure_user(ctx.author.id)
+        import random
+        reels = ["🍒", "🍋", "🔔", "⭐", "7️⃣"]
+        txid = None
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                bal = (await cur.fetchone())[0]
+                if bal < self.amount:
+                    return await interaction.response.send_message("Pas assez en poche.")
+                r = [random.choice(reels) for _ in range(3)]
+                win = 0
+                if len(set(r)) == 1: win = self.amount * 5
+                elif len({r[0], r[1], r[2]}) == 2: win = self.amount * 2
+                if win > 0:
+                    await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win, ctx.author.id))
+                    txid = self.cog._txn_id()
+                    if self.cog.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
+                        )
+                    desc = f"Slots {' | '.join(r)} — Gagné +{self.cog._fmt_amount(win)} {self.cog._currency_emoji(ctx)}"
+                    color = discord.Color.green()
+                else:
+                    await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (self.amount, ctx.author.id))
+                    desc = f"Slots {' | '.join(r)} — Perdu -{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(ctx)}"
+                    color = discord.Color.red()
+        cur_emoji = self.cog._currency_emoji(ctx)
+        if txid:
+            async with self.cog.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                    bal_after = (await cur.fetchone())[0]
+            # Utilisation de _fmt_amount
+            outcome_line = f":tada: __**Vous avez gagné {self.cog._fmt_amount(win)} {cur_emoji} Fcoins !**__"
+            extra_id = f"\n\nID: {txid}" if txid else ""
+            full_desc = f"Résultats: {' | '.join(r)}\n\n{outcome_line}\n\nVotre solde s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji} Fcoins**{extra_id}"
+            emb = self.cog._bank_embed(self.ctx, title="Casino • Machines à sous", description=full_desc, color=color, txn_id=txid)
+        else:
+            # Utilisation de _fmt_amount
+            outcome_line = f":x: **Vous avez perdu {self.cog._fmt_amount(self.amount)} {cur_emoji} Fcoins**"
+            full_desc = f"Résultats: {' | '.join(r)}\n\n{outcome_line}"
+            emb = self.cog._bank_embed(self.ctx, title="Casino • Machines à sous", description=full_desc, color=color)
+        try:
+            await interaction.message.edit(embed=emb, view=None)
+        except Exception:
+            pass
+        
+        # Update Stats
+        w_amt = self.amount + win if win > 0 else 0
+        await self.cog._update_stats(ctx.author.id, game=True, win=(win > 0), wager=self.amount, win_amount=w_amt)
+        await self.cog._check_achievements(self.ctx, ctx.author.id)
+
+class DiceView(discord.ui.View):
+    def __init__(self, cog: "Economy", ctx: commands.Context):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.ctx = ctx
+        self.amount: int = 10
+        self.bet_on: int | None = None
+        self.parity: str | None = None
+
+    @discord.ui.button(label="10", style=discord.ButtonStyle.secondary)
+    async def bet10(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.amount = 10
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="50", style=discord.ButtonStyle.secondary)
+    async def bet50(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.amount = 50
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="100", style=discord.ButtonStyle.secondary)
+    async def bet100(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.amount = 100
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="Pair", style=discord.ButtonStyle.primary)
+    async def pair(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.parity = "pair"
+        self.bet_on = None
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Pari: **Pair** • Mise: **{self.cog._fmt_amount(self.amount)}**", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="Impair", style=discord.ButtonStyle.primary)
+    async def impair(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.parity = "impair"
+        self.bet_on = None
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Pari: **Impair** • Mise: **{self.cog._fmt_amount(self.amount)}**", color=discord.Color.blurple()))
+
+    @discord.ui.select(placeholder="Choisis un nombre", options=[discord.SelectOption(label=str(i), value=str(i)) for i in range(1,7)])
+    async def choose_number(self, interaction: discord.Interaction, select: discord.ui.Select):
+        self.bet_on = int(select.values[0])
+        self.parity = None
+        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Pari: **{self.bet_on}** • Mise: **{self.cog._fmt_amount(self.amount)}**", color=discord.Color.blurple()))
+
+    @discord.ui.button(label="Jouer", style=discord.ButtonStyle.success)
+    async def play(self, interaction: discord.Interaction, button: discord.ui.Button):
+        ctx = self.ctx
+        await self.cog._ensure_user(ctx.author.id)
+        import random
+        txid = None
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                bal = (await cur.fetchone())[0]
+                if bal < self.amount:
+                    return await interaction.response.send_message("Pas assez en poche.")
+                roll = random.randint(1, 6)
+                if self.bet_on is None:
+                    win = self.amount if (roll % 2 == 0 and self.parity == "pair") or (roll % 2 == 1 and self.parity == "impair") else -self.amount
+                else:
+                    win = self.amount * 5 if roll == self.bet_on else -self.amount
+                if win >= 0:
+                    await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win, ctx.author.id))
+                    txid = self.cog._txn_id()
+                    if self.cog.logs_enabled:
+                        await cur.execute(
+                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
+                        )
+                    desc = f"Dé {roll} — Gagné +{self.cog._fmt_amount(win)} {self.cog._currency_emoji(ctx)}"
+                    color = discord.Color.green()
+                else:
+                    await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (-win, ctx.author.id))
+                    desc = f"Dé {roll} — Perdu -{self.cog._fmt_amount(abs(win))} {self.cog._currency_emoji(ctx)}"
+                    color = discord.Color.red()
+        if txid:
+            async with self.cog.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
+                    bal_after = (await cur.fetchone())[0]
+            cur_emoji = self.cog._currency_emoji(ctx)
+            # Utilisation de _fmt_amount
+            gain_line = f"**Vous avez gagné {self.cog._fmt_amount(win)} {cur_emoji} Fcoins**" if win > 0 else f"**Vous avez perdu {self.cog._fmt_amount(abs(win))} {cur_emoji} Fcoins**"
+            extra_id = f"\n\nID: {txid}" if txid else ""
+            full_desc = f"Le dé est tombé sur : {roll} :game_die:\n\n{gain_line}\n\nVotre solde s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji} Fcoins**{extra_id}"
+            emb = self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=full_desc, color=color, txn_id=txid)
+        else:
+            # Utilisation de _fmt_amount
+            full_desc = f"Le dé est tombé sur : {roll} :game_die:\n\n**Vous avez perdu {self.cog._fmt_amount(abs(win))} {cur_emoji} Fcoins**"
+            emb = self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=full_desc, color=color)
+        try:
+            await interaction.message.edit(embed=emb, view=None)
+        except Exception:
+            pass
+        
+        # Update Stats
+        w_amt = self.amount + win if win > 0 else 0
+        await self.cog._update_stats(ctx.author.id, game=True, win=(win > 0), wager=self.amount, win_amount=w_amt)
+        await self.cog._check_achievements(self.ctx, ctx.author.id)
+
+class LadderView(discord.ui.View):
+    def __init__(self, cog: "Economy", ctx: commands.Context, base_amt: int):
+        super().__init__(timeout=90)
+        self.cog = cog
+        self.ctx = ctx
+        self.base_amt = base_amt
+        self.step = 0
+        self.mult = 1.0
+
+    @discord.ui.button(label="Continuer", style=discord.ButtonStyle.success)
+    async def cont(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.ctx.author.id:
+            return await interaction.response.send_message("Seul l’initiateur peut jouer.")
+        await self.cog._ensure_user(self.ctx.author.id)
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.ctx.author.id,))
+                bal = (await cur.fetchone())[0]
+        if bal < self.base_amt:
+            return await interaction.response.send_message("Pas assez en poche.")
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+        import random
+        busts = [0.20, 0.35, 0.50, 0.65, 0.80]
+        mults = [1.5, 2.0, 2.5, 3.0, 3.5]
+        p = busts[self.step] if self.step < len(busts) else 0.90
+        m_next = mults[self.step] if self.step < len(mults) else (self.mult + 0.5)
+        if random.random() < p:
+            async with self.cog.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (self.base_amt, self.ctx.author.id))
+            async with self.cog.pool.acquire() as conn:
+                async with conn.cursor() as cur2:
+                    await cur2.execute("SELECT balance FROM users WHERE user_id=%s", (self.ctx.author.id,))
+                    bal_after = (await cur2.fetchone())[0]
+            cur_emoji = self.cog._currency_emoji(self.ctx)
+            emb = self.cog._bank_embed(
+                self.ctx,
+                title="Casino • Échelle Push Your Luck",
+                description=f"**Mise : {self.cog._fmt_amount(self.base_amt)} {cur_emoji}**",
+                color=discord.Color.red(),
+            )
+            emb.add_field(name="État", value="Bust instantané", inline=True)
+            emb.add_field(name="Perte", value=f"-{self.cog._fmt_amount(self.base_amt)} {cur_emoji}", inline=True)
+            emb.add_field(name="Solde après jeu", value=f"**{self.cog._fmt_amount(bal_after)} {cur_emoji} Fcoins**", inline=False)
+            try:
+                for item in self.children:
+                    item.disabled = True
+                await interaction.message.edit(embed=emb, view=None)
+            except Exception:
+                pass
+            
+            # Update Stats (Bust)
+            await self.cog._update_stats(self.ctx.author.id, game=True, win=False, wager=self.base_amt)
+            await self.cog._check_achievements(self.ctx, self.ctx.author.id)
+            
+            self.stop()
+            return
+        self.mult = m_next
+        self.step += 1
+        cur_emoji = self.cog._currency_emoji(self.ctx)
+        potential = int(self.base_amt * self.mult * 0.95)
+        emb = self.cog._bank_embed(
+            self.ctx,
+            title="Casino • Échelle Push Your Luck",
+            description=f"**Mise : {self.cog._fmt_amount(self.base_amt)} {cur_emoji}**",
+            color=discord.Color.blurple(),
+        )
+        emb.add_field(name="Étape", value=str(self.step), inline=True)
+        emb.add_field(name="Multiplicateur", value=f"x{self.mult:.2f}", inline=True)
+        emb.add_field(name="Risque bust", value=f"{int(p*100)}%", inline=True)
+        emb.add_field(name="Gain potentiel", value=f"{self.cog._fmt_amount(potential)} {cur_emoji}", inline=False)
+        try:
+            await interaction.message.edit(embed=emb, view=self)
+        except Exception:
+            pass
+
+    @discord.ui.button(label="Encaisser", style=discord.ButtonStyle.primary)
+    async def cash(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.ctx.author.id:
+            return await interaction.response.send_message("Seul l’initiateur peut encaisser.", ephemeral=True)
+        await self.cog._ensure_user(self.ctx.author.id)
+        payout = max(1, int(self.base_amt * self.mult * 0.95))
+        txid = None
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (payout, self.ctx.author.id))
+                txid = self.cog._txn_id()
+                if self.cog.logs_enabled:
+                    await cur.execute("INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)", (txid, "win", self.ctx.author.id, self.ctx.author.id, payout, "balance", "won"))
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur2:
+                await cur2.execute("SELECT balance FROM users WHERE user_id=%s", (self.ctx.author.id,))
+                bal_after = (await cur2.fetchone())[0]
+        cur_emoji = self.cog._currency_emoji(self.ctx)
+        emb = self.cog._bank_embed(
+            self.ctx,
+            title="Casino • Échelle Push Your Luck",
+            description=f"**Mise : {self.cog._fmt_amount(self.base_amt)} {cur_emoji}**",
+            color=discord.Color.green(),
+            txn_id=txid,
+        )
+        emb.add_field(name="Étapes franchies", value=str(self.step), inline=True)
+        emb.add_field(name="Gain", value=f"+{self.cog._fmt_amount(payout)} {cur_emoji}", inline=True)
+        emb.add_field(name="Solde après jeu", value=f"**{self.cog._fmt_amount(bal_after)} {cur_emoji} Fcoins**", inline=False)
+        try:
+            for item in self.children:
+                item.disabled = True
+            try:
+                await interaction.response.defer()
+            except Exception:
+                pass
+            await interaction.message.edit(embed=emb, view=None)
+        except Exception:
+            pass
+            
+        # Update Stats (Win)
+        await self.cog._update_stats(self.ctx.author.id, game=True, win=True, wager=self.base_amt, win_amount=payout)
+        await self.cog._check_achievements(self.ctx, self.ctx.author.id)
+
+        self.stop()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.ctx.author.id:
+            await interaction.response.send_message("Seul l’initiateur peut interagir.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        try:
+            for item in self.children:
+                item.disabled = True
+            cur_emoji = self.cog._currency_emoji(self.ctx)
+            emb = self.cog._bank_embed(
+                self.ctx,
+                title="Casino • Échelle Push Your Luck",
+                description=f"**Mise : {self.cog._fmt_amount(self.base_amt)} {cur_emoji}**",
+                color=discord.Color.dark_gray(),
+            )
+            emb.add_field(name="État", value="Temps écoulé", inline=True)
+            target_msg = getattr(self, "message", None)
+            if target_msg:
+                await target_msg.edit(embed=emb, view=None)
+        except Exception:
+            pass
+        self.stop()
+
+class TaxTransactionView(discord.ui.View):
+    def __init__(self, *args, **kwargs):
+        super().__init__(timeout=1)
+
+class AdminTransactionView(discord.ui.View):
+    def __init__(self, cog: "Economy", txid: str):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.txid = txid
+
+    @discord.ui.button(label="Accepter", style=discord.ButtonStyle.success)
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != 1443339902623154207:
+            return await interaction.response.send_message("Non autorisé.", ephemeral=True)
+        await self.cog._connect()
+        txid = self.txid
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT target_id, amount, account, status FROM transactions WHERE id=%s", (txid,))
+                row = await cur.fetchone()
+                if not row:
+                    return await interaction.response.send_message("Transaction introuvable.")
+                target_id, amount, col, status = row
+                if status != "pending":
+                    return await interaction.response.send_message("Déjà traitée.")
+                await cur.execute(f"UPDATE users SET {col}={col}+%s WHERE user_id=%s", (amount, target_id))
+                await cur.execute("UPDATE transactions SET status='accepted' WHERE id=%s", (txid,))
+        try:
+            base = interaction.message.embeds[0] if interaction.message and interaction.message.embeds else None
+            if base:
+                emb = discord.Embed.from_dict(base.to_dict())
+                emb.title = "Crédit admin (accepté)"
+                emb.color = discord.Color.green()
+            else:
+                emb = discord.Embed(title="Crédit admin (accepté)", color=discord.Color.green())
+            await interaction.response.edit_message(embed=emb, view=None)
+        except Exception:
+            await interaction.response.send_message("Accepté.")
+
+    @discord.ui.button(label="Refuser", style=discord.ButtonStyle.danger)
+    async def refuse_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != 1443339902623154207:
+            return await interaction.response.send_message("Non autorisé.", ephemeral=True)
+        await self.cog._connect()
+        txid = self.txid
+        async with self.cog.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT status FROM transactions WHERE id=%s", (txid,))
+                row = await cur.fetchone()
+                if not row:
+                    return await interaction.response.send_message("Transaction introuvable.")
+                status = row[0]
+                if status != "pending":
+                    return await interaction.response.send_message("Déjà traitée.")
+                await cur.execute("UPDATE transactions SET status='refused' WHERE id=%s", (txid,))
+        try:
+            base = interaction.message.embeds[0] if interaction.message and interaction.message.embeds else None
+            if base:
+                emb = discord.Embed.from_dict(base.to_dict())
+                emb.title = "Crédit admin (refusé)"
+                emb.color = discord.Color.red()
+            else:
+                emb = discord.Embed(title="Crédit admin (refusé)", color=discord.Color.red())
+            await interaction.response.edit_message(embed=emb, view=None)
+        except Exception:
+            await interaction.response.send_message("Refusée.")
+
+
 class Economy(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -1057,7 +2127,7 @@ class Economy(commands.Cog):
                     stats["commands_used"] = row[6]
                 
                 # Get balance/bank
-                await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (user_id,))
+                await cur.execute("SELECT balance, bank FROM users WHERE user_id=%s", (user_id,))
                 user_row = await cur.fetchone()
                 if not user_row: return
                 total_money = sum(user_row)
@@ -1403,7 +2473,7 @@ class Economy(commands.Cog):
 
         # Draw Balances on Card (Bottom Right overlay or similar? maybe too crowded)
         # Let's put total wealth top left
-        total = bal + bank1 + bank2 + bank3
+        total = bal + bank1
         draw.text((50, 40), f"WEALTH: ${fmt(total)}", fill=(212, 175, 55), font=font_small)
 
         # Save
@@ -1419,10 +2489,12 @@ class Economy(commands.Cog):
         
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (member.id,))
+                await cur.execute("SELECT balance, bank FROM users WHERE user_id=%s", (member.id,))
                 res = await cur.fetchone()
-                if not res: res = (0, 0, 0, 0)
-                bal, bank1, bank2, bank3 = res
+                if not res: res = (0, 0)
+                bal, bank1 = res
+                bank2 = 0
+                bank3 = 0
                 
                 # Get Assets Value
                 assets_val = 0
@@ -1452,8 +2524,6 @@ class Economy(commands.Cog):
             member.id, 
             bal, 
             bank1, 
-            bank2, 
-            bank3,
             assets_val,
             custom
         )
@@ -1544,18 +2614,18 @@ class Economy(commands.Cog):
                 
         await ctx.send(f"🎨 **Succès !** Ta carte a été pimpée avec l'option **{choice}** pour {self._fmt_amount(price)} {cur_emoji}. Fais `+card` pour voir.")
 
-    @commands.command(name="balance", aliases=["bal"]) 
+    @commands.command(name="balance", aliases=["bal", "money", "$"])
     async def balance(self, ctx: commands.Context, member: discord.Member | None = None):
-        """Affiche le solde de ton compte (poche + banques)."""
-        await self._connect(); member = member or ctx.author; await self._ensure_user(member.id)
+        """Affiche le solde de ton compte (poche + banque)."""
+        member = member or ctx.author; await self._ensure_user(member.id)
         
         # Get balance info
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (member.id,))
+                await cur.execute("SELECT balance, bank FROM users WHERE user_id=%s", (member.id,))
                 res = await cur.fetchone()
-                if not res: res = (0, 0, 0, 0)
-                bal, bank1, bank2, bank3 = res
+                if not res: res = (0, 0)
+                bal, bank1 = res
                 
                 # Get organization info
                 await cur.execute("""
@@ -1578,10 +2648,10 @@ class Economy(commands.Cog):
         emb = self._bank_embed(ctx, title=f"Solde de {member.display_name}", color=discord.Color.gold(), actor=member)
         emb.add_field(name="Organisation", value=org_info, inline=False)
         emb.add_field(name="Poche", value=f"{self._fmt_amount(bal)} {cur_emoji}", inline=True)
-        emb.add_field(name="Banque 1", value=f"{self._fmt_amount(bank1)} {cur_emoji}", inline=True)
+        emb.add_field(name="Banque", value=f"{self._fmt_amount(bank1)} {cur_emoji}", inline=True)
         
         # Add buttons for other banks if needed
-        view = BalanceView(ctx, member, bal, bank1, bank2, bank3, 0.0, cur_emoji, self)
+        view = BalanceView(ctx, member, bal, bank1, 0.0, cur_emoji, self)
         await ctx.send(embed=emb, view=view)
 
     async def _perform_deposit(self, ctx: commands.Context, bank_id: int, amount_str: str):
@@ -1606,17 +2676,25 @@ class Economy(commands.Cog):
                 
                 # Check Tier Limit
                 limit = BANK_TIERS.get(tier, BANK_TIERS[0])["limit"]
+                
+                # Smart Deposit Logic
                 if current_bank + amt > limit:
+                    # Calculate how much fits
                     space = limit - current_bank
-                    if space < 0: space = 0
-                    emb = self._bank_embed(
-                        ctx, 
-                        title="Plafond Atteint", 
-                        description=f"❌ Votre palier ({BANK_TIERS.get(tier, {}).get('name', 'Inconnu')}) est limité à {self._fmt_amount(limit)} {self._currency_emoji(ctx)}.\nEspace libre : {self._fmt_amount(space)}.", 
-                        color=discord.Color.red()
-                    )
-                    emb.set_footer(text="Utilisez +upgrade_bank pour augmenter votre plafond.")
-                    return await ctx.send(embed=emb)
+                    if space <= 0:
+                        emb = self._bank_embed(
+                            ctx, 
+                            title="Plafond Atteint", 
+                            description=f"❌ Votre banque est pleine (Max {self._fmt_amount(limit)}).", 
+                            color=discord.Color.red()
+                        )
+                        emb.set_footer(text="Utilisez +upgrade_bank pour augmenter votre plafond.")
+                        return await ctx.send(embed=emb)
+                    
+                    # Deposit only what fits
+                    amt = space
+                    # Optional: Notify user
+                    await ctx.send(f"⚠️ Dépôt limité à {self._fmt_amount(space)} (Plafond atteint).")
 
                 if bal < amt:
                     emb = self._bank_embed(ctx, title="Erreur", description="Pas assez en poche.", color=discord.Color.red())
@@ -1655,54 +2733,46 @@ class Economy(commands.Cog):
 
     @commands.command(name="depobank", aliases=["db"])
     async def depobank(self, ctx: commands.Context, bank_id: int | str, amount: str = None):
-        """Déposer de l'argent dans une banque spécifique (ex: +db 1 100k ou +db all)"""
-        if isinstance(bank_id, str) and bank_id.lower() in ["all", "tout"]:
-             # Case: +db all -> Deposit all cash to Bank 1
-             await self._perform_deposit(ctx, 1, "all")
-             return
-
+        """Déposer de l'argent (Alias pour +deposit). Usage: +db <montant>"""
+        # Redirect to deposit logic
+        # If user types +db 100 -> bank_id=100, amount=None
+        # If user types +db 1 100 -> bank_id=1, amount=100
+        
+        real_amount = None
+        
         if amount is None:
-             # If user typed +db 100k, bank_id captures "100k" (as string if int conversion failed, but here type hint is int | str)
-             # Let's try to interpret bank_id as amount for Bank 1
+             # Case: +db 100 or +db all
+             real_amount = str(bank_id)
+        else:
+             # Case: +db 1 100 or +db 2 100
+             # We ignore bank_id unless it's 2 or 3 (error)
              try:
-                 # Check if bank_id looks like an int (1, 2, 3)
                  b_id = int(str(bank_id))
-                 if b_id in [1, 2, 3]:
-                     return await ctx.send("Usage: `+db <banque> <montant>` ou `+dep <montant>`")
-                 else:
-                     # It's an amount like 500
-                     await self._perform_deposit(ctx, 1, str(bank_id))
-                     return
+                 if b_id in [2, 3]:
+                     return await ctx.send("❌ Les banques 2 et 3 sont fermées définitivement.")
              except:
-                 # It's a string amount like "100k"
-                 await self._perform_deposit(ctx, 1, str(bank_id))
-                 return
+                 pass
+             real_amount = amount
 
-        # Normal case: +db 1 100k
-        try:
-            b_id = int(str(bank_id))
-        except:
-            return await ctx.send("Banque invalide.")
-            
-        await self._perform_deposit(ctx, b_id, amount)
+        await self._perform_deposit(ctx, 1, real_amount)
 
     @commands.command(name="deposit", aliases=["dep"]) 
     async def deposit(self, ctx: commands.Context, arg1: str, arg2: str = None):
-        """Déposer de l'argent (intelligent). Usage: +dep <montant> ou +dep <banque> <montant>"""
+        """Déposer de l'argent. Usage: +dep <montant>"""
         if arg2 is None:
-            # Usage: +dep amount -> Bank 1
-            # Handle +dep all
-            bank_id = 1
+            # Usage: +dep amount
             amount_str = arg1
         else:
-            # Usage: +dep bank_id amount
-            if arg1 in ["1", "2", "3"]:
-                bank_id = int(arg1)
+            # Usage: +dep bank_id amount (Legacy)
+            if arg1 == "1":
                 amount_str = arg2
+            elif arg1 in ["2", "3"]:
+                return await ctx.send("❌ Les banques 2 et 3 sont fermées définitivement.")
             else:
-                return await ctx.send("Usage: `+dep <montant>` (Banque 1) ou `+dep <1/2/3> <montant>`")
+                return await ctx.send("Usage: `+dep <montant>`")
         
-        await self._perform_deposit(ctx, bank_id, amount_str)
+        # Always Bank 1
+        await self._perform_deposit(ctx, 1, amount_str)
 
     @commands.command(name="upgrade_bank", aliases=["upbank"])
     async def upgrade_bank(self, ctx: commands.Context, tier_choice: int | None = None):
@@ -1744,21 +2814,31 @@ class Economy(commands.Cog):
         await ctx.send(f"✅ Félicitations ! Vous êtes passé au palier **{target_data['name']}** (Max {self._fmt_amount(target_data['limit'])}).")
 
     @commands.command(name="withbank", aliases=["wb"])
-    async def withbank(self, ctx: commands.Context, bank_id: int, amount: str):
-        if bank_id not in (1, 2, 3):
-            emb = self._bank_embed(ctx, title="Erreur", description="Banque invalide. Utilisez 1, 2 ou 3.", color=discord.Color.red())
-            return await ctx.send(embed=emb)
+    async def withbank(self, ctx: commands.Context, arg1: str, arg2: str = None):
+        """Retirer de l'argent de la banque. Usage: +wb <montant>"""
         
+        if arg2 is None:
+            # Usage: +wb amount
+            amount_str = arg1
+        else:
+            # Usage: +wb bank_id amount
+            if arg1 == "1":
+                amount_str = arg2
+            elif arg1 in ["2", "3"]:
+                return await ctx.send("❌ Les banques 2 et 3 sont fermées définitivement.")
+            else:
+                return await ctx.send("Usage: `+wb <montant>`")
+
         await self._connect(); await self._ensure_user(ctx.author.id)
         
-        col_name = "bank" if bank_id == 1 else f"bank_{bank_id}"
+        col_name = "bank"
         
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(f"SELECT {col_name} FROM users WHERE user_id=%s", (ctx.author.id,))
                 bank_bal = (await cur.fetchone())[0]
                 
-                amt = self._parse_amount_all_nocap(amount, bank_bal)
+                amt = self._parse_amount_all_nocap(amount_str, bank_bal)
                 if amt <= 0:
                     emb = self._bank_embed(ctx, title="Erreur", description="Montant invalide.", color=discord.Color.red())
                     return await ctx.send(embed=emb)
@@ -1781,7 +2861,7 @@ class Economy(commands.Cog):
         cur = self._currency_emoji(ctx)
         emb = self._bank_embed(
             ctx,
-            title=f"Retrait Banque {bank_id}",
+            title=f"Retrait Banque",
             color=discord.Color.blue(),
             fields=[
                 ("Montant", f"{self._fmt_amount(amt)} {cur}", True),
@@ -1990,7 +3070,7 @@ class Economy(commands.Cog):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # Money Supply (M1)
-                await cur.execute("SELECT SUM(balance + bank + bank_2 + bank_3) FROM users")
+                await cur.execute("SELECT SUM(balance + bank) FROM users")
                 m1 = (await cur.fetchone())[0] or 0
                 
                 # Real Estate Value
@@ -2009,7 +3089,7 @@ class Economy(commands.Cog):
                 gdp = m1 + prop_val + lux_val
                 
                 # Richest Player
-                await cur.execute("SELECT user_id, (balance + bank + bank_2 + bank_3) as wealth FROM users ORDER BY wealth DESC LIMIT 1")
+                await cur.execute("SELECT user_id, (balance + bank) as wealth FROM users ORDER BY wealth DESC LIMIT 1")
                 richest = await cur.fetchone()
                 
         embed = discord.Embed(title="📊 Statistiques Économiques (INSEE)", color=discord.Color.dark_blue())
@@ -2813,11 +3893,11 @@ class Economy(commands.Cog):
             async with self.pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     # Check balance
-                    await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (ctx.author.id,))
+                    await cur.execute("SELECT balance, bank FROM users WHERE user_id=%s", (ctx.author.id,))
                     res = await cur.fetchone()
                     if not res: return await ctx.send("❌ Compte introuvable.")
-                    bal, b1, b2, b3 = res
-                    total_wealth = bal + b1 + b2 + b3
+                    bal, b1 = res
+                    total_wealth = bal + b1
                     
                     if total_wealth < price:
                         return await ctx.send(f"❌ T'as pas les sous frero. Il faut {self._fmt_amount(price)} {cur_emoji}.")
@@ -2826,8 +3906,6 @@ class Economy(commands.Cog):
                     remaining = price
                     new_bal = bal
                     new_b1 = b1
-                    new_b2 = b2
-                    new_b3 = b3
                     
                     if new_bal >= remaining:
                         new_bal -= remaining
@@ -2843,27 +3921,11 @@ class Economy(commands.Cog):
                         else:
                             remaining -= new_b1
                             new_b1 = 0
-                            
-                    if remaining > 0:
-                        if new_b2 >= remaining:
-                            new_b2 -= remaining
-                            remaining = 0
-                        else:
-                            remaining -= new_b2
-                            new_b2 = 0
-                            
-                    if remaining > 0:
-                        if new_b3 >= remaining:
-                            new_b3 -= remaining
-                            remaining = 0
-                        else:
-                            remaining -= new_b3
-                            new_b3 = 0
                     
                     # Update Balance
                     await cur.execute(
-                        "UPDATE users SET balance=%s, bank=%s, bank_2=%s, bank_3=%s WHERE user_id=%s",
-                        (new_bal, new_b1, new_b2, new_b3, ctx.author.id)
+                        "UPDATE users SET balance=%s, bank=%s WHERE user_id=%s",
+                        (new_bal, new_b1, ctx.author.id)
                     )
                     
                     # Add Property
@@ -2956,33 +4018,29 @@ class Economy(commands.Cog):
             async with self.pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     # Check balance
-                    await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (ctx.author.id,))
+                    await cur.execute("SELECT balance, bank FROM users WHERE user_id=%s", (ctx.author.id,))
                     res = await cur.fetchone()
                     if not res: return await ctx.send("❌ Compte introuvable.")
-                    bal, b1, b2, b3 = res
-                    total_wealth = bal + b1 + b2 + b3
+                    bal, b1 = res
+                    total_wealth = bal + b1
                     
                     if total_wealth < price:
                         return await ctx.send(f"❌ T'es trop pauvre pour ça. Il faut {self._fmt_amount(price)} {cur_emoji}.")
                     
                     # Deduct (Pocket -> Banks)
                     remaining = price
-                    new_bal, new_b1, new_b2, new_b3 = bal, b1, b2, b3
+                    new_bal, new_b1 = bal, b1
                     
                     # Deduction Logic (Same as Real Estate)
                     if new_bal >= remaining: new_bal -= remaining; remaining = 0
                     else: remaining -= new_bal; new_bal = 0
                     if remaining > 0 and new_b1 >= remaining: new_b1 -= remaining; remaining = 0
                     elif remaining > 0: remaining -= new_b1; new_b1 = 0
-                    if remaining > 0 and new_b2 >= remaining: new_b2 -= remaining; remaining = 0
-                    elif remaining > 0: remaining -= new_b2; new_b2 = 0
-                    if remaining > 0 and new_b3 >= remaining: new_b3 -= remaining; remaining = 0
-                    elif remaining > 0: remaining -= new_b3; new_b3 = 0
                     
                     # Update Balance
                     await cur.execute(
-                        "UPDATE users SET balance=%s, bank=%s, bank_2=%s, bank_3=%s WHERE user_id=%s",
-                        (new_bal, new_b1, new_b2, new_b3, ctx.author.id)
+                        "UPDATE users SET balance=%s, bank=%s WHERE user_id=%s",
+                        (new_bal, new_b1, ctx.author.id)
                     )
                     
                     # Generate Serial Number
@@ -3247,10 +4305,10 @@ class Economy(commands.Cog):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # 1. Money
-                await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (member.id,))
+                await cur.execute("SELECT balance, bank FROM users WHERE user_id=%s", (member.id,))
                 res = await cur.fetchone()
-                bal, b1, b2, b3 = res if res else (0,0,0,0)
-                total_money = bal + b1 + b2 + b3
+                bal, b1 = res if res else (0,0)
+                total_money = bal + b1
                 
                 # 2. Assets (Immo + Luxe)
                 prop_val = 0
@@ -3504,10 +4562,10 @@ class Economy(commands.Cog):
                 
                 # Get all rich users
                 await cur.execute("""
-                    SELECT user_id, balance, bank, bank_2, bank_3, 
-                           (balance + bank + bank_2 + bank_3) as total_wealth
+                    SELECT user_id, balance, bank, 
+                           (balance + bank) as total_wealth
                     FROM users 
-                    WHERE (balance + bank + bank_2 + bank_3) > %s
+                    WHERE (balance + bank) > %s
                     ORDER BY total_wealth DESC
                 """, (rich_threshold,))
                 
@@ -3519,7 +4577,7 @@ class Economy(commands.Cog):
                 total_tax_collected = 0
                 taxed_users = []
                 
-                for user_id, balance, bank, bank_2, bank_3, total_wealth in rich_users:
+                for user_id, balance, bank, total_wealth in rich_users:
                     # Calculate tax (take from balance first, then banks if needed)
                     tax_amount = int(total_wealth * (tax_rate / 100))
                     
@@ -3530,32 +4588,20 @@ class Economy(commands.Cog):
                     
                     # Take from bank_1 if needed
                     new_bank = bank
-                    new_bank_2 = bank_2
-                    new_bank_3 = bank_3
                     
                     if remaining_tax > 0:
                         new_bank = max(0, bank - remaining_tax)
                         actual_taxed_from_bank = bank - new_bank
                         remaining_tax -= actual_taxed_from_bank
                     
-                    if remaining_tax > 0:
-                        new_bank_2 = max(0, bank_2 - remaining_tax)
-                        actual_taxed_from_bank_2 = bank_2 - new_bank_2
-                        remaining_tax -= actual_taxed_from_bank_2
-                    
-                    if remaining_tax > 0:
-                        new_bank_3 = max(0, bank_3 - remaining_tax)
-                        actual_taxed_from_bank_3 = bank_3 - new_bank_3
-                        remaining_tax -= actual_taxed_from_bank_3
-                    
-                    actual_total_taxed = (balance - new_balance) + (bank - new_bank) + (bank_2 - new_bank_2) + (bank_3 - new_bank_3)
+                    actual_total_taxed = (balance - new_balance) + (bank - new_bank)
                     
                     # Update user balance
                     await cur.execute("""
                         UPDATE users 
-                        SET balance=%s, bank=%s, bank_2=%s, bank_3=%s 
+                        SET balance=%s, bank=%s 
                         WHERE user_id=%s
-                    """, (new_balance, new_bank, new_bank_2, new_bank_3, user_id))
+                    """, (new_balance, new_bank, user_id))
                     
                     total_tax_collected += actual_total_taxed
                     
@@ -3963,13 +5009,27 @@ class Economy(commands.Cog):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 try:
-                    await cur.execute("UPDATE users SET balance=0, bank=0, bank_tier=1")
+                    # Reset Users & Cooldowns
+                    await cur.execute("UPDATE users SET balance=0, bank=0, bank_tier=1, last_daily=NULL, last_weekly=NULL, last_monthly=NULL")
+                    
+                    # Delete Related Data
                     await cur.execute("DELETE FROM inventory")
                     await cur.execute("DELETE FROM user_horses")
                     await cur.execute("DELETE FROM user_achievements")
                     await cur.execute("DELETE FROM user_properties")
+                    await cur.execute("DELETE FROM user_luxury")
+                    await cur.execute("DELETE FROM user_card_customization")
+                    await cur.execute("DELETE FROM user_stats")
+                    
+                    # Social
+                    await cur.execute("DELETE FROM marriages")
+                    await cur.execute("DELETE FROM invoices")
+                    
+                    # Clans
                     await cur.execute("UPDATE clans SET balance=0")
                     await cur.execute("DELETE FROM clan_members")
+                    await cur.execute("DELETE FROM clan_invites")
+                    
                 except Exception as e:
                     return await ctx.send(f"❌ Erreur reset: {e}")
         await ctx.send(content="@everyone", embed=discord.Embed(title="🔄 Reset global", description="Tous les comptes et assets ont été réinitialisés.", color=discord.Color.red()))
@@ -3980,8 +5040,19 @@ class Economy(commands.Cog):
         await self._connect(); await self._ensure_user(member.id)
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("UPDATE users SET balance=0, bank=0 WHERE user_id=%s", (member.id,))
+                await cur.execute("UPDATE users SET balance=0, bank=0, bank_tier=1, last_daily=NULL, last_weekly=NULL, last_monthly=NULL WHERE user_id=%s", (member.id,))
                 await cur.execute("DELETE FROM inventory WHERE user_id=%s", (member.id,))
+                await cur.execute("DELETE FROM user_horses WHERE owner_id=%s", (member.id,))
+                await cur.execute("DELETE FROM user_achievements WHERE user_id=%s", (member.id,))
+                await cur.execute("DELETE FROM user_properties WHERE user_id=%s", (member.id,))
+                await cur.execute("DELETE FROM user_luxury WHERE user_id=%s", (member.id,))
+                await cur.execute("DELETE FROM user_card_customization WHERE user_id=%s", (member.id,))
+                await cur.execute("DELETE FROM user_stats WHERE user_id=%s", (member.id,))
+                # Social (requires complex queries for marriages/invites usually, but simpler to just delete where user is involved)
+                await cur.execute("DELETE FROM marriages WHERE user1_id=%s OR user2_id=%s", (member.id, member.id))
+                await cur.execute("DELETE FROM invoices WHERE sender_id=%s OR receiver_id=%s", (member.id, member.id))
+                await cur.execute("DELETE FROM clan_members WHERE user_id=%s", (member.id,))
+                
         await ctx.send(embed=discord.Embed(description=f"Reset complet de {member.mention}", color=discord.Color.dark_gray()))
 
     # Fun commands
@@ -4411,1078 +5482,6 @@ class Economy(commands.Cog):
 
 # --- Blackjack Game Logic ---
 
-class Card:
-    def __init__(self, rank: str, suit: str):
-        self.rank = rank
-        self.suit = suit
-        self.value = self._get_value()
-        self.emoji = self._get_emoji()
-
-    def _get_value(self) -> int:
-        if self.rank.isdigit():
-            return int(self.rank)
-        elif self.rank in ["J", "Q", "K"]:
-            return 10
-        elif self.rank == "A":
-            return 11 # As commence à 11
-
-    def _get_emoji(self) -> str:
-        # Simplification des emojis pour garantir la compatibilité
-        suit_emojis = {"♥": "♥", "♦": "♦", "♣": "♣", "♠": "♠"}
-        return f"[{self.rank}{suit_emojis.get(self.suit, '')}]"
-
-    def __str__(self) -> str:
-        return self.emoji
-
-class Deck:
-    RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
-    SUITS = ["♥", "♦", "♣", "♠"]
-    
-    def __init__(self):
-        self.cards = [Card(rank, suit) for rank in self.RANKS for suit in self.SUITS]
-        import random
-        random.shuffle(self.cards)
-
-    def draw(self) -> Card:
-        # S'assurer que le jeu ne plante pas s'il manque de cartes (même si peu probable en BJ)
-        if not self.cards:
-            self.__init__() # Réinitialiser/Mélanger
-        return self.cards.pop()
-
-class BlackjackGame:
-    def __init__(self, cog: Economy, player_id: int, bet: int):
-        self.cog = cog
-        self.player_id = player_id
-        self.bet = bet
-        self.deck = Deck()
-        self.player_hand: list[Card] = []
-        self.dealer_hand: list[Card] = []
-        self.ended = False
-        self.message: discord.Message | None = None
-        self.result: str = "Jeu en cours" # 'Jeu en cours', 'Blackjack', 'Gagné', 'Perdu', 'Égalité', 'Abandon'
-        
-        # Ajout des variables pour stocker le résultat du payout
-        self.payout_details: tuple[int, int, str] | None = None # (winnings, bal_after, payout_status)
-
-    def _calculate_hand_value(self, hand: list[Card]) -> int:
-        value = sum(card.value for card in hand)
-        num_aces = sum(1 for card in hand if card.rank == "A")
-        
-        # Ajuster les As (11 -> 1) si la main dépasse 21
-        while value > 21 and num_aces > 0:
-            value -= 10
-            num_aces -= 1
-        return value
-
-    def start_game(self):
-        # Distribution initiale
-        self.player_hand.append(self.deck.draw())
-        self.dealer_hand.append(self.deck.draw())
-        self.player_hand.append(self.deck.draw())
-        self.dealer_hand.append(self.deck.draw())
-        
-        # Vérifier le Blackjack initial
-        if self.get_player_value() == 21:
-            self.end_game("Blackjack")
-            
-    def get_player_value(self) -> int:
-        return self._calculate_hand_value(self.player_hand)
-    
-    def get_dealer_value(self, reveal_all=False) -> int:
-        if reveal_all:
-            return self._calculate_hand_value(self.dealer_hand)
-        # Ne montrer que la première carte du croupier
-        return self.dealer_hand[0].value
-        
-    def hit(self):
-        if self.ended: return
-        self.player_hand.append(self.deck.draw())
-        if self.get_player_value() > 21:
-            self.end_game("Perdu") # Bust
-
-    async def stand(self):
-        if self.ended: return
-        
-        # Le croupier révèle sa deuxième carte
-        # Pas d'action spécifique nécessaire ici, juste la boucle de tirage
-        
-        # Le croupier tire jusqu'à ce que sa main vaille 17 ou plus
-        dealer_value = self._calculate_hand_value(self.dealer_hand)
-        while dealer_value < 17:
-            # Note: Le croupier tire immédiatement sans attendre l'utilisateur
-            self.dealer_hand.append(self.deck.draw())
-            dealer_value = self._calculate_hand_value(self.dealer_hand)
-
-        player_value = self.get_player_value()
-        
-        if dealer_value > 21:
-            self.end_game("Gagné") # Croupier Bust
-        elif dealer_value > player_value:
-            self.end_game("Perdu") # Croupier a une meilleure main
-        elif dealer_value < player_value:
-            self.end_game("Gagné") # Joueur a une meilleure main
-        else:
-            self.end_game("Égalité") # Push
-
-    def end_game(self, result: Literal["Blackjack", "Gagné", "Perdu", "Égalité", "Abandon"]):
-        self.ended = True
-        self.result = result
-    
-    async def process_payout(self, cog: Economy):
-        if not self.ended: return
-        if self.payout_details: return self.payout_details # Déjà calculé
-        
-        user_id = self.player_id
-        winnings = 0
-        payout_status = ""
-        
-        # Récupérer la balance actuelle AVANT le payout pour les logs
-        async with cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (user_id,))
-                bal_before = (await cur.fetchone())[0]
-
-        async with cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                if self.result == "Blackjack":
-                    # Payout de 1.5x la mise (mise initiale + gain de 1.5x) -> 2.5 * bet
-                    winnings = int(self.bet * 2.5) 
-                    payout_status = "Blackjack! (Gain 1.5x)"
-                elif self.result == "Gagné":
-                    # Payout de 1x la mise (mise initiale + gain de 1x) -> 2 * bet
-                    winnings = self.bet * 2
-                    payout_status = "Victoire! (Gain 1x)"
-                elif self.result == "Égalité":
-                    # Mise rendue (Push) -> 1 * bet
-                    winnings = self.bet
-                    payout_status = "Égalité (Mise rendue)"
-                elif self.result == "Perdu":
-                    # Mise déjà déduite, ne rien rendre.
-                    winnings = 0
-                    payout_status = "Défaite"
-                elif self.result == "Abandon":
-                    # Demi-mise rendue (Surrender standard)
-                    winnings = self.bet // 2
-                    payout_status = "Abandon (Demi-mise rendue)"
-                
-                # Créditer les gains (si > 0)
-                if winnings > 0:
-                    await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (winnings, user_id))
-                    
-                    # Log de la transaction (uniquement si le gain net est > 0 pour éviter le spam de transaction)
-                    gain_net = winnings - self.bet if self.result not in ["Perdu", "Abandon"] and winnings > self.bet else 0
-                    if self.result == "Blackjack":
-                        gain_net = int(self.bet * 1.5)
-                    
-                    if gain_net > 0:
-                        txid = cog._txn_id()
-                        if cog.logs_enabled:
-                            await cur.execute(
-                                "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                                (txid, "win", user_id, user_id, gain_net, "balance", "won"),
-                            )
-                    
-                # Récupérer le nouveau solde
-                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (user_id,))
-                bal_after = (await cur.fetchone())[0]
-        
-        self.payout_details = (winnings, bal_after, payout_status)
-        return self.payout_details
-
-    # RENDU ASYNCHRONE
-    async def get_embed(self, ctx: commands.Context, cur_emoji: str) -> discord.Embed:
-        # Affichage des cartes
-        player_cards = " ".join(str(c) for c in self.player_hand)
-        player_value = self.get_player_value()
-        
-        # Déterminer les cartes et la valeur du croupier
-        if not self.ended:
-            # En jeu: cacher la deuxième carte du croupier
-            dealer_cards = f"{self.dealer_hand[0]} [❓]"
-            dealer_value_str = f"Valeur visible : {self.dealer_hand[0].value}"
-            title = "♦️ Jeu de Blackjack en cours ♦️"
-            color = discord.Color.blurple()
-        else:
-            # Fin de jeu: montrer toutes les cartes
-            dealer_cards = " ".join(str(c) for c in self.dealer_hand)
-            dealer_value = self.get_dealer_value(reveal_all=True)
-            dealer_value_str = f"Valeur finale : **{dealer_value}**"
-            
-            if self.result == "Blackjack":
-                title = "♣️ Blackjack ! ♣️"
-                color = discord.Color.gold()
-            elif self.result == "Gagné":
-                title = "✅ Victoire du joueur ! ✅"
-                color = discord.Color.green()
-            elif self.result == "Perdu":
-                title = "❌ Défaite du joueur ! ❌"
-                color = discord.Color.red()
-            elif self.result == "Égalité":
-                title = "🤝 Égalité (Push) 🤝"
-                color = discord.Color.dark_gray()
-            else: # Abandon
-                title = "🛑 Abandon"
-                color = discord.Color.dark_gray()
-
-        description = f"**Mise : {self.cog._fmt_amount(self.bet)} {cur_emoji}**\n\n"
-        
-        embed = self.cog._bank_embed(
-            ctx,
-            title=title,
-            description=description,
-            color=color,
-            actor=ctx.author
-        )
-        
-        # Champs d'information
-        embed.add_field(name="🃏 Votre main", value=f"{player_cards}\nValeur : **{player_value}**", inline=True)
-        embed.add_field(name="💻 Main du Croupier", value=f"{dealer_cards}\n{dealer_value_str}", inline=True)
-        
-        if self.ended:
-            # Traiter le payout SEULEMENT à la fin de la partie
-            final_payout_amount, final_balance, status_text = await self.process_payout(self.cog)
-            
-            # Update stats and check achievements
-            win = self.result in ["Blackjack", "Gagné"]
-            await self.cog._update_stats(ctx.author.id, game=True, win=win, wager=self.bet, win_amount=final_payout_amount)
-            await self.cog._check_achievements(ctx, ctx.author.id)
-            
-            # Calcul du gain net pour l'affichage
-            if self.result == "Blackjack":
-                gain_net = int(self.bet * 1.5)
-            elif self.result == "Gagné":
-                gain_net = self.bet
-            elif self.result == "Égalité":
-                gain_net = 0 # Mise rendue
-            elif self.result == "Abandon":
-                gain_net = - (self.bet - final_payout_amount) # Perte de la moitié de la mise
-            else: # Perdu
-                gain_net = -self.bet
-            
-            
-            if self.result == "Perdu":
-                payout_desc = f"Vous perdez votre mise de **{self.cog._fmt_amount(self.bet)} {cur_emoji}**."
-            elif self.result == "Abandon":
-                payout_desc = f"Vous abandonnez. **{self.cog._fmt_amount(final_payout_amount)} {cur_emoji}** (demi-mise) vous est rendu."
-            elif self.result == "Égalité":
-                payout_desc = f"Égalité. Votre mise de **{self.cog._fmt_amount(self.bet)} {cur_emoji}** vous est rendue."
-            else:
-                payout_desc = f"Gain net : **{self.cog._fmt_amount(gain_net)} {cur_emoji}** (Paiement total reçu: **{self.cog._fmt_amount(final_payout_amount)} {cur_emoji}**)."
-            
-            embed.description += f"**Résultat final : {status_text}**\n{payout_desc}"
-            embed.add_field(name="💰 Solde après jeu", value=f"**{self.cog._fmt_amount(final_balance)} {cur_emoji}**", inline=False)
-            
-        return embed
-
-# --- Blackjack View ---
-
-class BlackjackView(discord.ui.View):
-    def __init__(self, cog: Economy, game: BlackjackGame, ctx: commands.Context):
-        super().__init__(timeout=90) # Augmentation du timeout
-        self.cog = cog
-        self.game = game
-        self.ctx = ctx
-        self.cur_emoji = cog._currency_emoji(ctx)
-        
-        if game.ended:
-            for item in self.children:
-                item.disabled = True
-            self.stop() # Arrêter la vue si le jeu est déjà terminé
-
-    async def on_timeout(self) -> None:
-        if not self.game.ended:
-            self.game.end_game("Abandon")
-            try:
-                # Calcul du résultat final
-                embed = await self.game.get_embed(self.ctx, self.cur_emoji)
-                
-                # Désactiver les boutons et éditer le message
-                for item in self.children:
-                    item.disabled = True
-                await self.game.message.edit(embed=embed, view=self)
-                self.cog._blackjack_sessions.pop(self.game.player_id, None)
-            except Exception:
-                pass # Ignorer les erreurs si le message est déjà supprimé
-
-    async def update_message(self, interaction: discord.Interaction):
-        # Assurer que l'embed est asynchrone
-        embed = await self.game.get_embed(self.ctx, self.cur_emoji)
-        
-        if self.game.ended:
-            for item in self.children:
-                item.disabled = True
-            
-            # Suppression de la session de jeu du cache après la fin
-            self.cog._blackjack_sessions.pop(self.game.player_id, None)
-            
-            await interaction.response.edit_message(embed=embed, view=self)
-            self.stop()
-        else:
-            await interaction.response.edit_message(embed=embed, view=self)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.game.player_id:
-            await interaction.response.send_message("Seul le joueur ayant initié la partie peut interagir.", ephemeral=True)
-            return False
-        if self.game.ended:
-            await interaction.response.send_message("La partie est terminée.", ephemeral=True)
-            return False
-        return True
-
-    @discord.ui.button(label="Tirer (Hit)", style=discord.ButtonStyle.green)
-    async def hit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.game.hit()
-        await self.update_message(interaction)
-
-    @discord.ui.button(label="Rester (Stand)", style=discord.ButtonStyle.red)
-    async def stand_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Le stand doit être await car il contient la logique du croupier et la fin de jeu
-        await self.game.stand()
-        await self.update_message(interaction)
-        
-    @discord.ui.button(label="Abandonner (Surrender)", style=discord.ButtonStyle.blurple)
-    async def surrender_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.game.end_game("Abandon")
-        await self.update_message(interaction)
-
-
-# --- Les autres classes du fichier (Mines, CoinFlip, etc.) ---
-
-class MinesView(discord.ui.View):
-    def __init__(self, cog: Economy, ctx: commands.Context, session_owner_id: int):
-        super().__init__(timeout=120)
-        self.cog = cog
-        self.ctx = ctx
-        self.session_owner_id = session_owner_id
-        for i in range(25):
-            btn = discord.ui.Button(label="❓", style=discord.ButtonStyle.secondary, row=i // 5)
-            async def _cb(interaction: discord.Interaction, idx=i, b=btn):
-                if interaction.user.id != self.session_owner_id:
-                    return await interaction.response.send_message("Seul l’initiateur peut jouer.", ephemeral=True)
-                s = self.cog._mines_sessions.get(self.session_owner_id)
-                if not s or s.get("ended"):
-                    return await interaction.response.send_message("Partie terminée.")
-                if idx in s["revealed"]:
-                    return await interaction.response.send_message("Déjà révélé.")
-                s["revealed"].add(idx)
-                try:
-                    await interaction.response.defer()
-                except Exception:
-                    pass
-                if idx in s["mines_set"]:
-                    s["ended"] = True
-                    b.label = "💣"; b.disabled = True
-                    for item in list(self.children):
-                        try:
-                            item.disabled = True
-                        except Exception:
-                            pass
-                    async with self.cog.pool.acquire() as conn:
-                        async with conn.cursor() as cur:
-                            await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.session_owner_id,))
-                            bal_after = (await cur.fetchone())[0]
-                    cur_emoji = self.cog._currency_emoji(self.ctx)
-                    # Utilisation de _fmt_amount
-                    full_desc = (
-                        ":boom: __**Vous êtes tombé sur la mine !**__\n\n"
-                        f"Vous avez perdu {self.cog._fmt_amount(s['bet'])} {cur_emoji}\n\n"
-                        f"Votre solde actuel s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji}**"
-                    )
-                    emb = self.cog._bank_embed(self.ctx, title="Casino • Mines", description=full_desc, color=discord.Color.red())
-                    try:
-                        await interaction.message.edit(embed=emb, view=None)
-                    except Exception:
-                        pass
-                    cash_id = s.get("cash_message_id")
-                    try:
-                        if cash_id and interaction.channel:
-                            msg = await interaction.channel.fetch_message(cash_id)
-                            await msg.edit(view=None)
-                    except Exception:
-                        pass
-                    
-                    # Update Stats (Loss)
-                    await self.cog._update_stats(self.session_owner_id, game=True, win=False, wager=s['bet'])
-                    await self.cog._check_achievements(self.ctx, self.session_owner_id)
-                    return
-                total_rem = 25 - len(s["revealed"])
-                safe_rem = (25 - s["mines"]) - len(s["revealed"]) 
-                q = max(1e-6, safe_rem / max(1, total_rem))
-                s["mult"] *= (1.0 / q)
-                b.label = "💎"; b.disabled = True
-                cur_emoji = self.cog._currency_emoji(self.ctx)
-                potential = max(1, int(s["bet"] * s["mult"] * 0.95))
-                # Utilisation de _fmt_amount
-                desc = (
-                    f"Votre mise : {self.cog._fmt_amount(s['bet'])} {cur_emoji} • Nombre de mines : {s['mines']}\n"
-                    f"Cases révélées : {len(s['revealed'])} • Gain potentiel : {self.cog._fmt_amount(potential)} {cur_emoji}"
-                )
-                emb = self.cog._bank_embed(self.ctx, title="Casino • Mines", description=desc, color=discord.Color.blurple())
-                try:
-                    await interaction.message.edit(embed=emb, view=self)
-                except Exception:
-                    pass
-            btn.callback = _cb
-            self.add_item(btn)
-
-class MinesCashView(discord.ui.View):
-    def __init__(self, cog: Economy, ctx: commands.Context, session_owner_id: int):
-        super().__init__(timeout=120)
-        self.cog = cog
-        self.ctx = ctx
-        self.session_owner_id = session_owner_id
-
-    @discord.ui.button(label="Encaisser", style=discord.ButtonStyle.success)
-    async def cash(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.session_owner_id:
-            return await interaction.response.send_message("Seul l’initiateur peut encaisser.", ephemeral=True)
-        s = self.cog._mines_sessions.get(self.session_owner_id)
-        if not s or s.get("ended"):
-            return await interaction.response.send_message("Partie terminée.", ephemeral=True)
-        try:
-            await interaction.response.defer()
-        except Exception:
-            pass
-        payout = max(1, int(s["bet"] * s["mult"] * 0.95))
-        txid = None
-        await self.cog._connect(); await self.cog._ensure_user(self.session_owner_id)
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (payout, self.session_owner_id))
-                txid = self.cog._txn_id()
-                if self.cog.logs_enabled:
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", self.session_owner_id, self.session_owner_id, payout, "balance", "won"),
-                    )
-        self.cog._mines_sessions[self.session_owner_id]["ended"] = True
-        cur_emoji = self.cog._currency_emoji(self.ctx)
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.session_owner_id,))
-                bal_after = (await cur.fetchone())[0]
-        # Utilisation de _fmt_amount
-        full_desc = (
-            ":moneybag: __**Encaissement**__\n\n"
-            f"Vous gagnez {self.cog._fmt_amount(payout)} {cur_emoji}\n\n"
-            f"Votre solde actuel s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji}**"
-        )
-        emb = self.cog._bank_embed(self.ctx, title="Casino • Mines", description=full_desc, color=discord.Color.green(), txn_id=txid)
-        try:
-            await interaction.message.edit(embed=emb, view=None)
-        except Exception:
-            pass
-        try:
-            cash_id = self.cog._mines_sessions[self.session_owner_id].get("cash_message_id")
-            if cash_id and interaction.channel:
-                msg = await interaction.channel.fetch_message(cash_id)
-                await msg.edit(view=None)
-        except Exception:
-            pass
-
-        # Update Stats (Win)
-        await self.cog._update_stats(self.session_owner_id, game=True, win=True, wager=s['bet'], win_amount=payout)
-        await self.cog._check_achievements(self.ctx, self.session_owner_id)
-
-    @discord.ui.button(label="Annuler", style=discord.ButtonStyle.danger)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.session_owner_id:
-            return await interaction.response.send_message("Seul l’initiateur peut annuler.", ephemeral=True)
-        s = self.cog._mines_sessions.get(self.session_owner_id)
-        if not s or s.get("ended"):
-            return await interaction.response.send_message("Partie terminée.", ephemeral=True)
-        try:
-            await interaction.response.defer()
-        except Exception:
-            pass
-        self.cog._mines_sessions[self.session_owner_id]["ended"] = True
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.session_owner_id,))
-                bal_after = (await cur.fetchone())[0]
-        cur_emoji = self.cog._currency_emoji(self.ctx)
-        # Utilisation de _fmt_amount
-        full_desc = (
-            ":stop_sign: __**Partie annulée**__\n\n"
-            f"Votre solde actuel s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji}**"
-        )
-        emb = self.cog._bank_embed(self.ctx, title="Casino • Mines", description=full_desc, color=discord.Color.dark_gray())
-        try:
-            await interaction.message.edit(embed=emb, view=None)
-        except Exception:
-            pass
-        try:
-            cash_id = self.cog._mines_sessions[self.session_owner_id].get("cash_message_id")
-            if cash_id and interaction.channel:
-                msg = await interaction.channel.fetch_message(cash_id)
-                await msg.edit(view=None)
-        except Exception:
-            pass
-
-class CoinFlipView(discord.ui.View):
-    def __init__(self, cog: Economy, ctx: commands.Context):
-        super().__init__(timeout=60)
-        self.cog = cog
-        self.ctx = ctx
-        self.side: str | None = None
-        self.amount: int = 10
-
-    @discord.ui.button(label="Pile", style=discord.ButtonStyle.primary)
-    async def pile(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.side = "pile"
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Coin Flip", description=f"Choix: Pile • Mise: {self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="Face", style=discord.ButtonStyle.primary)
-    async def face(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.side = "face"
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Coin Flip", description=f"Choix: Face • Mise: {self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="10", style=discord.ButtonStyle.secondary)
-    async def bet10(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.amount = 10
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Coin Flip", description=f"Mise: {self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="50", style=discord.ButtonStyle.secondary)
-    async def bet50(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.amount = 50
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Coin Flip", description=f"Mise: {self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="100", style=discord.ButtonStyle.secondary)
-    async def bet100(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.amount = 100
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Coin Flip", description=f"Mise: {self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="Jouer", style=discord.ButtonStyle.success)
-    async def play(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.ctx.author.id:
-            return await interaction.response.send_message("Seul l’initiateur peut jouer.", ephemeral=True)
-        if not self.side:
-            return await interaction.response.send_message("Choisis Pile ou Face.")
-        ctx = self.ctx
-        await self.cog._ensure_user(ctx.author.id)
-        import random
-        txid = None
-        try:
-            await interaction.response.defer()
-        except Exception:
-            pass
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
-                bal = (await cur.fetchone())[0]
-                if bal < self.amount:
-                    return await interaction.response.send_message("Pas assez en poche.")
-                flip = random.choice(["pile", "face"])
-                if flip == self.side:
-                    await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (self.amount, ctx.author.id))
-                    txid = self.cog._txn_id()
-                    if self.cog.logs_enabled:
-                        await cur.execute(
-                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                            (txid, "win", ctx.author.id, ctx.author.id, self.amount, "balance", "won"),
-                        )
-                    desc = f"Coin flip: {flip}. Gagné +{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(ctx)}"
-                    color = discord.Color.green()
-                else:
-                    await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (self.amount, ctx.author.id))
-                    desc = f"Coin flip: {flip}. Perdu -{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(ctx)}"
-                    color = discord.Color.red()
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur2:
-                await cur2.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
-                bal_after = (await cur2.fetchone())[0]
-        cur_emoji = self.cog._currency_emoji(ctx)
-        # Utilisation de _fmt_amount
-        outcome_line = f":tada: __**Vous avez gagné {self.cog._fmt_amount(self.amount)} {cur_emoji} Fcoins !**__" if txid else f":x: **Vous avez perdu {self.cog._fmt_amount(self.amount)} {cur_emoji} Fcoins**"
-        extra_id = f"\n\nID: {txid}" if txid else ""
-        full_desc = f"Tirage: {flip}\n\n{outcome_line}\n\nVotre solde s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji} Fcoins**{extra_id}"
-        emb = self.cog._bank_embed(self.ctx, title="Casino • Pile ou Face", description=full_desc, color=color, txn_id=txid)
-        try:
-            await interaction.message.edit(embed=emb, view=None)
-        except Exception:
-            pass
-        
-        # Update Stats
-        win = (txid is not None)
-        await self.cog._update_stats(ctx.author.id, game=True, win=win, wager=self.amount, win_amount=(self.amount * 2) if win else 0)
-        await self.cog._check_achievements(self.ctx, ctx.author.id)
-
-class ScootRaceView(discord.ui.View):
-    def __init__(self, cog: Economy, ctx: commands.Context, target: discord.Member, amount: int):
-        super().__init__(timeout=60)
-        self.cog = cog
-        self.ctx = ctx
-        self.target = target
-        self.amount = amount
-
-    @discord.ui.button(label="Accepter", style=discord.ButtonStyle.success)
-    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.target.id:
-            return await interaction.response.send_message("Seule la personne ping peut répondre.", ephemeral=True)
-        await self.cog._ensure_user(self.ctx.author.id); await self.cog._ensure_user(self.target.id)
-        try:
-            await interaction.response.defer()
-        except Exception:
-            pass
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.ctx.author.id,))
-                a_bal = (await cur.fetchone())[0]
-                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.target.id,))
-                t_bal = (await cur.fetchone())[0]
-                if a_bal < self.amount or t_bal < self.amount:
-                    return await interaction.response.send_message("Solde insuffisant pour l’un des deux.")
-                await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (self.amount, self.ctx.author.id))
-                await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (self.amount, self.target.id))
-        import random
-        winner = self.ctx.author if random.random() < 0.5 else self.target
-        gain = self.amount * 2
-        txid = None
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (gain, winner.id))
-                txid = self.cog._txn_id()
-                if self.cog.logs_enabled:
-                    await cur.execute(
-                        "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                        (txid, "win", winner.id, winner.id, gain, "balance", "won"),
-                    )
-        cur_emoji = self.cog._currency_emoji(self.ctx)
-        # Utilisation de _fmt_amount
-        desc = f"Course Scoot • Mise: {self.cog._fmt_amount(self.amount)} {cur_emoji} chacun\nGagnant: {winner.mention} (+{self.cog._fmt_amount(gain)} {cur_emoji})"
-        emb = self.cog._bank_embed(self.ctx, title="Scoot", description=desc, color=discord.Color.green(), txn_id=txid)
-        try:
-            await interaction.message.edit(embed=emb, view=None)
-        except Exception:
-            pass
-
-        # Update Stats for both
-        loser = self.target if winner.id == self.ctx.author.id else self.ctx.author
-        
-        # Winner
-        await self.cog._update_stats(winner.id, game=True, win=True, wager=self.amount, win_amount=gain)
-        await self.cog._check_achievements(self.ctx, winner.id)
-        
-        # Loser
-        await self.cog._update_stats(loser.id, game=True, win=False, wager=self.amount)
-        await self.cog._check_achievements(self.ctx, loser.id)
-
-    @discord.ui.button(label="Refuser", style=discord.ButtonStyle.danger)
-    async def refuse(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.target.id:
-            return await interaction.response.send_message("Seule la personne ping peut répondre.", ephemeral=True)
-        try:
-            await interaction.response.defer()
-        except Exception:
-            pass
-        emb = self.cog._bank_embed(self.ctx, title="Scoot", description=f"Refusé par {self.target.mention}", color=discord.Color.red())
-        try:
-            await interaction.message.edit(embed=emb, view=None)
-        except Exception:
-            pass
-
-class SlotsView(discord.ui.View):
-    def __init__(self, cog: Economy, ctx: commands.Context):
-        super().__init__(timeout=60)
-        self.cog = cog
-        self.ctx = ctx
-        self.amount: int = 10
-
-    @discord.ui.button(label="10", style=discord.ButtonStyle.secondary)
-    async def bet10(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.amount = 10
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Machines à sous", description=f"🎰 Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="50", style=discord.ButtonStyle.secondary)
-    async def bet50(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.amount = 50
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Machines à sous", description=f"🎰 Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="100", style=discord.ButtonStyle.secondary)
-    async def bet100(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.amount = 100
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Machines à sous", description=f"🎰 Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="Spin", style=discord.ButtonStyle.success)
-    async def spin(self, interaction: discord.Interaction, button: discord.ui.Button):
-        ctx = self.ctx
-        await self.cog._ensure_user(ctx.author.id)
-        import random
-        reels = ["🍒", "🍋", "🔔", "⭐", "7️⃣"]
-        txid = None
-        try:
-            await interaction.response.defer()
-        except Exception:
-            pass
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
-                bal = (await cur.fetchone())[0]
-                if bal < self.amount:
-                    return await interaction.response.send_message("Pas assez en poche.")
-                r = [random.choice(reels) for _ in range(3)]
-                win = 0
-                if len(set(r)) == 1: win = self.amount * 5
-                elif len({r[0], r[1], r[2]}) == 2: win = self.amount * 2
-                if win > 0:
-                    await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win, ctx.author.id))
-                    txid = self.cog._txn_id()
-                    if self.cog.logs_enabled:
-                        await cur.execute(
-                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                            (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
-                        )
-                    desc = f"Slots {' | '.join(r)} — Gagné +{self.cog._fmt_amount(win)} {self.cog._currency_emoji(ctx)}"
-                    color = discord.Color.green()
-                else:
-                    await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (self.amount, ctx.author.id))
-                    desc = f"Slots {' | '.join(r)} — Perdu -{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(ctx)}"
-                    color = discord.Color.red()
-        cur_emoji = self.cog._currency_emoji(ctx)
-        if txid:
-            async with self.cog.pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
-                    bal_after = (await cur.fetchone())[0]
-            # Utilisation de _fmt_amount
-            outcome_line = f":tada: __**Vous avez gagné {self.cog._fmt_amount(win)} {cur_emoji} Fcoins !**__"
-            extra_id = f"\n\nID: {txid}" if txid else ""
-            full_desc = f"Résultats: {' | '.join(r)}\n\n{outcome_line}\n\nVotre solde s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji} Fcoins**{extra_id}"
-            emb = self.cog._bank_embed(self.ctx, title="Casino • Machines à sous", description=full_desc, color=color, txn_id=txid)
-        else:
-            # Utilisation de _fmt_amount
-            outcome_line = f":x: **Vous avez perdu {self.cog._fmt_amount(self.amount)} {cur_emoji} Fcoins**"
-            full_desc = f"Résultats: {' | '.join(r)}\n\n{outcome_line}"
-            emb = self.cog._bank_embed(self.ctx, title="Casino • Machines à sous", description=full_desc, color=color)
-        try:
-            await interaction.message.edit(embed=emb, view=None)
-        except Exception:
-            pass
-        
-        # Update Stats
-        w_amt = self.amount + win if win > 0 else 0
-        await self.cog._update_stats(ctx.author.id, game=True, win=(win > 0), wager=self.amount, win_amount=w_amt)
-        await self.cog._check_achievements(self.ctx, ctx.author.id)
-
-class DiceView(discord.ui.View):
-    def __init__(self, cog: Economy, ctx: commands.Context):
-        super().__init__(timeout=60)
-        self.cog = cog
-        self.ctx = ctx
-        self.amount: int = 10
-        self.bet_on: int | None = None
-        self.parity: str | None = None
-
-    @discord.ui.button(label="10", style=discord.ButtonStyle.secondary)
-    async def bet10(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.amount = 10
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="50", style=discord.ButtonStyle.secondary)
-    async def bet50(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.amount = 50
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="100", style=discord.ButtonStyle.secondary)
-    async def bet100(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.amount = 100
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Mise: **{self.cog._fmt_amount(self.amount)} {self.cog._currency_emoji(self.ctx)}**", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="Pair", style=discord.ButtonStyle.primary)
-    async def pair(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.parity = "pair"
-        self.bet_on = None
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Pari: **Pair** • Mise: **{self.cog._fmt_amount(self.amount)}**", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="Impair", style=discord.ButtonStyle.primary)
-    async def impair(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.parity = "impair"
-        self.bet_on = None
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Pari: **Impair** • Mise: **{self.cog._fmt_amount(self.amount)}**", color=discord.Color.blurple()))
-
-    @discord.ui.select(placeholder="Choisis un nombre", options=[discord.SelectOption(label=str(i), value=str(i)) for i in range(1,7)])
-    async def choose_number(self, interaction: discord.Interaction, select: discord.ui.Select):
-        self.bet_on = int(select.values[0])
-        self.parity = None
-        await interaction.response.edit_message(embed=self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=f":game_die: Pari: **{self.bet_on}** • Mise: **{self.cog._fmt_amount(self.amount)}**", color=discord.Color.blurple()))
-
-    @discord.ui.button(label="Jouer", style=discord.ButtonStyle.success)
-    async def play(self, interaction: discord.Interaction, button: discord.ui.Button):
-        ctx = self.ctx
-        await self.cog._ensure_user(ctx.author.id)
-        import random
-        txid = None
-        try:
-            await interaction.response.defer()
-        except Exception:
-            pass
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
-                bal = (await cur.fetchone())[0]
-                if bal < self.amount:
-                    return await interaction.response.send_message("Pas assez en poche.")
-                roll = random.randint(1, 6)
-                if self.bet_on is None:
-                    win = self.amount if (roll % 2 == 0 and self.parity == "pair") or (roll % 2 == 1 and self.parity == "impair") else -self.amount
-                else:
-                    win = self.amount * 5 if roll == self.bet_on else -self.amount
-                if win >= 0:
-                    await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (win, ctx.author.id))
-                    txid = self.cog._txn_id()
-                    if self.cog.logs_enabled:
-                        await cur.execute(
-                            "INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                            (txid, "win", ctx.author.id, ctx.author.id, win, "balance", "won"),
-                        )
-                    desc = f"Dé {roll} — Gagné +{self.cog._fmt_amount(win)} {self.cog._currency_emoji(ctx)}"
-                    color = discord.Color.green()
-                else:
-                    await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (-win, ctx.author.id))
-                    desc = f"Dé {roll} — Perdu -{self.cog._fmt_amount(abs(win))} {self.cog._currency_emoji(ctx)}"
-                    color = discord.Color.red()
-        if txid:
-            async with self.cog.pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute("SELECT balance FROM users WHERE user_id=%s", (ctx.author.id,))
-                    bal_after = (await cur.fetchone())[0]
-            cur_emoji = self.cog._currency_emoji(ctx)
-            # Utilisation de _fmt_amount
-            gain_line = f"**Vous avez gagné {self.cog._fmt_amount(win)} {cur_emoji} Fcoins**" if win > 0 else f"**Vous avez perdu {self.cog._fmt_amount(abs(win))} {cur_emoji} Fcoins**"
-            extra_id = f"\n\nID: {txid}" if txid else ""
-            full_desc = f"Le dé est tombé sur : {roll} :game_die:\n\n{gain_line}\n\nVotre solde s'estime à : **{self.cog._fmt_amount(bal_after)} {cur_emoji} Fcoins**{extra_id}"
-            emb = self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=full_desc, color=color, txn_id=txid)
-        else:
-            # Utilisation de _fmt_amount
-            full_desc = f"Le dé est tombé sur : {roll} :game_die:\n\n**Vous avez perdu {self.cog._fmt_amount(abs(win))} {cur_emoji} Fcoins**"
-            emb = self.cog._bank_embed(self.ctx, title="Casino • Jeu du dé", description=full_desc, color=color)
-        try:
-            await interaction.message.edit(embed=emb, view=None)
-        except Exception:
-            pass
-        
-        # Update Stats
-        w_amt = self.amount + win if win > 0 else 0
-        await self.cog._update_stats(ctx.author.id, game=True, win=(win > 0), wager=self.amount, win_amount=w_amt)
-        await self.cog._check_achievements(self.ctx, ctx.author.id)
-
-class LadderView(discord.ui.View):
-    def __init__(self, cog: Economy, ctx: commands.Context, base_amt: int):
-        super().__init__(timeout=90)
-        self.cog = cog
-        self.ctx = ctx
-        self.base_amt = base_amt
-        self.step = 0
-        self.mult = 1.0
-
-    @discord.ui.button(label="Continuer", style=discord.ButtonStyle.success)
-    async def cont(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.ctx.author.id:
-            return await interaction.response.send_message("Seul l’initiateur peut jouer.")
-        await self.cog._ensure_user(self.ctx.author.id)
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT balance FROM users WHERE user_id=%s", (self.ctx.author.id,))
-                bal = (await cur.fetchone())[0]
-        if bal < self.base_amt:
-            return await interaction.response.send_message("Pas assez en poche.")
-        try:
-            await interaction.response.defer()
-        except Exception:
-            pass
-        import random
-        busts = [0.20, 0.35, 0.50, 0.65, 0.80]
-        mults = [1.5, 2.0, 2.5, 3.0, 3.5]
-        p = busts[self.step] if self.step < len(busts) else 0.90
-        m_next = mults[self.step] if self.step < len(mults) else (self.mult + 0.5)
-        if random.random() < p:
-            async with self.cog.pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute("UPDATE users SET balance=balance-%s WHERE user_id=%s", (self.base_amt, self.ctx.author.id))
-            async with self.cog.pool.acquire() as conn:
-                async with conn.cursor() as cur2:
-                    await cur2.execute("SELECT balance FROM users WHERE user_id=%s", (self.ctx.author.id,))
-                    bal_after = (await cur2.fetchone())[0]
-            cur_emoji = self.cog._currency_emoji(self.ctx)
-            emb = self.cog._bank_embed(
-                self.ctx,
-                title="Casino • Échelle Push Your Luck",
-                description=f"**Mise : {self.cog._fmt_amount(self.base_amt)} {cur_emoji}**",
-                color=discord.Color.red(),
-            )
-            emb.add_field(name="État", value="Bust instantané", inline=True)
-            emb.add_field(name="Perte", value=f"-{self.cog._fmt_amount(self.base_amt)} {cur_emoji}", inline=True)
-            emb.add_field(name="Solde après jeu", value=f"**{self.cog._fmt_amount(bal_after)} {cur_emoji} Fcoins**", inline=False)
-            try:
-                for item in self.children:
-                    item.disabled = True
-                await interaction.message.edit(embed=emb, view=None)
-            except Exception:
-                pass
-            
-            # Update Stats (Bust)
-            await self.cog._update_stats(self.ctx.author.id, game=True, win=False, wager=self.base_amt)
-            await self.cog._check_achievements(self.ctx, self.ctx.author.id)
-            
-            self.stop()
-            return
-        self.mult = m_next
-        self.step += 1
-        cur_emoji = self.cog._currency_emoji(self.ctx)
-        potential = int(self.base_amt * self.mult * 0.95)
-        emb = self.cog._bank_embed(
-            self.ctx,
-            title="Casino • Échelle Push Your Luck",
-            description=f"**Mise : {self.cog._fmt_amount(self.base_amt)} {cur_emoji}**",
-            color=discord.Color.blurple(),
-        )
-        emb.add_field(name="Étape", value=str(self.step), inline=True)
-        emb.add_field(name="Multiplicateur", value=f"x{self.mult:.2f}", inline=True)
-        emb.add_field(name="Risque bust", value=f"{int(p*100)}%", inline=True)
-        emb.add_field(name="Gain potentiel", value=f"{self.cog._fmt_amount(potential)} {cur_emoji}", inline=False)
-        try:
-            await interaction.message.edit(embed=emb, view=self)
-        except Exception:
-            pass
-
-    @discord.ui.button(label="Encaisser", style=discord.ButtonStyle.primary)
-    async def cash(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.ctx.author.id:
-            return await interaction.response.send_message("Seul l’initiateur peut encaisser.", ephemeral=True)
-        await self.cog._ensure_user(self.ctx.author.id)
-        payout = max(1, int(self.base_amt * self.mult * 0.95))
-        txid = None
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (payout, self.ctx.author.id))
-                txid = self.cog._txn_id()
-                if self.cog.logs_enabled:
-                    await cur.execute("INSERT INTO transactions(id,type,requester_id,target_id,amount,account,status) VALUES(%s,%s,%s,%s,%s,%s,%s)", (txid, "win", self.ctx.author.id, self.ctx.author.id, payout, "balance", "won"))
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur2:
-                await cur2.execute("SELECT balance FROM users WHERE user_id=%s", (self.ctx.author.id,))
-                bal_after = (await cur2.fetchone())[0]
-        cur_emoji = self.cog._currency_emoji(self.ctx)
-        emb = self.cog._bank_embed(
-            self.ctx,
-            title="Casino • Échelle Push Your Luck",
-            description=f"**Mise : {self.cog._fmt_amount(self.base_amt)} {cur_emoji}**",
-            color=discord.Color.green(),
-            txn_id=txid,
-        )
-        emb.add_field(name="Étapes franchies", value=str(self.step), inline=True)
-        emb.add_field(name="Gain", value=f"+{self.cog._fmt_amount(payout)} {cur_emoji}", inline=True)
-        emb.add_field(name="Solde après jeu", value=f"**{self.cog._fmt_amount(bal_after)} {cur_emoji} Fcoins**", inline=False)
-        try:
-            for item in self.children:
-                item.disabled = True
-            try:
-                await interaction.response.defer()
-            except Exception:
-                pass
-            await interaction.message.edit(embed=emb, view=None)
-        except Exception:
-            pass
-            
-        # Update Stats (Win)
-        await self.cog._update_stats(self.ctx.author.id, game=True, win=True, wager=self.base_amt, win_amount=payout)
-        await self.cog._check_achievements(self.ctx, self.ctx.author.id)
-
-        self.stop()
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.ctx.author.id:
-            await interaction.response.send_message("Seul l’initiateur peut interagir.", ephemeral=True)
-            return False
-        return True
-
-    async def on_timeout(self) -> None:
-        try:
-            for item in self.children:
-                item.disabled = True
-            cur_emoji = self.cog._currency_emoji(self.ctx)
-            emb = self.cog._bank_embed(
-                self.ctx,
-                title="Casino • Échelle Push Your Luck",
-                description=f"**Mise : {self.cog._fmt_amount(self.base_amt)} {cur_emoji}**",
-                color=discord.Color.dark_gray(),
-            )
-            emb.add_field(name="État", value="Temps écoulé", inline=True)
-            target_msg = getattr(self, "message", None)
-            if target_msg:
-                await target_msg.edit(embed=emb, view=None)
-        except Exception:
-            pass
-        self.stop()
-
-class TaxTransactionView(discord.ui.View):
-    def __init__(self, *args, **kwargs):
-        super().__init__(timeout=1)
-
-class AdminTransactionView(discord.ui.View):
-    def __init__(self, cog: Economy, txid: str):
-        super().__init__(timeout=120)
-        self.cog = cog
-        self.txid = txid
-
-    @discord.ui.button(label="Accepter", style=discord.ButtonStyle.success)
-    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != 1443339902623154207:
-            return await interaction.response.send_message("Non autorisé.", ephemeral=True)
-        await self.cog._connect()
-        txid = self.txid
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT target_id, amount, account, status FROM transactions WHERE id=%s", (txid,))
-                row = await cur.fetchone()
-                if not row:
-                    return await interaction.response.send_message("Transaction introuvable.")
-                target_id, amount, col, status = row
-                if status != "pending":
-                    return await interaction.response.send_message("Déjà traitée.")
-                await cur.execute(f"UPDATE users SET {col}={col}+%s WHERE user_id=%s", (amount, target_id))
-                await cur.execute("UPDATE transactions SET status='accepted' WHERE id=%s", (txid,))
-        try:
-            base = interaction.message.embeds[0] if interaction.message and interaction.message.embeds else None
-            if base:
-                emb = discord.Embed.from_dict(base.to_dict())
-                emb.title = "Crédit admin (accepté)"
-                emb.color = discord.Color.green()
-            else:
-                emb = discord.Embed(title="Crédit admin (accepté)", color=discord.Color.green())
-            await interaction.response.edit_message(embed=emb, view=None)
-        except Exception:
-            await interaction.response.send_message("Accepté.")
-
-    @discord.ui.button(label="Refuser", style=discord.ButtonStyle.danger)
-    async def refuse_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != 1443339902623154207:
-            return await interaction.response.send_message("Non autorisé.", ephemeral=True)
-        await self.cog._connect()
-        txid = self.txid
-        async with self.cog.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT status FROM transactions WHERE id=%s", (txid,))
-                row = await cur.fetchone()
-                if not row:
-                    return await interaction.response.send_message("Transaction introuvable.")
-                status = row[0]
-                if status != "pending":
-                    return await interaction.response.send_message("Déjà traitée.")
-                await cur.execute("UPDATE transactions SET status='refused' WHERE id=%s", (txid,))
-        try:
-            base = interaction.message.embeds[0] if interaction.message and interaction.message.embeds else None
-            if base:
-                emb = discord.Embed.from_dict(base.to_dict())
-                emb.title = "Crédit admin (refusé)"
-                emb.color = discord.Color.red()
-            else:
-                emb = discord.Embed(title="Crédit admin (refusé)", color=discord.Color.red())
-            await interaction.response.edit_message(embed=emb, view=None)
-        except Exception:
-            await interaction.response.send_message("Refusée.")
-
-
     @commands.command(name="scoot", help="Defie en course scoot: +scoot @membre montant. Pari symétrique.") 
     @commands.dynamic_cooldown(lambda ctx: None if getattr(ctx.author, "guild_permissions", None) and ctx.author.guild_permissions.administrator else commands.Cooldown(1, 5), commands.BucketType.user)
     async def scoot(self, ctx: commands.Context, member: discord.Member, amount: str):
@@ -5508,9 +5507,9 @@ class AdminTransactionView(discord.ui.View):
         await ctx.send(embed=emb, view=view)
 
     @commands.command(name="work", aliases=["khedma", "w"], help="Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.", usage="work")
-    @commands.dynamic_cooldown(lambda ctx: commands.Cooldown(1, 300), commands.BucketType.user)
-    async def work(self, ctx: commands.Context):
-        print(f"[DEBUG] Executing work command for {ctx.author}")
+    # @commands.dynamic_cooldown(lambda ctx: commands.Cooldown(1, 300), commands.BucketType.user)
+    @commands.cooldown(1, 300, commands.BucketType.user)
+    async def work_command(self, ctx: commands.Context):
         await self._connect(); await self._ensure_user(ctx.author.id)
         
         base_amount = 100
@@ -5588,7 +5587,7 @@ class AdminTransactionView(discord.ui.View):
     @commands.command(name="khadma", aliases=["khadema", "khdma", "khedma2"])  
     @commands.dynamic_cooldown(lambda ctx: None if getattr(ctx.author, "guild_permissions", None) and ctx.author.guild_permissions.administrator else commands.Cooldown(1, 5*60), commands.BucketType.user)
     async def khadma(self, ctx: commands.Context):
-        await self.work(ctx)
+        await self.work_command(ctx)
 
     # système d’entreprise retiré
     async def entreprise(self, ctx: commands.Context, name: str):
@@ -5700,7 +5699,9 @@ class AdminTransactionView(discord.ui.View):
 
         
 async def setup(bot: commands.Bot):
-    await bot.add_cog(Economy(bot))
+    eco_cog = Economy(bot)
+    await bot.add_cog(eco_cog)
+    
     tree = bot.tree
 
     class _SlashCtx:

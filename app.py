@@ -176,7 +176,7 @@ def api_stats():
                 cur.execute("SELECT COUNT(*) as count FROM users")
                 users = cur.fetchone()["count"]
                 
-                cur.execute("SELECT SUM(balance + bank + bank_2 + bank_3) as total FROM users")
+                cur.execute("SELECT SUM(balance + bank) as total FROM users")
                 row = cur.fetchone()
                 money = int(row["total"]) if row and row["total"] else 0
                 
@@ -207,7 +207,7 @@ def api_leaderboard():
                 cur.execute("""
                     SELECT 
                         user_id, 
-                        (balance + bank + bank_2 + bank_3) as total,
+                        (balance + bank) as total,
                         'Citoyen' as role
                     FROM users 
                     ORDER BY total DESC 

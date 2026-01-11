@@ -12,7 +12,7 @@ class Help(commands.Cog):
         
         prefix = ctx.prefix if ctx.prefix else "+"
         
-        embed = discord.Embed(
+        embed = discord.Embed(                                            
             title="📚 Menu d'Aide - Bot de Fazer",
             description=f"Utilisez `{prefix}commande` pour effectuer une action.\nPour plus de détails sur une commande spécifique (ex: `{prefix}immo`), tapez simplement la commande.",
             color=0x2b2d31, # Dark theme friendly
@@ -24,10 +24,10 @@ class Help(commands.Cog):
 
         # --- 🏦 Banque & Paliers ---
         bank_cmds = [
-            f"`{prefix}depobank <1-3> <montant>` : Déposer (Plafond selon Palier)",
-            f"`{prefix}withbank <1-3> <montant>` : Retirer (aucune limite de retrait)",
+            f"`{prefix}depobank <montant>` : Déposer (Plafond selon Palier)",
+            f"`{prefix}withbank <montant>` : Retirer (aucune limite de retrait)",
             f"`{prefix}upgrade_bank` : Améliorer son compte bancaire (Augmenter plafond)",
-            f"`{prefix}card` : Voir sa carte et ses comptes",
+            f"`{prefix}card` : Voir sa carte et son compte",
             f"`{prefix}facture <@user> <montant> [motif]` : Envoyer une facture"
         ]
         embed.add_field(name="🏦 Banque & Paliers", value="\n".join(bank_cmds), inline=False)
@@ -157,6 +157,11 @@ class Help(commands.Cog):
         embed.description = "**Correctifs & Améliorations**"
         
         changes = [
+            "🏦 **Mise à Jour Bancaire** :",
+            "• **Système Simplifié** : Fusion des 3 banques en une seule banque centrale.",
+            "• `+dep <montant>` et `+with <montant>` : Plus besoin de préciser le numéro de banque.",
+            "• Le classement et les stats prennent maintenant en compte ce système unifié.",
+            "",
             "✅ **Correctifs Récents** :",
             "• `+work` : La commande est réparée et pleinement fonctionnelle.",
             "• `+idcard` : Correction du bug d'affichage (erreur joined_at).",
@@ -165,11 +170,6 @@ class Help(commands.Cog):
             "🐎 **Rappel PMU Street** :",
             "• `+course start [durée]` ouvre les paris, `+course run` lance.",
             "• `+bet <num> <mise>` pour miser. Animation live.",
-            "• `+horsebuy <nom>` pour acheter son cheval (50m).",
-            "",
-            "🛡️ **Admin** :",
-            "• `+dn <nom>` bannit par nom et envoie une image en DM.",
-            "• `+set_max_bet <montant>` règle la mise maximale des jeux.",
             "",
             "Le dev travaille fort pour le quartier 🔧"
         ]
