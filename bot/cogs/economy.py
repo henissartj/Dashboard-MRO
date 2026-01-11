@@ -195,6 +195,17 @@ DDL = [
         variance FLOAT NOT NULL,
         INDEX idx_owner (owner_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_stats (
+        user_id BIGINT PRIMARY KEY,
+        games_played INT DEFAULT 0,
+        games_won INT DEFAULT 0,
+        games_lost INT DEFAULT 0,
+        amount_wagered BIGINT DEFAULT 0,
+        amount_won BIGINT DEFAULT 0,
+        commands_used INT DEFAULT 0
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
 ]
 
@@ -285,7 +296,14 @@ ACHIEVEMENTS = {
     "magnat": {"name": "Magnat Immo", "desc": "Posséder 5 propriétés", "emoji": "🏘️"},
     "mariage": {"name": "Just Married", "desc": "Être marié(e)", "emoji": "💍"},
     "clan_boss": {"name": "Parrain", "desc": "Créer une organisation", "emoji": "🕶️"},
-    "investor": {"name": "Loup de Wall Street", "desc": "Posséder 1M en actions (fictive)", "emoji": "📈"}
+    "investor": {"name": "Loup de Wall Street", "desc": "Posséder 1M en actions (fictive)", "emoji": "📈"},
+    "addict": {"name": "Addict au Casino", "desc": "Jouer 50 fois au casino", "emoji": "🎰"},
+    "pauvre": {"name": "SDF", "desc": "Avoir moins de 10 balles", "emoji": "🏚️"},
+    "flambeur": {"name": "Flambeur", "desc": "Miser plus de 1M au total", "emoji": "🔥"},
+    "tueur_temps": {"name": "Chômeur Pro", "desc": "Utiliser 1000 commandes", "emoji": "💤"},
+    "mecene": {"name": "Mécène", "desc": "Donner de l'argent aux pauvres", "emoji": "🤝"},
+    "chatteux": {"name": "Cocu", "desc": "Gagner 60% de ses 50+ jeux", "emoji": "🍀"},
+    "poisseux": {"name": "Miskine", "desc": "Perdre 70% de ses 50+ jeux", "emoji": "😭"}
 }
 
 # --- CONSTANTS ---
@@ -388,63 +406,23 @@ def format_currency_abbr(n: int) -> str:
 
 
 class BalanceView(discord.ui.View):
-    def __init__(self, ctx, member, bal, bank1, bank2, bank3, fcoin, cur_emoji, cog):
+    def __init__(self, ctx, member, bal, bank1, fcoin, cur_emoji, cog):
         super().__init__(timeout=60)
         self.ctx = ctx
         self.member = member
         self.bal = bal
         self.bank1 = bank1
-        self.bank2 = bank2
-        self.bank3 = bank3
         self.fcoin = fcoin
         self.cur = cur_emoji
         self.cog = cog
         
-        # Determine available banks (if balance > 0)
-        # Note: User request: "faut pas que par défaut ça affiche 'banque 1, 2 et 3' alors que l'user les a pas forcément"
-        # Logic: Always show Main Bank (1). Show 2 & 3 only if they have funds OR if explicitly requested via button click?
-        # Better: Show buttons for all, but embed only shows active one.
-        
-        # Default view: Overview (Poche + Main Bank)
-        self.current_view = "main"
+        # Only one view: Main
         self.update_buttons()
 
     def update_buttons(self):
         self.clear_items()
-        
-        # Main Button
-        btn_main = discord.ui.Button(label="Principal", style=discord.ButtonStyle.primary if self.current_view == "main" else discord.ButtonStyle.secondary)
-        btn_main.callback = self.show_main
-        self.add_item(btn_main)
-        
-        # Bank 2 Button (Only if used or navigation)
-        # Showing button allows user to check even if 0
-        btn_b2 = discord.ui.Button(label="Banque 2", style=discord.ButtonStyle.primary if self.current_view == "bank2" else discord.ButtonStyle.secondary)
-        btn_b2.callback = self.show_bank2
-        self.add_item(btn_b2)
-
-        # Bank 3 Button
-        btn_b3 = discord.ui.Button(label="Banque 3", style=discord.ButtonStyle.primary if self.current_view == "bank3" else discord.ButtonStyle.secondary)
-        btn_b3.callback = self.show_bank3
-        self.add_item(btn_b3)
-
-    async def show_main(self, interaction: discord.Interaction):
-        if interaction.user != self.ctx.author: return await interaction.response.send_message("Tu n'es pas le propriétaire de ce compte.", ephemeral=True)
-        self.current_view = "main"
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.get_embed(), view=self)
-
-    async def show_bank2(self, interaction: discord.Interaction):
-        if interaction.user != self.ctx.author: return await interaction.response.send_message("Tu n'es pas le propriétaire de ce compte.", ephemeral=True)
-        self.current_view = "bank2"
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.get_embed(), view=self)
-
-    async def show_bank3(self, interaction: discord.Interaction):
-        if interaction.user != self.ctx.author: return await interaction.response.send_message("Tu n'es pas le propriétaire de ce compte.", ephemeral=True)
-        self.current_view = "bank3"
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+        # No navigation needed if only one bank.
+        pass
 
     def get_embed(self):
         emb = self.cog._bank_embed(
@@ -456,15 +434,7 @@ class BalanceView(discord.ui.View):
         
         # Poche is always visible
         emb.add_field(name="Poche", value=f"{self.cog._fmt_amount(self.bal)} {self.cur}", inline=True)
-        
-        if self.current_view == "main":
-            emb.add_field(name="Banque 1", value=f"{self.cog._fmt_amount(self.bank1)} {self.cur}", inline=True)
-            if self.bank2 > 0 or self.bank3 > 0:
-                 emb.set_footer(text="D'autres fonds disponibles en Banque 2/3")
-        elif self.current_view == "bank2":
-            emb.add_field(name="Banque 2", value=f"{self.cog._fmt_amount(self.bank2)} {self.cur}", inline=True)
-        elif self.current_view == "bank3":
-            emb.add_field(name="Banque 3", value=f"{self.cog._fmt_amount(self.bank3)} {self.cur}", inline=True)
+        emb.add_field(name="Banque", value=f"{self.cog._fmt_amount(self.bank1)} {self.cur}", inline=True)
             
         return emb
 
@@ -499,33 +469,29 @@ class InvoiceView(discord.ui.View):
                     return await interaction.followup.send(f"❌ Facture déjà {res[0]}.", ephemeral=True)
                 
                 # Check Balance
-                await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (interaction.user.id,))
+                await cur.execute("SELECT balance, bank FROM users WHERE user_id=%s", (interaction.user.id,))
                 res = await cur.fetchone()
                 if not res:
                     return await interaction.followup.send("❌ Erreur compte utilisateur.", ephemeral=True)
-                bal, b1, b2, b3 = res
-                total_wealth = bal + b1 + b2 + b3
+                bal, b1 = res
+                total_wealth = bal + b1
                 
                 if total_wealth < self.amount:
                     return await interaction.followup.send("❌ Fonds insuffisants.", ephemeral=True)
                 
                 # Deduct
                 remaining = self.amount
-                new_bal, new_b1, new_b2, new_b3 = bal, b1, b2, b3
+                new_bal, new_b1 = bal, b1
                 
                 if new_bal >= remaining: new_bal -= remaining; remaining = 0
                 else: remaining -= new_bal; new_bal = 0
                 if remaining > 0 and new_b1 >= remaining: new_b1 -= remaining; remaining = 0
                 elif remaining > 0: remaining -= new_b1; new_b1 = 0
-                if remaining > 0 and new_b2 >= remaining: new_b2 -= remaining; remaining = 0
-                elif remaining > 0: remaining -= new_b2; new_b2 = 0
-                if remaining > 0 and new_b3 >= remaining: new_b3 -= remaining; remaining = 0
-                elif remaining > 0: remaining -= new_b3; new_b3 = 0
                 
                 # Update Payer
                 await cur.execute(
-                    "UPDATE users SET balance=%s, bank=%s, bank_2=%s, bank_3=%s WHERE user_id=%s",
-                    (new_bal, new_b1, new_b2, new_b3, interaction.user.id)
+                    "UPDATE users SET balance=%s, bank=%s WHERE user_id=%s",
+                    (new_bal, new_b1, interaction.user.id)
                 )
                 
                 # Update Receiver
@@ -718,6 +684,7 @@ class Economy(commands.Cog):
         self._emoji_cache = None
         self._known_users = set()
         self.max_bet_limit = 1_000_000
+        self.reset_enabled = True
 
     async def _connect(self):
         if self.pool:
@@ -766,14 +733,25 @@ class Economy(commands.Cog):
                         pass
                     
                     # Load settings
-                    await cur.execute("SELECT setting_value FROM settings WHERE setting_key='logs_enabled'")
-                    row = await cur.fetchone()
-                    if row:
-                        self.logs_enabled = (row[0] == "1")
-                    else:
-                        # Insert default
+                    await cur.execute("SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('logs_enabled', 'max_bet_limit', 'reset_enabled')")
+                    rows = await cur.fetchall()
+                    settings = {row[0]: row[1] for row in rows}
+                    
+                    self.logs_enabled = (settings.get('logs_enabled', '1') == '1')
+                    self.reset_enabled = (settings.get('reset_enabled', '1') == '1')
+                    try:
+                        self.max_bet_limit = int(settings.get('max_bet_limit', '1000000'))
+                    except:
+                        self.max_bet_limit = 1_000_000
+                        
+                    # Insert defaults if missing
+                    if 'logs_enabled' not in settings:
                         await cur.execute("INSERT INTO settings(setting_key, setting_value) VALUES('logs_enabled', '1')")
-                        self.logs_enabled = True
+                    if 'reset_enabled' not in settings:
+                        await cur.execute("INSERT INTO settings(setting_key, setting_value) VALUES('reset_enabled', '1')")
+                    if 'max_bet_limit' not in settings:
+                        await cur.execute("INSERT INTO settings(setting_key, setting_value) VALUES('max_bet_limit', '1000000')")
+
         except Exception as e:
             print(f"[ERROR] DB Connection failed: {e}")
             self.pool = None
@@ -950,6 +928,8 @@ class Economy(commands.Cog):
 
     @tasks.loop(time=dt.time(hour=6, minute=0, tzinfo=ZoneInfo("Europe/Paris")))
     async def _daily_reset_task(self):
+        if not self.reset_enabled:
+            return
         try:
             await self._connect()
             async with self.pool.acquire() as conn:
@@ -965,13 +945,8 @@ class Economy(commands.Cog):
             await self._connect()
             async with self.pool.acquire() as conn:
                 async with conn.cursor() as cur:
-                    # Appliquer une taxe quotidienne de 2% sur les banques
-                    await cur.execute("""
-                        UPDATE users 
-                        SET bank = FLOOR(bank * 0.98),
-                            bank_2 = FLOOR(bank_2 * 0.98),
-                            bank_3 = FLOOR(bank_3 * 0.98)
-                    """)
+                    # Appliquer une taxe quotidienne de 2% sur la banque
+                    await cur.execute("UPDATE users SET bank = FLOOR(bank * 0.98)")
         except Exception:
             pass
 
@@ -1023,6 +998,115 @@ class Economy(commands.Cog):
             async with conn.cursor() as cur:
                 await cur.execute("INSERT IGNORE INTO users(user_id) VALUES(%s)", (uid,))
                 self._known_users.add(uid)
+
+    async def _update_stats(self, user_id: int, game=False, win=False, wager=0, win_amount=0, command=False):
+        """Update user statistics."""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Ensure stats row exists
+                await cur.execute("INSERT IGNORE INTO user_stats (user_id) VALUES (%s)", (user_id,))
+                
+                updates = []
+                params = []
+                
+                if game:
+                    updates.append("games_played = games_played + 1")
+                    if win:
+                        updates.append("games_won = games_won + 1")
+                        updates.append("amount_won = amount_won + %s")
+                        params.append(win_amount)
+                    else:
+                        updates.append("games_lost = games_lost + 1")
+                    
+                    if wager > 0:
+                        updates.append("amount_wagered = amount_wagered + %s")
+                        params.append(wager)
+                        
+                if command:
+                    updates.append("commands_used = commands_used + 1")
+                
+                if updates:
+                    sql = f"UPDATE user_stats SET {', '.join(updates)} WHERE user_id = %s"
+                    params.append(user_id)
+                    await cur.execute(sql, tuple(params))
+
+    async def _check_achievements(self, ctx, user_id: int):
+        """Check and award badges."""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Get current badges
+                await cur.execute("SELECT badge_id FROM user_achievements WHERE user_id=%s", (user_id,))
+                current_badges = {row[0] for row in await cur.fetchall()}
+                
+                # Get stats
+                await cur.execute("SELECT * FROM user_stats WHERE user_id=%s", (user_id,))
+                row = await cur.fetchone()
+                
+                stats = {
+                    "games_played": 0, "games_won": 0, "games_lost": 0,
+                    "amount_wagered": 0, "amount_won": 0, "commands_used": 0
+                }
+                if row:
+                    # Map columns based on table definition order: 
+                    # user_id, games_played, games_won, games_lost, amount_wagered, amount_won, commands_used
+                    stats["games_played"] = row[1]
+                    stats["games_won"] = row[2]
+                    stats["games_lost"] = row[3]
+                    stats["amount_wagered"] = row[4]
+                    stats["amount_won"] = row[5]
+                    stats["commands_used"] = row[6]
+                
+                # Get balance/bank
+                await cur.execute("SELECT balance, bank, bank_2, bank_3 FROM users WHERE user_id=%s", (user_id,))
+                user_row = await cur.fetchone()
+                if not user_row: return
+                total_money = sum(user_row)
+                pocket = user_row[0]
+                
+                new_badges = []
+                
+                # Check Millionnaire
+                if "millionnaire" not in current_badges and pocket >= 1_000_000:
+                    new_badges.append("millionnaire")
+                    
+                # Check Addict (50 games)
+                if "addict" not in current_badges and stats["games_played"] >= 50:
+                    new_badges.append("addict")
+                    
+                # Check Flambeur (1M wagered)
+                if "flambeur" not in current_badges and stats["amount_wagered"] >= 1_000_000:
+                    new_badges.append("flambeur")
+                    
+                # Check Tueur de temps (1000 cmds)
+                if "tueur_temps" not in current_badges and stats["commands_used"] >= 1000:
+                    new_badges.append("tueur_temps")
+                    
+                # Check SDF (Less than 10 total)
+                if "pauvre" not in current_badges and total_money < 10:
+                    new_badges.append("pauvre")
+                    
+                # Check Luck
+                if stats["games_played"] >= 50:
+                    win_rate = stats["games_won"] / stats["games_played"]
+                    if "chatteux" not in current_badges and win_rate >= 0.60:
+                        new_badges.append("chatteux")
+                    if "poisseux" not in current_badges and win_rate <= 0.30:
+                        new_badges.append("poisseux")
+                    
+                # Award badges
+                for badge_id in new_badges:
+                    await cur.execute("INSERT INTO user_achievements (user_id, badge_id) VALUES (%s, %s)", (user_id, badge_id))
+                    badge_info = ACHIEVEMENTS.get(badge_id)
+                    if badge_info:
+                        # Notification
+                        embed = discord.Embed(
+                            title=f"🏆 Nouveau Badge Débloqué !",
+                            description=f"**{badge_info['name']}**\n{badge_info['desc']}",
+                            color=discord.Color.gold()
+                        )
+                        embed.set_thumbnail(url=ctx.author.display_avatar.url)
+                        embed.add_field(name="Badge", value=badge_info['emoji'], inline=True)
+                        await ctx.send(f"Bravo {ctx.author.mention} !", embed=embed)
 
     async def _log_transaction(self, type: str, requester_id: int, target_id: int, amount: int, account: str, status: str, is_suspect: int = 0):
         if not self.logs_enabled:
@@ -1501,13 +1585,13 @@ class Economy(commands.Cog):
         await ctx.send(embed=emb, view=view)
 
     async def _perform_deposit(self, ctx: commands.Context, bank_id: int, amount_str: str):
-        if bank_id not in (1, 2, 3):
-            emb = self._bank_embed(ctx, title="Erreur", description="Banque invalide. Utilisez 1, 2 ou 3.", color=discord.Color.red())
+        if bank_id != 1:
+            emb = self._bank_embed(ctx, title="Erreur", description="Seule la Banque 1 est disponible.", color=discord.Color.red())
             return await ctx.send(embed=emb)
         
         await self._connect(); await self._ensure_user(ctx.author.id)
         
-        col_name = "bank" if bank_id == 1 else f"bank_{bank_id}"
+        col_name = "bank"
         
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -1515,7 +1599,7 @@ class Economy(commands.Cog):
                 res = await cur.fetchone()
                 bal, tier, current_bank = res
                 
-                amt = self._parse_bet_amount(amount_str, bal)
+                amt = self._parse_amount_all_nocap(amount_str, bal)
                 if amt <= 0:
                     emb = self._bank_embed(ctx, title="Erreur", description="Montant invalide.", color=discord.Color.red())
                     return await ctx.send(embed=emb)
@@ -1554,12 +1638,12 @@ class Economy(commands.Cog):
                 
                 # Log Suspect
                 if amt >= SUSPICIOUS_THRESHOLD:
-                    await self._log_transaction('deposit', ctx.author.id, ctx.author.id, amt, f'bank_{bank_id}', 'success', 1)
+                    await self._log_transaction('deposit', ctx.author.id, ctx.author.id, amt, 'bank', 'success', 1)
         
         cur_emoji = self._currency_emoji(ctx)
         emb = self._bank_embed(
             ctx,
-            title=f"Dépôt Banque {bank_id}",
+            title="Dépôt Banque",
             color=discord.Color.green(),
             fields=[
                 ("Montant", f"{self._fmt_amount(amt)} {cur_emoji}", True),
@@ -3614,6 +3698,9 @@ class Economy(commands.Cog):
             actor=ctx.author,
         )
         await ctx.send(embed=emb)
+        
+        await self._update_stats(ctx.author.id, command=True)
+        await self._check_achievements(ctx, ctx.author.id)
 
     @commands.command(name="weekly") 
     async def weekly(self, ctx: commands.Context):
@@ -3642,6 +3729,9 @@ class Economy(commands.Cog):
             actor=ctx.author,
         )
         await ctx.send(embed=emb)
+        
+        await self._update_stats(ctx.author.id, command=True)
+        await self._check_achievements(ctx, ctx.author.id)
 
     @commands.command(name="monthly", aliases=["m"]) 
     async def monthly(self, ctx: commands.Context):
@@ -3670,6 +3760,9 @@ class Economy(commands.Cog):
             actor=ctx.author,
         )
         await ctx.send(embed=emb)
+        
+        await self._update_stats(ctx.author.id, command=True)
+        await self._check_achievements(ctx, ctx.author.id)
 
     # Admin commands
     @commands.command(name="add_money", aliases=["addmoney", "$addmoney"]) 
@@ -3803,14 +3896,35 @@ class Economy(commands.Cog):
         )
         await ctx.send(embed=emb)
 
-    @commands.command(name="set_max_bet")
+    @commands.command(name="maxmise", aliases=["maxbet", "set_max_bet"])
     @is_owner_or_admin()
     async def set_max_bet(self, ctx: commands.Context, amount: str):
         val = self._parse_amount(amount)
         if val <= 0:
             return await ctx.send("❌ Montant invalide.")
         self.max_bet_limit = val
+        
+        # Save to DB
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("INSERT INTO settings(setting_key, setting_value) VALUES('max_bet_limit', %s) ON DUPLICATE KEY UPDATE setting_value=%s", (str(val), str(val)))
+
         await ctx.send(f"✅ Mise maximale fixée à {self._fmt_amount(val)}.")
+
+    @commands.command(name="togglereset", aliases=["reset_toggle"])
+    @is_owner_or_admin()
+    async def togglereset(self, ctx: commands.Context):
+        self.reset_enabled = not self.reset_enabled
+        
+        # Save to DB
+        await self._connect()
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("INSERT INTO settings(setting_key, setting_value) VALUES('reset_enabled', %s) ON DUPLICATE KEY UPDATE setting_value=%s", ('1' if self.reset_enabled else '0', '1' if self.reset_enabled else '0'))
+                
+        state = "ACTIVÉ" if self.reset_enabled else "DÉSACTIVÉ"
+        await ctx.send(f"✅ Reset de 6h {state}.")
 
     @commands.command(name="admin_fix_db")
     @is_owner_or_admin()
@@ -3849,7 +3963,7 @@ class Economy(commands.Cog):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 try:
-                    await cur.execute("UPDATE users SET balance=0, bank=0, bank_2=0, bank_3=0, bank_tier=1")
+                    await cur.execute("UPDATE users SET balance=0, bank=0, bank_tier=1")
                     await cur.execute("DELETE FROM inventory")
                     await cur.execute("DELETE FROM user_horses")
                     await cur.execute("DELETE FROM user_achievements")
@@ -4216,6 +4330,10 @@ class Economy(commands.Cog):
             desc = f"{result_txt}\n\n:x: **Vous avez perdu {self._fmt_amount(abs(win_amt))} {cur_emoji} Fcoins**\n\nVotre solde s'estime à : **{self._fmt_amount(bal_after)} {cur_emoji} Fcoins**"
         emb = self._bank_embed(ctx, title="Casino • Roulette", description=desc, color=color, txn_id=txid)
         await ctx.send(embed=emb)
+        
+        # Update Stats
+        await self._update_stats(ctx.author.id, game=True, win=(win_amt > 0), wager=amt, win_amount=(amt + win_amt) if win_amt > 0 else 0)
+        await self._check_achievements(ctx, ctx.author.id)
 
     @commands.command(name="mines", help="Jeu Mines 5×5 : +mines <montant> <mines 1–24>") 
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -4524,6 +4642,11 @@ class BlackjackGame:
             # Traiter le payout SEULEMENT à la fin de la partie
             final_payout_amount, final_balance, status_text = await self.process_payout(self.cog)
             
+            # Update stats and check achievements
+            win = self.result in ["Blackjack", "Gagné"]
+            await self.cog._update_stats(ctx.author.id, game=True, win=win, wager=self.bet, win_amount=final_payout_amount)
+            await self.cog._check_achievements(ctx, ctx.author.id)
+            
             # Calcul du gain net pour l'affichage
             if self.result == "Blackjack":
                 gain_net = int(self.bet * 1.5)
@@ -4677,6 +4800,10 @@ class MinesView(discord.ui.View):
                             await msg.edit(view=None)
                     except Exception:
                         pass
+                    
+                    # Update Stats (Loss)
+                    await self.cog._update_stats(self.session_owner_id, game=True, win=False, wager=s['bet'])
+                    await self.cog._check_achievements(self.ctx, self.session_owner_id)
                     return
                 total_rem = 25 - len(s["revealed"])
                 safe_rem = (25 - s["mines"]) - len(s["revealed"]) 
@@ -4752,6 +4879,10 @@ class MinesCashView(discord.ui.View):
                 await msg.edit(view=None)
         except Exception:
             pass
+
+        # Update Stats (Win)
+        await self.cog._update_stats(self.session_owner_id, game=True, win=True, wager=s['bet'], win_amount=payout)
+        await self.cog._check_achievements(self.ctx, self.session_owner_id)
 
     @discord.ui.button(label="Annuler", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -4870,6 +5001,11 @@ class CoinFlipView(discord.ui.View):
             await interaction.message.edit(embed=emb, view=None)
         except Exception:
             pass
+        
+        # Update Stats
+        win = (txid is not None)
+        await self.cog._update_stats(ctx.author.id, game=True, win=win, wager=self.amount, win_amount=(self.amount * 2) if win else 0)
+        await self.cog._check_achievements(self.ctx, ctx.author.id)
 
 class ScootRaceView(discord.ui.View):
     def __init__(self, cog: Economy, ctx: commands.Context, target: discord.Member, amount: int):
@@ -4919,6 +5055,17 @@ class ScootRaceView(discord.ui.View):
             await interaction.message.edit(embed=emb, view=None)
         except Exception:
             pass
+
+        # Update Stats for both
+        loser = self.target if winner.id == self.ctx.author.id else self.ctx.author
+        
+        # Winner
+        await self.cog._update_stats(winner.id, game=True, win=True, wager=self.amount, win_amount=gain)
+        await self.cog._check_achievements(self.ctx, winner.id)
+        
+        # Loser
+        await self.cog._update_stats(loser.id, game=True, win=False, wager=self.amount)
+        await self.cog._check_achievements(self.ctx, loser.id)
 
     @discord.ui.button(label="Refuser", style=discord.ButtonStyle.danger)
     async def refuse(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -5011,6 +5158,11 @@ class SlotsView(discord.ui.View):
             await interaction.message.edit(embed=emb, view=None)
         except Exception:
             pass
+        
+        # Update Stats
+        w_amt = self.amount + win if win > 0 else 0
+        await self.cog._update_stats(ctx.author.id, game=True, win=(win > 0), wager=self.amount, win_amount=w_amt)
+        await self.cog._check_achievements(self.ctx, ctx.author.id)
 
 class DiceView(discord.ui.View):
     def __init__(self, cog: Economy, ctx: commands.Context):
@@ -5108,6 +5260,11 @@ class DiceView(discord.ui.View):
             await interaction.message.edit(embed=emb, view=None)
         except Exception:
             pass
+        
+        # Update Stats
+        w_amt = self.amount + win if win > 0 else 0
+        await self.cog._update_stats(ctx.author.id, game=True, win=(win > 0), wager=self.amount, win_amount=w_amt)
+        await self.cog._check_achievements(self.ctx, ctx.author.id)
 
 class LadderView(discord.ui.View):
     def __init__(self, cog: Economy, ctx: commands.Context, base_amt: int):
@@ -5162,6 +5319,11 @@ class LadderView(discord.ui.View):
                 await interaction.message.edit(embed=emb, view=None)
             except Exception:
                 pass
+            
+            # Update Stats (Bust)
+            await self.cog._update_stats(self.ctx.author.id, game=True, win=False, wager=self.base_amt)
+            await self.cog._check_achievements(self.ctx, self.ctx.author.id)
+            
             self.stop()
             return
         self.mult = m_next
@@ -5221,6 +5383,11 @@ class LadderView(discord.ui.View):
             await interaction.message.edit(embed=emb, view=None)
         except Exception:
             pass
+            
+        # Update Stats (Win)
+        await self.cog._update_stats(self.ctx.author.id, game=True, win=True, wager=self.base_amt, win_amount=payout)
+        await self.cog._check_achievements(self.ctx, self.ctx.author.id)
+
         self.stop()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:

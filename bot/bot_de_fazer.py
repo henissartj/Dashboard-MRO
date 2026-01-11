@@ -597,6 +597,12 @@ async def interpol(ctx: commands.Context, member: discord.Member = None):
         offences = "ASSOCIATION DE MALFAITEURS, TRAFIC AGGRAVÉ, BLANCHIMENT, IMPORTATION D'ARMES, PROXÉNÉTISME AGGRAVÉ, FÉTICHISME DES PIEDS"
         place_of_birth = "Marseille, France"
 
+    # Custom User (1430659045026693120)
+    if member.id == 1430659045026693120:
+        gender = "Male"
+        place_of_birth = "Tel Aviv, Israël"
+        offences = "DÉBITAGE DISCORD"
+
     # Custom User (726868923819229195)
     if member.id == 726868923819229195:
         gender = "Male"

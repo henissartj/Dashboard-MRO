@@ -226,6 +226,9 @@ if (btnTop) {
 document.addEventListener("DOMContentLoaded", () => {
     initCommands();
     fetchStats();
+    // initLeaderboard(); // Removed
+    // Start polling every 10 seconds
+    setInterval(fetchStats, 10000);
 });
 
 // Modal Logic
@@ -251,4 +254,87 @@ if (btnServers && modal) {
             closeModal();
         }
     }
+}
+
+// --- Leaderboard Logic (Real) ---
+async function initLeaderboard() {
+    const el = document.getElementById("leaderboardList");
+    if (!el) return;
+
+    try {
+        const res = await fetch("/api/leaderboard");
+        if (!res.ok) throw new Error("API Error");
+        const data = await res.json();
+
+        if (data.length === 0) {
+            el.innerHTML = '<div class="lb-item">Aucune donnée disponible</div>';
+            return;
+        }
+
+        el.innerHTML = data.map((u, i) => {
+            const rank = i + 1;
+            return `
+            <div class="lb-item" data-rank="${rank}">
+                <div class="lb-rank">#${rank}</div>
+                <div class="lb-avatar"><img src="${u.avatar}" alt=""></div>
+                <div class="lb-info">
+                    <div class="lb-name">${u.name}</div>
+                    <div class="lb-detail">Citoyen</div>
+                </div>
+                <div class="lb-val">${formatMoney(u.balance)} $</div>
+            </div>
+            `;
+        }).join("");
+    } catch (e) {
+        console.error("Leaderboard fail:", e);
+        el.innerHTML = '<div class="lb-item">Erreur de chargement</div>';
+    }
+}
+
+function formatMoney(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + "Mds";
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+    return n.toLocaleString();
+}
+
+// --- Typing Effect ---
+function initTyping() {
+    const el = document.querySelector(".hero p");
+    if (!el) return;
+    const txt = el.innerText;
+    el.innerText = "";
+    
+    let i = 0;
+    function type() {
+        if (i < txt.length) {
+            el.innerText += txt.charAt(i);
+            i++;
+            setTimeout(type, 30);
+        }
+    }
+    type();
+}
+
+// FreeFazer Button Logic
+const freeFazerBtn = document.getElementById("freeFazerBtn");
+if (freeFazerBtn) {
+    freeFazerBtn.addEventListener("click", () => {
+        const text = "#FREEFAZER";
+        navigator.clipboard.writeText(text).then(() => {
+            showToast("#FREEFAZER copié !");
+            
+            // Temporary animation speedup on click
+            freeFazerBtn.style.animation = "none";
+            // Force reflow
+            void freeFazerBtn.offsetWidth;
+            freeFazerBtn.style.animation = "mega-pulse 0.5s ease-in-out";
+            
+            setTimeout(() => {
+                freeFazerBtn.style.animation = ""; // Reset to CSS default
+            }, 500);
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+            showToast("Erreur lors de la copie");
+        });
+    });
 }

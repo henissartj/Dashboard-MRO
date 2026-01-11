@@ -20,6 +20,7 @@ def home():
     return "Index not found", 404
 
 
+
 @app.route("/images/<path:filename>")
 def serve_images(filename):
     images_path = os.path.join(os.path.dirname(__file__), "site", "images")
@@ -103,6 +104,9 @@ def _extract_commands_from_file(file_path: str, repo_root: str) -> list[dict]:
             if usage and not isinstance(usage, str):
                 usage = None
             
+            if name == "work":
+                print(f"DEBUG: Found work command. kws: {kws}")
+            
             description = kws.get("help")
             if not isinstance(description, str) or not description.strip():
                 description = (
@@ -185,6 +189,47 @@ def api_stats():
         print(f"Stats Error: {e}")
         # Return dummy data on error to avoid breaking UI
         return jsonify({"users": 0, "money": 0, "servers": 2})
+
+
+@app.route("/api/leaderboard")
+def api_leaderboard():
+    try:
+        conn = pymysql.connect(
+            host=os.getenv("DB_HOST", "127.0.0.1"),
+            user=os.getenv("DB_USER", "botfazer"),
+            password=os.getenv("DB_PASSWORD", ""),
+            database=os.getenv("DB_NAME", "bot_fazer"),
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        with conn:
+            with conn.cursor() as cur:
+                # Top 5 Richest (balance + all banks)
+                cur.execute("""
+                    SELECT 
+                        user_id, 
+                        (balance + bank + bank_2 + bank_3) as total,
+                        'Citoyen' as role
+                    FROM users 
+                    ORDER BY total DESC 
+                    LIMIT 3
+                """)
+                rows = cur.fetchall()
+                
+                # Mock names for privacy/demo if real names aren't in DB (assuming user ID based)
+                # In a real scenario, you'd fetch Discord usernames via bot API
+                leaderboard = []
+                for row in rows:
+                    leaderboard.append({
+                        "id": str(row["user_id"]),
+                        "balance": row["total"],
+                        "name": f"User {str(row['user_id'])[-4:]}", # Masked name
+                        "avatar": "https://cdn.discordapp.com/embed/avatars/0.png"
+                    })
+                    
+        return jsonify(leaderboard)
+    except Exception as e:
+        print(f"Leaderboard Error: {e}")
+        return jsonify([])
 
 
 if __name__ == "__main__":

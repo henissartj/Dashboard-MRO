@@ -1,0 +1,1568 @@
+{
+  "commands": [
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1361,
+      "name": "8ball",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 3710,
+      "name": "accept",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "addmoney",
+        "$addmoney"
+      ],
+      "category": "Economy",
+      "description": "",
+      "line": 3677,
+      "name": "add_money",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Horserace",
+      "description": "",
+      "line": 359,
+      "name": "addhorse",
+      "source": "bot/cogs/horserace.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "(Admin) G\u00e9rer les assets : list/remove <user> [immo/luxe] [key]",
+      "line": 1794,
+      "name": "admin_assets",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "(Admin) Fix badge column length",
+      "line": 3340,
+      "name": "admin_fix_badge",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Force database migration for clans table",
+      "line": 3817,
+      "name": "admin_fix_db",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "biens",
+        "patrimoine"
+      ],
+      "category": "Economy",
+      "description": "Affiche le patrimoine immobilier et luxe",
+      "line": 2959,
+      "name": "assets",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "(Admin) Auditer les finances d'un joueur.",
+      "line": 1844,
+      "name": "audit",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 431,
+      "name": "avatar",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "(Admin) Award a badge to a user",
+      "line": 3506,
+      "name": "awardbadge",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "bal"
+      ],
+      "category": "Economy",
+      "description": "Affiche le solde de ton compte (poche + banques).",
+      "line": 1464,
+      "name": "balance",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Horserace",
+      "description": "",
+      "line": 147,
+      "name": "bet",
+      "source": "bot/cogs/horserace.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "bj"
+      ],
+      "category": "Economy",
+      "description": "Jeu de Blackjack contre le croupier.",
+      "line": 4256,
+      "name": "blackjack",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "info",
+        "bi",
+        "bot"
+      ],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "Affiche les infos du bot et les liens utiles.",
+      "line": 401,
+      "name": "botinfo",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "(Ill\u00e9gal) Tenter de braquer un joueur.",
+      "line": 1070,
+      "name": "braquage",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": "braquage <joueur>"
+    },
+    {
+      "aliases": [
+        "b"
+      ],
+      "category": "Economy",
+      "description": "",
+      "line": 2066,
+      "name": "buy",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": "buy <item> [qty]"
+    },
+    {
+      "aliases": [
+        "carte"
+      ],
+      "category": "Economy",
+      "description": "",
+      "line": 1332,
+      "name": "card",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": "card [joueur]"
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1376,
+      "name": "choose",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1307,
+      "name": "clear",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "cf",
+        "coinflip",
+        "flip"
+      ],
+      "category": "Economy",
+      "description": "Pile/Face avec mise. Gains taxables via ID.",
+      "line": 3876,
+      "name": "coin_flip",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "cooldown"
+      ],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "Active/D\u00e9sactive un cooldown global pour tout le bot.",
+      "line": 149,
+      "name": "cooldown_global",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "Emp\u00eache le spam de la m\u00eame commande.",
+      "line": 188,
+      "name": "cooldown_repeat",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "cd",
+        "delais"
+      ],
+      "category": "Economy",
+      "description": "Voir ses temps d'attente",
+      "line": 2599,
+      "name": "cooldowns",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "race"
+      ],
+      "category": "Horserace",
+      "description": "",
+      "line": 86,
+      "name": "course",
+      "source": "bot/cogs/horserace.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Cr\u00e9er une organisation (100k)",
+      "line": 2175,
+      "name": "create",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "ccard"
+      ],
+      "category": "Economy",
+      "description": "Personnaliser sa carte bancaire (Luxury)",
+      "line": 1381,
+      "name": "customize_card",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": "customize_card <category> <choice>"
+    },
+    {
+      "aliases": [
+        "d"
+      ],
+      "category": "Economy",
+      "description": "R\u00e9cup\u00e8re ta r\u00e9compense quotidienne (24h).",
+      "line": 3572,
+      "name": "daily",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": "daily"
+    },
+    {
+      "aliases": [
+        "db"
+      ],
+      "category": "Economy",
+      "description": "D\u00e9poser de l'argent dans une banque sp\u00e9cifique (ex: +db 1 100k ou +db all)",
+      "line": 1573,
+      "name": "depobank",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "dep"
+      ],
+      "category": "Economy",
+      "description": "D\u00e9poser de l'argent (intelligent). Usage: +dep <montant> ou +dep <banque> <montant>",
+      "line": 1606,
+      "name": "deposit",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "D\u00e9poser de l'argent dans le coffre de l'organisation",
+      "line": 2295,
+      "name": "deposit",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "de",
+        "dc"
+      ],
+      "category": "Economy",
+      "description": "Pari pair/impair ou chiffre. Maison avantage l\u00e9g\u00e8re.",
+      "line": 4067,
+      "name": "dice",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "Affiche le Dipl\u00f4me de la Rue",
+      "line": 995,
+      "name": "diplome",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Divorcer et partager le compte commun",
+      "line": 2145,
+      "name": "divorce",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "Ban par nom: +dn <nom>",
+      "line": 466,
+      "name": "dn",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Statistiques \u00e9conomiques globales du serveur.",
+      "line": 1901,
+      "name": "ecostats",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "invoice",
+        "bill"
+      ],
+      "category": "Economy",
+      "description": "Envoyer une facture \u00e0 un joueur.",
+      "line": 1744,
+      "name": "facture",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Affiche le cours du Fcoin",
+      "line": 2007,
+      "name": "fcoin",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1431,
+      "name": "gift",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "donner",
+        "give"
+      ],
+      "category": "Economy",
+      "description": "Donner un objet de son inventaire \u00e0 un autre joueur",
+      "line": 2570,
+      "name": "giveitem",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "(Ill\u00e9gal) Faire un Go-Fast (Risqu\u00e9).",
+      "line": 1123,
+      "name": "gofast",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": "gofast"
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1288,
+      "name": "help",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "aide",
+        "h"
+      ],
+      "category": "Help",
+      "description": "Affiche le menu d'aide cat\u00e9goris\u00e9.",
+      "line": 10,
+      "name": "help",
+      "source": "bot/cogs/help.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "buyhorse",
+        "cheval",
+        "chevalbuy"
+      ],
+      "category": "Horserace",
+      "description": "",
+      "line": 326,
+      "name": "horsebuy",
+      "source": "bot/cogs/horserace.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "renamehorse",
+        "chevalrename"
+      ],
+      "category": "Horserace",
+      "description": "",
+      "line": 406,
+      "name": "horserename",
+      "source": "bot/cogs/horserace.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "sellhorse"
+      ],
+      "category": "Horserace",
+      "description": "",
+      "line": 431,
+      "name": "horsesell",
+      "source": "bot/cogs/horserace.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "Affiche la Carte d'Identit\u00e9 du Quartier",
+      "line": 941,
+      "name": "idcard",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "realestate"
+      ],
+      "category": "Economy",
+      "description": "Syst\u00e8me immobilier: buy, sell, list, collect",
+      "line": 2665,
+      "name": "immo",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Infos de l'organisation",
+      "line": 2251,
+      "name": "info",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "\ud83d\udcb0 Percevoir vos int\u00e9r\u00eats d'immeubles (pour les propri\u00e9taires ayant atteint le pallier max)",
+      "line": 3352,
+      "name": "interest",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 515,
+      "name": "interpol",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "inv"
+      ],
+      "category": "Economy",
+      "description": "Affiche ton inventaire d'objets.",
+      "line": 3519,
+      "name": "inventory",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": "inventory [joueur]"
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1316,
+      "name": "invite",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Inviter un membre dans l'organisation",
+      "line": 2381,
+      "name": "invite",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Rejoindre une organisation (sur invitation)",
+      "line": 2409,
+      "name": "join",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "khadema",
+        "khdma",
+        "khedma2"
+      ],
+      "category": "Economy",
+      "description": "",
+      "line": 5423,
+      "name": "khadma",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "(Chef) Exclure un membre",
+      "line": 2457,
+      "name": "kick",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "ld"
+      ],
+      "category": "Economy",
+      "description": "\u00c9chelle Push Your Luck: +ladder montant",
+      "line": 3937,
+      "name": "ladder",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "lb"
+      ],
+      "category": "Economy",
+      "description": "",
+      "line": 1976,
+      "name": "leaderboard",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Quitter l'organisation actuelle",
+      "line": 2437,
+      "name": "leave",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1385,
+      "name": "love",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "shopluxe",
+        "luxe"
+      ],
+      "category": "Economy",
+      "description": "Boutique de luxe et flex",
+      "line": 2834,
+      "name": "luxury",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Help",
+      "description": "",
+      "line": 155,
+      "name": "maj",
+      "source": "bot/cogs/help.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "shop",
+        "magasin"
+      ],
+      "category": "Economy",
+      "description": "Place de march\u00e9 unifi\u00e9e (Immo, Luxe, Objets)",
+      "line": 3055,
+      "name": "market",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Demander quelqu'un en mariage",
+      "line": 2110,
+      "name": "marry",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Voir les membres de l'organisation",
+      "line": 2483,
+      "name": "members",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Jeu Mines 5\u00d75 : +mines <montant> <mines 1\u201324>",
+      "line": 4222,
+      "name": "mines",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "m"
+      ],
+      "category": "Economy",
+      "description": "",
+      "line": 3647,
+      "name": "monthly",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1478,
+      "name": "on",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "organisation",
+        "clan"
+      ],
+      "category": "Economy",
+      "description": "Syst\u00e8me d'Organisations (Gangs)",
+      "line": 2170,
+      "name": "org",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "G\u00e9n\u00e8re un ticket de pari sportif fun",
+      "line": 1080,
+      "name": "parions",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "arosage"
+      ],
+      "category": "Economy",
+      "description": "(Admin) Donner de l'argent \u00e0 tout le monde dans le salon vocal",
+      "line": 2631,
+      "name": "payall",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "payinvoice",
+        "pf"
+      ],
+      "category": "Economy",
+      "description": "(Obsol\u00e8te) Payer une facture (Utilisez les boutons).",
+      "line": 1788,
+      "name": "payfacture",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": "payfacture <id>"
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "Affiche un avis de recherche 'Perdu de vue'",
+      "line": 915,
+      "name": "perdu",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 417,
+      "name": "ping",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Vos parts par entreprise",
+      "line": 5516,
+      "name": "portefeuille",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "profil",
+        "p"
+      ],
+      "category": "Economy",
+      "description": "Afficher le profil complet (Stats, Assets, Badges, Social)",
+      "line": 3140,
+      "name": "profile",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 3731,
+      "name": "refuse",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1325,
+      "name": "reload",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "remoney"
+      ],
+      "category": "Economy",
+      "description": "",
+      "line": 3780,
+      "name": "remove_money",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 3843,
+      "name": "reset_all",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 3865,
+      "name": "reset_user",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Bande de Risque 1\u2013100: +risk montant L-H (ex: +risk 300k 15-35)",
+      "line": 6291,
+      "name": "risk",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1422,
+      "name": "roll",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "rl"
+      ],
+      "category": "Economy",
+      "description": "Roulette europ\u00e9enne: +roulette <mise> <pari>. Ex: +roulette 1m rouge | pair | 17 | 1-18 | 19-36 | 1st | 2nd | 3rd",
+      "line": 4132,
+      "name": "roulette",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1399,
+      "name": "rps",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Horserace",
+      "description": "",
+      "line": 193,
+      "name": "run",
+      "source": "bot/cogs/horserace.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1300,
+      "name": "say",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1338,
+      "name": "scoot",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Defie en course scoot: +scoot @membre montant. Pari sym\u00e9trique.",
+      "line": 5321,
+      "name": "scoot",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "se"
+      ],
+      "category": "Economy",
+      "description": "",
+      "line": 2534,
+      "name": "sell",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "pay",
+        "sd"
+      ],
+      "category": "Economy",
+      "description": "Envoie de l'argent \u00e0 un autre membre.",
+      "line": 1944,
+      "name": "send",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1229,
+      "name": "serverinfo",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Personnaliser l'Orga: desc, badge, color",
+      "line": 2201,
+      "name": "set",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 3808,
+      "name": "set_max_bet",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Simuler les revenus (ex: +simulate immo)",
+      "line": 2514,
+      "name": "simulate",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "sl"
+      ],
+      "category": "Economy",
+      "description": "Machines \u00e0 sous avec mise. Payouts variables.",
+      "line": 4004,
+      "name": "slots",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 6279,
+      "name": "snipe",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Horserace",
+      "description": "",
+      "line": 94,
+      "name": "start",
+      "source": "bot/cogs/horserace.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 3748,
+      "name": "tax",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "(Admin) Taxer les joueurs tr\u00e8s riches (5% par d\u00e9faut)",
+      "line": 3410,
+      "name": "taxrich",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1444,
+      "name": "testvaillant",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Forcer un tick du march\u00e9",
+      "line": 5527,
+      "name": "tick_bourse",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "Active ou d\u00e9sactive les logs d'argent dans la base de donn\u00e9es (on/off).",
+      "line": 1044,
+      "name": "toggle_logs",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "tx"
+      ],
+      "category": "Economy",
+      "description": "",
+      "line": 3531,
+      "name": "transactions",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1458,
+      "name": "tweet",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "(Chef) Am\u00e9liorer l'organisation (Bonus XP/Argent)",
+      "line": 2351,
+      "name": "upgrade",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "upbank"
+      ],
+      "category": "Economy",
+      "description": "Am\u00e9liorer son compte bancaire pour augmenter le plafond.",
+      "line": 1624,
+      "name": "upgrade_bank",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1215,
+      "name": "userinfo",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1484,
+      "name": "vaillant",
+      "source": "bot/bot_de_fazer.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "steal"
+      ],
+      "category": "Economy",
+      "description": "",
+      "line": 3962,
+      "name": "vol",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 3619,
+      "name": "weekly",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "wb"
+      ],
+      "category": "Economy",
+      "description": "",
+      "line": 1663,
+      "name": "withbank",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "with"
+      ],
+      "category": "Economy",
+      "description": "Retire de l'argent de ta banque vers ta poche.",
+      "line": 1713,
+      "name": "withdraw",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "(Chef) Retirer de l'argent du coffre",
+      "line": 2322,
+      "name": "withdraw",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": null
+    },
+    {
+      "aliases": [
+        "khedma",
+        "w"
+      ],
+      "category": "Economy",
+      "description": "Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.",
+      "line": 5345,
+      "name": "work",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": "work"
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5952,
+      "name": "add_money",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5545,
+      "name": "balance",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5818,
+      "name": "blackjack",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5657,
+      "name": "buy",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 6055,
+      "name": "coinflip",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5757,
+      "name": "daily",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5586,
+      "name": "deposit",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 6163,
+      "name": "dice",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 1293,
+      "name": "help",
+      "source": "bot/bot_de_fazer.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5715,
+      "name": "inventory",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5996,
+      "name": "khedma",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 6402,
+      "name": "ladder",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5727,
+      "name": "leaderboard",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5859,
+      "name": "mines",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5797,
+      "name": "monthly",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "G\u00e9n\u00e9ral",
+      "description": "",
+      "line": 425,
+      "name": "ping",
+      "source": "bot/bot_de_fazer.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5971,
+      "name": "remove_money",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5985,
+      "name": "reset_user",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 6344,
+      "name": "risk",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 6430,
+      "name": "roulette",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 6026,
+      "name": "scoot",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5690,
+      "name": "sell",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5559,
+      "name": "send",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5632,
+      "name": "shop",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 6109,
+      "name": "slots",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 6238,
+      "name": "tax",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5910,
+      "name": "vol",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5777,
+      "name": "weekly",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    },
+    {
+      "aliases": [],
+      "category": "Economy",
+      "description": "",
+      "line": 5609,
+      "name": "withdraw",
+      "source": "bot/cogs/economy.py",
+      "type": "slash",
+      "usage": null
+    }
+  ],
+  "count": 145
+}
