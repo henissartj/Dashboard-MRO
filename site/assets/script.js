@@ -1,3 +1,16 @@
+// Loader logic
+window.addEventListener('load', () => {
+  const loader = document.getElementById('loader-overlay');
+  if (loader) {
+    setTimeout(() => {
+      loader.classList.add('hidden');
+      setTimeout(() => {
+        loader.remove();
+      }, 500);
+    }, 800);
+  }
+});
+
 const state = {
   filter: "all",
   query: "",
@@ -315,26 +328,4 @@ function initTyping() {
     type();
 }
 
-// FreeFazer Button Logic
-const freeFazerBtn = document.getElementById("freeFazerBtn");
-if (freeFazerBtn) {
-    freeFazerBtn.addEventListener("click", () => {
-        const text = "#FREEFAZER";
-        navigator.clipboard.writeText(text).then(() => {
-            showToast("#FREEFAZER copié !");
-            
-            // Temporary animation speedup on click
-            freeFazerBtn.style.animation = "none";
-            // Force reflow
-            void freeFazerBtn.offsetWidth;
-            freeFazerBtn.style.animation = "mega-pulse 0.5s ease-in-out";
-            
-            setTimeout(() => {
-                freeFazerBtn.style.animation = ""; // Reset to CSS default
-            }, 500);
-        }).catch(err => {
-            console.error('Failed to copy: ', err);
-            showToast("Erreur lors de la copie");
-        });
-    });
-}
+ 

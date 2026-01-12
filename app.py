@@ -20,6 +20,16 @@ def home():
     return "Index not found", 404
 
 
+@app.route("/me")
+def me():
+    # Serve me.html for Fazer's personal landing page
+    me_path = os.path.join(os.path.dirname(__file__), "site", "me.html")
+    if os.path.exists(me_path):
+        with open(me_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "Page not found", 404
+
+
 
 @app.route("/images/<path:filename>")
 def serve_images(filename):
