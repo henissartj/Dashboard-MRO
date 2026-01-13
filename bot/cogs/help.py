@@ -61,6 +61,7 @@ class Help(commands.Cog):
 
         # --- 🎰 Casino & Jeux ---
         game_cmds = [
+            f"`{prefix}casinostats [user]` : Voir ses stats (Gains/Pertes/ROI)",
             f"`{prefix}course start [durée]` : Ouvrir les paris (Admin)",
             f"`{prefix}bet <numéro> <mise>` : Parier sur un cheval",
             f"`{prefix}course run` : Lancer la course (Admin)",
@@ -113,6 +114,7 @@ class Help(commands.Cog):
         # --- 🏆 Social & Organisation ---
         social_cmds = [
             f"`{prefix}profile` : Voir votre profil complet (Badges, Orga, Mariage)",
+            f"`{prefix}setbio <texte>` : Définir votre bio de profil",
             f"`{prefix}marry <@user>` : Demander en mariage",
             f"`{prefix}org` : Menu Organisation (Créer, Rejoindre, Info)",
             f"`{prefix}org set <desc/badge/color> <valeur>` : Personnaliser son Orga",
@@ -162,7 +164,10 @@ class Help(commands.Cog):
             "• `+dep <montant>` et `+with <montant>` : Plus besoin de préciser le numéro de banque.",
             "• Le classement et les stats prennent maintenant en compte ce système unifié.",
             "",
-            "✅ **Correctifs Récents** :",
+            "✅ **Correctifs & Nouveautés** :",
+            "• `+profile` : Affiche désormais un profil complet en Embed (plus rapide).",
+            "• `+setbio` : Personnalisez votre bio sur votre profil.",
+            "• `+casinostats` : Suivez vos gains, pertes et ROI au casino.",
             "• `+work` : La commande est réparée et pleinement fonctionnelle.",
             "• `+idcard` : Correction du bug d'affichage (erreur joined_at).",
             "• `+facture` : Le paiement met désormais correctement à jour l'embed (Statut PAYÉE).",

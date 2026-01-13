@@ -1,7 +1,9 @@
 nohup: ignoring input
 ✅ Discord OK: 200
-[2026-01-10 23:34:11] [INFO    ] discord.client: logging in using static token
-[2026-01-10 23:34:12] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 5d02678328d20888352ddc235763c6da).
+[2026-01-13 22:54:42] [INFO    ] discord.client: logging in using static token
+[2026-01-13 22:54:43] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 74313918871c84cda792144b919e0f9b).
+[DEBUG] Message: '+tts torah rien' from .aurianavvlt (len=15)
+[DEBUG] Processing commands for message: +tts torah rien
 Bot de Fazer#4289 est connecté.
 [DEBUG] Connecting to DB 127.0.0.1 as botfazer...
 [DEBUG] DB Connected successfully.
@@ -45,8 +47,21 @@ Cog économie chargé.
 Cog help chargé.
 Cog interest chargé.
 Cog horserace chargé.
-Commands chargées: 93
-Commande 'work' absente.
+Cog fun chargé.
+Commands chargées: 102
+Commande 'work' présente.
 /opt/mro_dash/.venv/lib/python3.12/site-packages/aiomysql/cursors.py:239: Warning: Data truncated for column 'price' at row 1
   await self._query(query)
 Slash commands synchronisées.
+[DEBUG] Message: '++tts j'aime trop sa culotte quand je lui arrache avec les dents' from fazer_37057 (len=64)
+[DEBUG] Processing commands for message: ++tts j'aime trop sa culotte quand je lui arrache avec les dents
+[DEBUG] Message: '+profile' from fazer_37057 (len=8)
+[DEBUG] Processing commands for message: +profile
+/opt/mro_dash/.venv/lib/python3.12/site-packages/aiomysql/cursors.py:239: Warning: Duplicate entry '1443339902623154207' for key 'users.PRIMARY'
+  await self._query(query)
+[DEBUG] Message: '+setbio aa' from fazer_37057 (len=10)
+[DEBUG] Processing commands for message: +setbio aa
+[DEBUG] Message: '+setbio Mochi mochi' from fazer_37057 (len=19)
+[DEBUG] Processing commands for message: +setbio Mochi mochi
+[DEBUG] Message: '+profile' from fazer_37057 (len=8)
+[DEBUG] Processing commands for message: +profile

@@ -1569,7 +1569,32 @@
       "source": "bot/cogs/economy.py",
       "type": "slash",
       "usage": null
+    },
+    {
+      "aliases": [
+        "cstats",
+        "stats"
+      ],
+      "category": "Economy",
+      "description": "Voir ses statistiques de jeu (Gains, Pertes, ROI)",
+      "line": 4338,
+      "name": "casinostats",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": "casinostats [user]"
+    },
+    {
+      "aliases": [
+        "bio"
+      ],
+      "category": "Economy",
+      "description": "Définir sa bio de profil (Max 255 chars)",
+      "line": 4290,
+      "name": "setbio",
+      "source": "bot/cogs/economy.py",
+      "type": "prefix",
+      "usage": "setbio <texte>"
     }
   ],
-  "count": 145
+  "count": 147
 }

@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mises à jour du Bot</title>
+    <link rel="icon" type="image/png" href="/images/favicon.png">
+    <meta name="description" content="Notes de mise à jour et nouveautés du bot Fazer City.">
+    <meta name="theme-color" content="#facc15">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/style.css">
+    <style>
+      .timeline {
+        position: relative;
+        max-width: 800px;
+        margin: 40px auto;
+        padding-left: 30px;
+      }
+      .timeline::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .patch-note {
+        position: relative;
+        margin-bottom: 60px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        padding: 24px;
+        transition: transform 0.3s ease;
+      }
+      .patch-note:hover {
+        transform: translateY(-4px);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .patch-dot {
+        position: absolute;
+        left: -41px;
+        top: 24px;
+        width: 24px;
+        height: 24px;
+        background: #05070c;
+        border: 2px solid #facc15;
+        border-radius: 50%;
+        box-shadow: 0 0 10px rgba(250, 204, 21, 0.3);
+      }
+      .patch-date {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.5);
+        margin-bottom: 8px;
+        font-family: monospace;
+      }
+      .patch-version {
+        display: inline-block;
+        background: rgba(250, 204, 21, 0.1);
+        color: #facc15;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+      .patch-title {
+        font-size: 24px;
+        font-weight: 800;
+        margin-bottom: 16px;
+        color: #fff;
+      }
+      .patch-content ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .patch-content li {
+        margin-bottom: 12px;
+        padding-left: 24px;
+        position: relative;
+        color: #d1d5db;
+        line-height: 1.6;
+      }
+      .patch-content li::before {
+        content: '•';
+        position: absolute;
+        left: 0;
+        color: #facc15;
+        font-weight: bold;
+      }
+      .badge-new {
+        background: #10b981;
+        color: #000;
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 700;
+        margin-left: 8px;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Same Loader as Index -->
+    <div id="loader-overlay">
+      <div class="loader">
+        <svg id="cloud" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+          <defs>
+            <filter id="roundness">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="1.5"></feGaussianBlur>
+              <feColorMatrix values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 20 -10"></feColorMatrix>
+            </filter>
+            <mask id="shapes">
+              <g fill="white">
+                <polygon points="50 37.5 80 75 20 75 50 37.5"></polygon>
+                <circle cx="20" cy="60" r="15"></circle>
+                <circle cx="80" cy="60" r="15"></circle>
+                <g>
+                  <circle cx="20" cy="60" r="15"></circle>
+                  <circle cx="20" cy="60" r="15"></circle>
+                  <circle cx="20" cy="60" r="15"></circle>
+                </g>
+              </g>
+            </mask>
+          </defs>
+          <g filter="url(#roundness)">
+            <rect width="100" height="100" fill="transparent"></rect>
+            <g transform="translate(-10, 10)">
+              <g mask="url(#shapes)">
+                <rect y="30" width="100" height="70" fill="white"></rect>
+              </g>
+            </g>
+            <g transform="translate(15, -15)">
+              <g mask="url(#shapes)">
+                <rect y="30" width="100" height="70" fill="white"></rect>
+              </g>
+            </g>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand-wrapper">
+          <a href="/" style="display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit;">
+            <img src="/images/logo.png" class="brand-logo" alt="Logo">
+            <div class="brand">
+              <div class="brand-title">Bot de Fazer</div>
+              <div class="brand-sub">Patch Notes</div>
+            </div>
+          </a>
+        </div>
+        
+        <div class="top-actions">
+          <a class="btn btn-sm" href="/" style="margin-right: 0.5rem;">
+            Retour à l'accueil
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main class="container" style="padding-top: 120px;">
+      <div style="text-align: center; margin-bottom: 60px;">
+        <h1 style="font-size: 3rem; margin-bottom: 1rem;">Mises à jour</h1>
+        <p style="color: #9ca3af; font-size: 1.2rem;">L'évolution constante du Bot.</p>
+      </div>
+
+      <div class="timeline">
+
+        <!-- Patch 2.1.1 -->
+        <div class="patch-note">
+          <div class="patch-dot"></div>
+          <div class="patch-date">13 Janvier 2026</div>
+          <div class="patch-version">v2.1.1</div>
+          <h2 class="patch-title">La Voix du Peuple <span class="badge-new">HOT</span></h2>
+          <div class="patch-content">
+            <ul>
+              <li><strong>Text-to-Speech (+tts) :</strong> Faites parler le bot ! Il rejoint votre salon vocal et lit votre message à haute voix. Ex: <code>+tts Wesh l'équipe</code>.</li>
+            </ul>
+          </div>
+        </div>
+        
+        <!-- Patch 2.1.0 -->
+        <div class="patch-note">
+          <div class="patch-dot"></div>
+          <div class="patch-date">15 Janvier 2026</div>
+          <div class="patch-version">v2.1.0</div>
+          <h2 class="patch-title">L'Ère de l'Image <span class="badge-new">NOUVEAU</span></h2>
+          <div class="patch-content">
+            <p style="margin-bottom: 16px; color: #9ca3af;">Grosse mise à jour visuelle pour rendre votre profil unique.</p>
+            <ul>
+              <li><strong>Nouveau Profil Visuel (+profile) :</strong> Fini le texte ! Votre profil est maintenant une véritable carte d'identité générée en image avec votre avatar, niveau et solde.</li>
+              <li><strong>Système de Biographie (+setbio) :</strong> Ajoutez une phrase signature personnalisée sur votre profil. Ex: <code>+setbio "Le roi du quartier"</code>.</li>
+              <li><strong>Statistiques Détaillées :</strong> Une nouvelle commande pour voir vos stats de casino (taux de victoire, gains totaux) et de crimes.</li>
+              <li>Optimisation de la rapidité du bot (-20% de latence).</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Patch 2.0.5 -->
+        <div class="patch-note">
+          <div class="patch-dot"></div>
+          <div class="patch-date">02 Janvier 2026</div>
+          <div class="patch-version">v2.0.5</div>
+          <h2 class="patch-title">Économie & Confort</h2>
+          <div class="patch-content">
+            <ul>
+              <li><strong>Rééquilibrage du Casino :</strong> Les chances de gain au Blackjack ont été légèrement augmentées.</li>
+              <li><strong>Anti-Spam :</strong> Amélioration du filtre pour éviter le spam de commandes dans les salons non dédiés.</li>
+              <li>Correction d'un bug où l'XP ne montait pas dans les salons vocaux.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Patch 2.0.0 -->
+        <div class="patch-note">
+          <div class="patch-dot"></div>
+          <div class="patch-date">10 Décembre 2025</div>
+          <div class="patch-version">v2.0.0</div>
+          <h2 class="patch-title">Fazer City 2.0</h2>
+          <div class="patch-content">
+            <ul>
+              <li>Lancement officiel de la version 2.0.</li>
+              <li>Refonte complète du système de niveaux.</li>
+              <li>Ajout des commandes de modération (Kick, Ban, Mute).</li>
+              <li>Nouveau site web officiel.</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-actions">
+        <a class="btn" href="/">Retour à l'accueil</a>
+        <a class="btn" href="https://discord.com/oauth2/authorize?client_id=1448011692867977266&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Inviter le bot</a>
+      </div>
+      <div class="supporters-marquee">
+        <div class="marquee-content">
+          Merci la famille : aurianavvlt, 4y0pl41t, mr.korrnichon, amaeeel._., an333.back, fgddfgdfsgfsd, marwanleboss, beaucouptropcon, nyrt.kc
+        </div>
+      </div>
+    </footer>
+
+    <script src="/assets/script.js"></script>
+  </body>
+</html>

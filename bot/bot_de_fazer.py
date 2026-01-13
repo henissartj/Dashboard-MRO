@@ -117,6 +117,12 @@ async def on_ready():
         print("Cog horserace chargé.")
     except Exception as e:
         print(f"Échec chargement horserace: {e}")
+
+    try:
+        await bot.load_extension("bot.cogs.fun")
+        print("Cog fun chargé.")
+    except Exception as e:
+        print(f"Échec chargement fun: {e}")
     
     try:
         names = [c.name for c in bot.commands]

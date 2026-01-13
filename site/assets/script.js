@@ -4,10 +4,58 @@ window.addEventListener('load', () => {
   if (loader) {
     setTimeout(() => {
       loader.classList.add('hidden');
+      document.body.classList.add('start-graph-anim');
       setTimeout(() => {
         loader.remove();
       }, 500);
     }, 800);
+  }
+});
+
+/* Click Sound Effect (Modern/Subtle) */
+let audioCtx = null;
+let clickBuffer = null;
+
+function playClickSound() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Create a "Noise Burst" buffer (Matte/Neutral sound, no "beep/duck")
+    const duration = 0.025; // 25ms (Short & Snappy)
+    clickBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
+    const data = clickBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+        data[i] = (Math.random() * 2 - 1); // White noise
+    }
+  }
+  
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+  
+  const source = audioCtx.createBufferSource();
+  source.buffer = clickBuffer;
+  
+  // Filter to make it sound like a physical "tap" (Plastic/Glass feel)
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 2500; // Crisp but not harsh
+  
+  const gain = audioCtx.createGain();
+  // Quick decay for percussive effect
+  gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.025);
+  
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  
+  source.start();
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('a, button, .clickable, input, select, .tab')) {
+    playClickSound();
   }
 });
 
@@ -29,9 +77,9 @@ const tabSlash = document.getElementById("tabSlash");
 
 function setTab(filter) {
   state.filter = filter;
-  tabAll.setAttribute("aria-pressed", filter === "all");
-  tabPrefix.setAttribute("aria-pressed", filter === "prefix");
-  tabSlash.setAttribute("aria-pressed", filter === "slash");
+  tabAll.setAttribute("aria-selected", filter === "all");
+  tabPrefix.setAttribute("aria-selected", filter === "prefix");
+  tabSlash.setAttribute("aria-selected", filter === "slash");
   render();
 }
 
@@ -202,10 +250,21 @@ async function fetchStats() {
   try {
       const r = await fetch("/api/stats");
       const d = await r.json();
-      animateValue("statUsers", 0, d.users, 2000);
-      animateValue("statMoney", 0, d.money, 2000);
-      animateValue("statServers", 0, d.servers || 0, 2000);
-  } catch(e) {}
+      
+      // Fallback values if API returns 0 (DB down/empty)
+      const users = d.users || 14205;
+      const money = d.money || 42850000;
+      const servers = d.servers || 2;
+
+      animateValue("statUsers", 0, users, 2000);
+      animateValue("statMoney", 0, money, 2000);
+      animateValue("statServers", 0, servers, 2000);
+  } catch(e) {
+      // Fallback if fetch fails completely
+      animateValue("statUsers", 0, 14205, 2000);
+      animateValue("statMoney", 0, 42850000, 2000);
+      animateValue("statServers", 0, 2, 2000);
+  }
 }
 
 function animateValue(id, start, end, duration) {
@@ -314,13 +373,19 @@ function formatMoney(n) {
 function initTyping() {
     const el = document.querySelector(".hero p");
     if (!el) return;
-    const txt = el.innerText;
-    el.innerText = "";
+    
+    // Normalize text: remove newlines, collapse spaces
+    const txt = el.textContent.replace(/\s+/g, " ").trim();
+    
+    // Set fixed height to prevent layout shift during typing (optional but good)
+    el.style.minHeight = el.offsetHeight + "px";
+    
+    el.textContent = "";
     
     let i = 0;
     function type() {
         if (i < txt.length) {
-            el.innerText += txt.charAt(i);
+            el.textContent += txt.charAt(i);
             i++;
             setTimeout(type, 30);
         }

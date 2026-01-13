@@ -11,6 +11,7 @@ import random
 import io
 import json
 import time
+import aiohttp
 from PIL import Image, ImageDraw, ImageFont
 import plotly.graph_objects as go
 from zoneinfo import ZoneInfo
@@ -203,6 +204,13 @@ DDL = [
         amount_wagered BIGINT DEFAULT 0,
         amount_won BIGINT DEFAULT 0,
         commands_used INT DEFAULT 0
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_profiles (
+        user_id BIGINT PRIMARY KEY,
+        bio VARCHAR(255) DEFAULT NULL,
+        custom_image_url VARCHAR(255) DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
 ]
@@ -4278,9 +4286,74 @@ class Economy(commands.Cog):
         else:
              await ctx.send("Catégorie inconnue. Essaie `immo`, `luxe` ou `items`.")
 
+    @commands.command(name="setbio", aliases=["bio"])
+    async def setbio(self, ctx: commands.Context, *, bio: str):
+        """Définir votre bio de profil (max 255 caractères)"""
+        if len(bio) > 255:
+            return await ctx.send("❌ La bio ne peut pas dépasser 255 caractères.")
+        
+        await self._connect()
+        await self._ensure_user(ctx.author.id)
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    INSERT INTO user_profiles (user_id, bio) 
+                    VALUES (%s, %s) 
+                    ON DUPLICATE KEY UPDATE bio=%s
+                """, (ctx.author.id, bio, bio))
+                
+        await ctx.send(f"✅ Votre bio a été mise à jour.")
+
+    @commands.command(name="casinostats", aliases=["cstats", "stats"])
+    async def casinostats(self, ctx: commands.Context, member: discord.Member = None):
+        """Voir ses statistiques de jeu (Gains, Pertes, ROI)"""
+        member = member or ctx.author
+        await self._connect()
+        await self._ensure_user(member.id)
+        
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT * FROM user_stats WHERE user_id=%s", (member.id,))
+                row = await cur.fetchone()
+                
+                if not row:
+                    return await ctx.send("❌ Aucune statistique disponible pour ce joueur.")
+                
+                # user_id, games_played, games_won, games_lost, amount_wagered, amount_won, commands_used
+                _, games_played, games_won, games_lost, amount_wagered, amount_won, cmds = row
+                
+                if games_played == 0:
+                    return await ctx.send("❌ Ce joueur n'a jamais joué au casino.")
+                
+                win_rate = (games_won / games_played) * 100
+                profit = amount_won - amount_wagered
+                roi = (profit / amount_wagered) * 100 if amount_wagered > 0 else 0
+                
+                cur_emoji = self._currency_emoji(ctx)
+                
+                embed = discord.Embed(title=f"🎰 Stats Casino de {member.display_name}", color=discord.Color.gold())
+                embed.set_thumbnail(url=member.display_avatar.url)
+                
+                embed.add_field(name="Parties jouées", value=str(games_played), inline=True)
+                embed.add_field(name="Victoires", value=f"{games_won} ({win_rate:.1f}%)", inline=True)
+                embed.add_field(name="Défaites", value=str(games_lost), inline=True)
+                
+                embed.add_field(name="Misé Total", value=f"{self._fmt_amount(amount_wagered)} {cur_emoji}", inline=True)
+                embed.add_field(name="Gagné Total", value=f"{self._fmt_amount(amount_won)} {cur_emoji}", inline=True)
+                
+                profit_str = f"{self._fmt_amount(profit)} {cur_emoji}"
+                if profit > 0: profit_str = f"+{profit_str} 📈"
+                else: profit_str = f"{profit_str} 📉"
+                
+                embed.add_field(name="Profit Net", value=profit_str, inline=True)
+                embed.add_field(name="ROI (Retour sur Invest.)", value=f"{roi:.2f}%", inline=False)
+                
+                await ctx.send(embed=embed)
+
     @commands.command(name="profile", aliases=["profil", "p"])
     async def profile(self, ctx: commands.Context, member: discord.Member = None):
-        """Afficher le profil complet (Stats, Assets, Badges, Social)"""
+        """Afficher le profil complet (Dossier Citoyen)"""
         member = member or ctx.author
         
         # Special Bot Profile
@@ -4291,12 +4364,8 @@ class Economy(commands.Cog):
             view.add_item(discord.ui.Button(label="Ajouter au serveur", url=invite_url, emoji="➕"))
             
             embed = discord.Embed(title="🤖 Bot de Fazer", description="Le bot du quartier. Validé par le secteur.", color=0xFFD700)
-            embed.add_field(name="Développeur", value="Fazer", inline=True)
-            embed.add_field(name="Ping", value=f"{round(self.bot.latency * 1000)}ms", inline=True)
-            embed.add_field(name="Serveurs", value=str(len(self.bot.guilds)), inline=True)
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
             embed.set_image(url="http://www.fazer.city/images/video.gif?v=3")
-            embed.set_footer(text="Ambiance, Casino, Économie & Quartier")
             await ctx.send(embed=embed, view=view)
             return
 
@@ -4304,7 +4373,7 @@ class Economy(commands.Cog):
         
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # 1. Money
+                # 1. Money & Bank
                 await cur.execute("SELECT balance, bank FROM users WHERE user_id=%s", (member.id,))
                 res = await cur.fetchone()
                 bal, b1 = res if res else (0,0)
@@ -4312,103 +4381,121 @@ class Economy(commands.Cog):
                 
                 # 2. Assets (Immo + Luxe)
                 prop_val = 0
+                prop_count = 0
                 await cur.execute("SELECT property_key FROM user_properties WHERE user_id=%s", (member.id,))
                 props = await cur.fetchall()
                 properties = self.asset_manager.get_properties()
                 for p in props:
-                    if p[0] in properties: prop_val += properties[p[0]]['price']
+                    if p[0] in properties: 
+                        prop_val += properties[p[0]]['price']
+                        prop_count += 1
                     
                 lux_val = 0
+                lux_count = 0
                 await cur.execute("SELECT item_key FROM user_luxury WHERE user_id=%s", (member.id,))
                 luxs = await cur.fetchall()
                 luxury_items = self.asset_manager.get_luxury_items()
                 for l in luxs:
-                    if l[0] in luxury_items: lux_val += luxury_items[l[0]]['price']
+                    if l[0] in luxury_items: 
+                        lux_val += luxury_items[l[0]]['price']
+                        lux_count += 1
                     
                 # 3. Social (Marriage, Clan)
-                # Marriage
                 spouse_name = "Célibataire"
                 await cur.execute("SELECT user1_id, user2_id FROM marriages WHERE user1_id=%s OR user2_id=%s", (member.id, member.id))
                 m_row = await cur.fetchone()
                 if m_row:
                     spouse_id = m_row[1] if m_row[0] == member.id else m_row[0]
-                    # Try fetch name
                     spouse = ctx.guild.get_member(spouse_id)
-                    spouse_name = spouse.display_name if spouse else f"ID:{spouse_id}"
-                    
-                # Clan
-                clan_name = "Aucune"
-                clan_role = ""
-                clan_badge = ""
-                c_row = None
-                
-                try:
-                    await cur.execute("""
-                        SELECT c.name, m.role, c.badge 
-                        FROM clans c 
-                        JOIN clan_members m ON c.id = m.clan_id 
-                        WHERE m.user_id=%s
-                    """, (member.id,))
-                    c_row = await cur.fetchone()
-                    if c_row:
-                        clan_name = c_row[0]
-                        clan_role = f"({c_row[1]})"
-                        clan_badge = c_row[2] if c_row[2] else ""
-                except Exception:
-                    # Fallback if query fails (e.g. badge column missing despite fix)
-                    pass
-                    
-                # 4. Badges / Achievements
-                # Auto-check achievements before displaying
-                badge_ids = set()
-                
-                # Check Millionnaire
-                if total_money >= 1_000_000:
-                    await self.award_badge(member.id, 'millionnaire', ctx)
-                    badge_ids.add('millionnaire')
-                
-                # Check Magnat
-                if len(props) >= 5:
-                    await self.award_badge(member.id, 'magnat', ctx)
-                    badge_ids.add('magnat')
-                    
-                # Check Marriage
-                if m_row:
-                    await self.award_badge(member.id, 'mariage', ctx)
-                    badge_ids.add('mariage')
-                    
-                # Check Clan Owner
-                if c_row and c_row[1] == 'owner':
-                    await self.award_badge(member.id, 'clan_boss', ctx)
-                    badge_ids.add('clan_boss')
-                
-                # Get all badges from database (includes the ones we just checked/awarded if they were already there)
-                db_badges = await self._get_user_badges(member.id)
-                for bid in db_badges:
-                    badge_ids.add(bid)
+                    spouse_name = f"Marié(e) à {spouse.display_name}" if spouse else "Marié(e) (Partenaire introuvable)"
 
-                # Convert to emojis
-                badges = []
+                clan_text = "Aucun Gang"
+                clan_badge = ""
+                await cur.execute("""
+                    SELECT c.name, m.role, c.badge 
+                    FROM clans c 
+                    JOIN clan_members m ON c.id = m.clan_id 
+                    WHERE m.user_id=%s
+                """, (member.id,))
+                c_row = await cur.fetchone()
+                if c_row:
+                    clan_badge = c_row[2] if c_row[2] else ""
+                    clan_text = f"{clan_badge} **{c_row[0]}** ({c_row[1]})"
+                
+                # 4. Bio
+                bio = "Aucune bio définie."
+                try:
+                    await cur.execute("SELECT bio FROM user_profiles WHERE user_id=%s", (member.id,))
+                    p_row = await cur.fetchone()
+                    if p_row and p_row[0]: bio = p_row[0]
+                except Exception:
+                    pass
+
+                # 5. Casino Stats
+                casino_stats = "Jamais joué"
+                await cur.execute("SELECT games_played, games_won, amount_won, amount_wagered FROM user_stats WHERE user_id=%s", (member.id,))
+                s_row = await cur.fetchone()
+                if s_row and s_row[0] > 0:
+                    games, wins, won, wagered = s_row
+                    win_rate = (wins / games) * 100
+                    profit = won - wagered
+                    profit_icon = "📈" if profit >= 0 else "📉"
+                    casino_stats = f"WR: **{win_rate:.1f}%** • Profit: **{self._fmt_amount(profit)}** {profit_icon}"
+
+                # 6. Badges Logic
+                badge_ids = set()
+                if total_money >= 1_000_000: badge_ids.add('millionnaire')
+                if prop_count >= 5: badge_ids.add('magnat')
+                if m_row: badge_ids.add('mariage')
+                if c_row and c_row[1] == 'owner': badge_ids.add('clan_boss')
+                
+                db_badges = await self._get_user_badges(member.id)
+                for bid in db_badges: badge_ids.add(bid)
+
+                badges_str = ""
                 for badge_id in badge_ids:
                     if badge_id in ACHIEVEMENTS:
-                        badges.append(ACHIEVEMENTS[badge_id]['emoji'])
+                        badges_str += ACHIEVEMENTS[badge_id]['emoji'] + " "
                 
-        # Build Embed
-        embed = discord.Embed(title=f"Profil de {member.display_name}", color=discord.Color.gold())
-        embed.set_thumbnail(url=member.display_avatar.url)
-        
-        # General Stats
-        stats = f"💰 **Richesse:** {self._fmt_amount(total_money)}\n"
-        stats += f"🏙️ **Actifs:** {self._fmt_amount(prop_val + lux_val)}\n"
-        stats += f"💍 **Statut:** {spouse_name}\n"
-        stats += f"🕶️ **Organisation:** {clan_badge} {clan_name} {clan_role}"
-        embed.add_field(name="Informations", value=stats, inline=False)
-        
-        # Badges
-        if badges:
-            embed.add_field(name="Badges", value=" ".join(badges), inline=False)
-            
-        await ctx.send(embed=embed)
+                if not badges_str: badges_str = "Aucun badge"
+
+                # EMBED GENERATION
+                embed = discord.Embed(title=f"📂 DOSSIER CITOYEN • {member.display_name.upper()}", color=member.color if member.color != discord.Color.default() else 0xFFD700)
+                embed.set_thumbnail(url=member.display_avatar.url)
+                embed.description = f"*{bio}*"
+                
+                # Ligne 1: Finances
+                finances = (
+                    f"💵 **Liquide:** `{self._fmt_amount(bal)}`\n"
+                    f"💳 **Banque:** `{self._fmt_amount(b1)}`\n"
+                    f"💰 **Total:** `{self._fmt_amount(total_money)}`"
+                )
+                embed.add_field(name="💳 Finances", value=finances, inline=True)
+                
+                # Ligne 2: Patrimoine
+                assets = (
+                    f"🏠 **Immo:** {prop_count} biens (`{self._fmt_amount(prop_val)}`)\n"
+                    f"👜 **Luxe:** {lux_count} objets (`{self._fmt_amount(lux_val)}`)\n"
+                    f"💎 **Valeur:** `{self._fmt_amount(prop_val + lux_val)}`"
+                )
+                embed.add_field(name="🏙️ Patrimoine", value=assets, inline=True)
+                
+                # Séparateur invisible si besoin, ou juste passer à la suite
+                
+                # Ligne 3: Social & Statut
+                social = (
+                    f"💍 **Statut:** {spouse_name}\n"
+                    f"🕶️ **Gang:** {clan_text}\n"
+                    f"🎰 **Casino:** {casino_stats}"
+                )
+                embed.add_field(name="💼 État Civil & Activités", value=social, inline=False)
+                
+                # Badges en bas
+                embed.add_field(name="🏆 Distinctions", value=badges_str, inline=False)
+                
+                embed.set_footer(text=f"ID: {member.id} • Système FazerCity", icon_url=self.bot.user.display_avatar.url)
+                
+                await ctx.send(embed=embed)
 
     async def award_badge(self, user_id: int, badge_id: str, ctx: commands.Context = None, channel: discord.TextChannel = None):
         """Award a badge to a user with notification"""
