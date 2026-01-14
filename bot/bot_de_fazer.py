@@ -1,4 +1,6 @@
 import os
+import sys
+import fcntl
 import random
 import difflib
 import discord
@@ -6,6 +8,28 @@ from discord import app_commands
 from dotenv import load_dotenv, dotenv_values
 from discord.ext import commands
 import time
+
+# ------- SINGLE INSTANCE LOCK -------
+def single_instance_check():
+    """Ensure only one instance of the bot is running."""
+    lock_file_path = '/tmp/bot_fazer.lock'
+    try:
+        # Open the file in write mode (creates it if it doesn't exist)
+        # We keep the file object open to maintain the lock
+        fp = open(lock_file_path, 'w')
+        # Try to acquire an exclusive lock without blocking
+        fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # Write PID for info
+        fp.write(str(os.getpid()))
+        fp.flush()
+        return fp
+    except IOError:
+        print("⚠️  ERREUR CRITIQUE: Une autre instance du bot est déjà en cours d'exécution.")
+        print("    Veuillez arrêter l'ancienne instance avant d'en lancer une nouvelle.")
+        sys.exit(1)
+
+# Hold the lock reference globally so it isn't garbage collected
+_INSTANCE_LOCK = single_instance_check()
 
 # ------- CONFIG -------
 BOT_NAME = "Bot de Fazer"
@@ -123,6 +147,12 @@ async def on_ready():
         print("Cog fun chargé.")
     except Exception as e:
         print(f"Échec chargement fun: {e}")
+
+    try:
+        await bot.load_extension("bot.cogs.community")
+        print("Cog community chargé.")
+    except Exception as e:
+        print(f"Échec chargement community: {e}")
     
     try:
         names = [c.name for c in bot.commands]
@@ -402,7 +432,7 @@ class BotInfoView(discord.ui.View):
         self.add_item(discord.ui.Button(label="Site Web", url="http://www.fazer.city/", emoji="🌐"))
         self.add_item(discord.ui.Button(label="Ajouter au serveur", url=invite_url, emoji="➕"))
 
-@bot.command(name="botinfo", aliases=["info", "bi", "bot"])
+@bot.command(name="botinfo", aliases=["bi", "bot"])
 async def botinfo(ctx: commands.Context):
     """Affiche les infos du bot et les liens utiles."""
     invite_url = discord.utils.oauth_url(bot.user.id, permissions=discord.Permissions(administrator=True))
@@ -418,26 +448,13 @@ async def botinfo(ctx: commands.Context):
     
     await ctx.send(embed=embed, view=view)
 
-@bot.command(name="ping")
-async def ping(ctx: commands.Context):
-    latency_ms = round(bot.latency * 1000)
-    await ctx.send(
-        f"Pong {ctx.author.mention} ! T’es vif à {latency_ms} ms, "
-        f"t’es une fibre optique mon frero bsaha 💥"
-    )
-
 @bot.tree.command(name="ping", description="Tester la latence du bot")
 async def ping_slash(interaction: discord.Interaction):
     latency_ms = round(bot.latency * 1000)
     await interaction.response.send_message(f"Pong ! {latency_ms} ms")
 
 
-@bot.command(name="avatar")
-async def avatar(ctx: commands.Context, member: discord.Member = None):
-    member = member or ctx.author
-    await ctx.send(
-        f"We kho {member.display_name}, voici ta tête de vaillant : {member.avatar.url}"
-    )
+
 
 def _find_member_by_name(guild: discord.Guild, name: str) -> discord.Member | None:
     if not guild or not name:
@@ -1222,33 +1239,10 @@ async def parions(ctx: commands.Context):
     await ctx.send(file=discord.File(buffer, filename="parions.png"))
 
 
-@bot.command(name="userinfo")
-async def userinfo(ctx: commands.Context, member: discord.Member = None):
-    member = member or ctx.author
-    embed = discord.Embed(
-        title=f"Fiche Interpol de {member.display_name}",
-        color=discord.Color.gold()
-    )
-    embed.add_field(name="Pseudo", value=member.name, inline=True)
-    embed.add_field(name="ID", value=member.id, inline=True)
-    embed.add_field(name="Rejoint le serveur", value=member.joined_at.strftime("%d/%m/%Y"), inline=False)
-    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-    await ctx.send(embed=embed)
 
 
-@bot.command(name="serverinfo")
-async def serverinfo(ctx: commands.Context):
-    guild = ctx.guild
-    embed = discord.Embed(
-        title=f"Infos de {guild.name}",
-        color=discord.Color.blue()
-    )
-    embed.add_field(name="Membres", value=guild.member_count, inline=True)
-    embed.add_field(name="Proprio", value=guild.owner, inline=True)
-    embed.add_field(name="Créé le", value=guild.created_at.strftime("%d/%m/%Y"), inline=False)
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url)
-    await ctx.send(embed=embed)
+
+
 
 
 class HelpView(discord.ui.View):

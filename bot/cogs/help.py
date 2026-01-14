@@ -113,7 +113,7 @@ class Help(commands.Cog):
 
         # --- 🏆 Social & Organisation ---
         social_cmds = [
-            f"`{prefix}profile` : Voir votre profil complet (Badges, Orga, Mariage)",
+            f"`{prefix}profile` : Dossier Citoyen complet (Finances, Social, Casino...)",
             f"`{prefix}setbio <texte>` : Définir votre bio de profil",
             f"`{prefix}marry <@user>` : Demander en mariage",
             f"`{prefix}org` : Menu Organisation (Créer, Rejoindre, Info)",
@@ -124,14 +124,23 @@ class Help(commands.Cog):
         ]
         embed.add_field(name="🏆 Social & Organisation", value="\n".join(social_cmds), inline=False)
         
-        # --- ℹ️ Divers ---
+        # --- ℹ️ Divers & Communauté ---
         misc_cmds = [
             f"`{prefix}maj` : Voir le changelog (Quoi de neuf ?)",
             f"`{prefix}cd` : Voir vos temps d'attente (Cooldowns)",
             f"`{prefix}cooldown_global <secondes>` : Verrouiller commandes serveur",
-            f"`{prefix}cooldown_repeat <secondes>` : Empêcher la répétition d'une commande"
+            f"`{prefix}cooldown_repeat <secondes>` : Empêcher la répétition d'une commande",
+            f"`{prefix}userinfo <@user>` : Infos utilisateur",
+            f"`{prefix}serverinfo` : Infos serveur",
+            f"`{prefix}members` : Nombre de membres",
+            f"`{prefix}avatar <@user>` : Voir l'avatar en grand",
+            f"`{prefix}banner <@user>` : Voir la bannière",
+            f"`{prefix}ping` : Voir la latence",
+            f"`{prefix}poll <question> [choix...]` : Créer un sondage",
+            f"`{prefix}report <message>` : Signaler un problème",
+            f"`{prefix}afk <raison>` : Se mettre en mode AFK"
         ]
-        embed.add_field(name="ℹ️ Divers", value="\n".join(misc_cmds), inline=False)
+        embed.add_field(name="ℹ️ Divers & Communauté", value="\n".join(misc_cmds), inline=False)
 
         # --- 🛡️ Admin / Police ---
         if ctx.author.guild_permissions.administrator:
@@ -155,31 +164,24 @@ class Help(commands.Cog):
 
     @commands.command(name="maj")
     async def maj(self, ctx: commands.Context):
-        embed = discord.Embed(title="📜 Note de Mise à Jour", color=discord.Color.gold())
-        embed.description = "**Correctifs & Améliorations**"
+        embed = discord.Embed(title="📜 Note de Mise à Jour v2.2.1", color=discord.Color.gold())
+        embed.description = "**Réputation & Améliorations**"
         
         changes = [
-            "🏦 **Mise à Jour Bancaire** :",
-            "• **Système Simplifié** : Fusion des 3 banques en une seule banque centrale.",
-            "• `+dep <montant>` et `+with <montant>` : Plus besoin de préciser le numéro de banque.",
-            "• Le classement et les stats prennent maintenant en compte ce système unifié.",
+            "🏆 **Système de Réputation** :",
+            "• `+rep <@user>` : Donnez du respect à un autre joueur (1x par 24h).",
+            "• `+top` : Affichez le classement des joueurs les plus respectés.",
             "",
-            "✅ **Correctifs & Nouveautés** :",
-            "• `+profile` : Affiche désormais un profil complet en Embed (plus rapide).",
-            "• `+setbio` : Personnalisez votre bio sur votre profil.",
-            "• `+casinostats` : Suivez vos gains, pertes et ROI au casino.",
-            "• `+work` : La commande est réparée et pleinement fonctionnelle.",
-            "• `+idcard` : Correction du bug d'affichage (erreur joined_at).",
-            "• `+facture` : Le paiement met désormais correctement à jour l'embed (Statut PAYÉE).",
+            "💤 **AFK Amélioré** :",
+            "• Le mode AFK ne s'enlève plus instantanément si vous envoyez un message dans les 10 secondes après l'activation.",
             "",
-            "🐎 **Rappel PMU Street** :",
-            "• `+course start [durée]` ouvre les paris, `+course run` lance.",
-            "• `+bet <num> <mise>` pour miser. Animation live.",
+            "🧹 **Nettoyage** :",
+            "• Suppression des commandes de tickets pour alléger le bot.",
             "",
             "Le dev travaille fort pour le quartier 🔧"
         ]
         
-        embed.add_field(name="Changelog", value="\n".join(changes), inline=False)
+        embed.add_field(name="Changelog 14/01/2026", value="\n".join(changes), inline=False)
         embed.set_footer(text="Bot développé par Fazer")
         await ctx.send(embed=embed)
 

@@ -203,7 +203,9 @@ DDL = [
         games_lost INT DEFAULT 0,
         amount_wagered BIGINT DEFAULT 0,
         amount_won BIGINT DEFAULT 0,
-        commands_used INT DEFAULT 0
+        commands_used INT DEFAULT 0,
+        rep INT DEFAULT 0,
+        last_rep_give_time TIMESTAMP NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """,
     """
@@ -1262,6 +1264,11 @@ class CoinFlipView(discord.ui.View):
             await interaction.message.edit(embed=emb, view=None)
         except Exception:
             pass
+        
+        # Update Stats
+        win = (txid is not None)
+        await self.cog._update_stats(ctx.author.id, game=True, win=win, wager=self.amount, win_amount=(self.amount * 2) if win else 0)
+        await self.cog._check_achievements(ctx, ctx.author.id)
         
         # Update Stats
         win = (txid is not None)
@@ -2458,7 +2465,7 @@ class Economy(commands.Cog):
 
 
         # Bank Name
-        draw.text((width-250, 30), "MRO BANK", fill=text_c, font=font_large)
+        draw.text((width-250, 30), "FAZER CITY", fill=text_c, font=font_large)
         
         # Card Number (Fake)
         card_num = f"4921  {str(user_id)[:4]}  {str(user_id)[4:8]}  {str(user_id)[8:12]}"
@@ -2634,27 +2641,11 @@ class Economy(commands.Cog):
                 res = await cur.fetchone()
                 if not res: res = (0, 0)
                 bal, bank1 = res
-                
-                # Get organization info
-                await cur.execute("""
-                    SELECT c.name, m.role, c.badge 
-                    FROM clans c 
-                    JOIN clan_members m ON c.id = m.clan_id 
-                    WHERE m.user_id=%s
-                """, (member.id,))
-                c_row = await cur.fetchone()
-                org_info = "Aucune"
-                if c_row:
-                    clan_name = c_row[0]
-                    clan_role = f"({c_row[1]})"
-                    clan_badge = c_row[2] if c_row[2] else ""
-                    org_info = f"{clan_badge} {clan_name} {clan_role}".strip()
         
         cur_emoji = self._currency_emoji(ctx)
         
         # Create embed with organization info
         emb = self._bank_embed(ctx, title=f"Solde de {member.display_name}", color=discord.Color.gold(), actor=member)
-        emb.add_field(name="Organisation", value=org_info, inline=False)
         emb.add_field(name="Poche", value=f"{self._fmt_amount(bal)} {cur_emoji}", inline=True)
         emb.add_field(name="Banque", value=f"{self._fmt_amount(bank1)} {cur_emoji}", inline=True)
         
@@ -5334,6 +5325,10 @@ class Economy(commands.Cog):
         emb.add_field(name="Solde après jeu", value=f"**{self._fmt_amount(bal_after)} {cur_emoji} Fcoins**", inline=False)
         await ctx.send(embed=emb)
 
+        # Update Stats
+        await self._update_stats(ctx.author.id, game=True, win=(win > 0), wager=amt, win_amount=(amt + win) if win > 0 else 0)
+        await self._check_achievements(ctx, ctx.author.id)
+
     @commands.command(name="dice", aliases=["de","dc"], help="Pari pair/impair ou chiffre. Maison avantage légère.") 
     @commands.dynamic_cooldown(lambda ctx: None if getattr(ctx.author, "guild_permissions", None) and ctx.author.guild_permissions.administrator else commands.Cooldown(1, 5), commands.BucketType.user)
     async def dice(self, ctx: commands.Context, amount: str | None = None, bet_on: int | None = None):
@@ -5398,6 +5393,10 @@ class Economy(commands.Cog):
         emb.add_field(name="Résultat", value=f"{res_txt} {cur_emoji}", inline=False)
         emb.add_field(name="Solde après jeu", value=f"**{self._fmt_amount(bal_after)} {cur_emoji} Fcoins**", inline=False)
         await ctx.send(embed=emb)
+
+        # Update Stats
+        await self._update_stats(ctx.author.id, game=True, win=(win > 0), wager=amt, win_amount=(amt + win) if win > 0 else 0)
+        await self._check_achievements(ctx, ctx.author.id)
 
     @commands.command(name="roulette", aliases=["rl"], help="Roulette européenne: +roulette <mise> <pari>. Ex: +roulette 1m rouge | pair | 17 | 1-18 | 19-36 | 1st | 2nd | 3rd")
     @commands.dynamic_cooldown(lambda ctx: None if getattr(ctx.author, "guild_permissions", None) and ctx.author.guild_permissions.administrator else commands.Cooldown(1, 5), commands.BucketType.user)
@@ -5617,10 +5616,17 @@ class Economy(commands.Cog):
                 
                 if row:
                     org_name, org_level = row
+                    # Sanity check: Ensure level is positive
+                    if org_level < 0: org_level = 0
+                    
                     # BONUS SIGNIFICATIF: Niveau * 5000
                     bonus_amount = org_level * 5000
+                    # Sanity check: Ensure bonus is not negative
+                    if bonus_amount < 0: bonus_amount = 0
                 
                 total_amount = base_amount + bonus_amount
+                # Final Sanity Check
+                if total_amount < 0: total_amount = 0
                 
                 await cur.execute("UPDATE users SET balance=balance+%s WHERE user_id=%s", (total_amount, ctx.author.id))
         

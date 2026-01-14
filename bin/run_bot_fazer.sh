@@ -12,6 +12,11 @@ fi
 
 export DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-${DISCORD_TOKEN:-}}"
 
+# Clean up existing instances just in case
+echo "🧹 Cleaning up old bot instances..."
+pkill -f "bot.bot_de_fazer" || true
+sleep 1
+
 cd "${APP_DIR}"
 source "${VENV_ACTIVATE}"
 
