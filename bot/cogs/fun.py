@@ -3,6 +3,7 @@ from discord.ext import commands
 from gtts import gTTS
 import os
 import asyncio
+import random
 
 class Fun(commands.Cog):
     def __init__(self, bot):
@@ -64,6 +65,38 @@ class Fun(commands.Cog):
             await ctx.send(f"❌ Erreur TTS : {e}")
             if os.path.exists(filepath):
                 os.remove(filepath)
+
+    @commands.command(name="jdr", aliases=["jdrstats", "fiche"])
+    async def jdr(self, ctx):
+        vie1 = random.randint(1, 20)
+        vie2 = random.randint(1, 20)
+        vie = vie1 + vie2
+        defense = random.randint(1, 20)
+        force = random.randint(1, 20)
+        vitesse = random.randint(1, 100)
+        esquive = min(random.randint(1, 20), 10)
+        mana = random.randint(1, 100) + random.randint(1, 100)
+        intelligence = min(random.randint(1, 20), 15)
+        marchandage = min(random.randint(1, 20), 15)
+
+        embed = discord.Embed(
+            title="🎲 Fiche de personnage JDR",
+            color=discord.Color.purple()
+        )
+        embed.set_author(
+            name=ctx.author.display_name,
+            icon_url=ctx.author.avatar.url if ctx.author.avatar else None
+        )
+        embed.add_field(name="Vie", value=f"{vie} (2d20)", inline=True)
+        embed.add_field(name="Défense", value=f"{defense} (1d20)", inline=True)
+        embed.add_field(name="Force", value=f"{force} (1d20)", inline=True)
+        embed.add_field(name="Vitesse", value=f"{vitesse} (1d100)", inline=True)
+        embed.add_field(name="Esquive", value=f"{esquive} (1d20, max 10)", inline=True)
+        embed.add_field(name="Mana", value=f"{mana} (2d100)", inline=True)
+        embed.add_field(name="Intelligence", value=f"{intelligence} (1d20, max 15)", inline=True)
+        embed.add_field(name="Marchandage", value=f"{marchandage} (1d20, max 15)", inline=True)
+
+        await ctx.send(embed=embed)
 
     @commands.command(name="leave", aliases=["disconnect", "deco"])
     async def leave(self, ctx):

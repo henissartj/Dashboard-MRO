@@ -82,6 +82,11 @@ class Help(commands.Cog):
         ]
         embed.add_field(name="🎰 Casino & Jeux", value="\n".join(game_cmds), inline=False)
 
+        rpg_cmds = [
+            f"`{prefix}jdr` : Générer une fiche de stats JDR (Vie, Mana, etc.)"
+        ]
+        embed.add_field(name="🎲 Jeux de rôles", value="\n".join(rpg_cmds), inline=False)
+
         # --- 📸 Images & Fun ---
         fun_cmds = [
             f"`{prefix}parions` : Ticket Parions Street (FDJ)",
@@ -164,9 +169,9 @@ class Help(commands.Cog):
 
     @commands.command(name="maj")
     async def maj(self, ctx: commands.Context):
-        embed = discord.Embed(title="📜 Note de Mise à Jour v2.2.1", color=discord.Color.gold())
-        embed.description = "**Réputation & Améliorations**"
-        
+        embed = discord.Embed(title="📜 Note de Mise à Jour v2.2.2", color=discord.Color.gold())
+        embed.description = "**Réputation, AFK & Jeux de rôles**"
+
         changes = [
             "🏆 **Système de Réputation** :",
             "• `+rep <@user>` : Donnez du respect à un autre joueur (1x par 24h).",
@@ -175,12 +180,13 @@ class Help(commands.Cog):
             "💤 **AFK Amélioré** :",
             "• Le mode AFK ne s'enlève plus instantanément si vous envoyez un message dans les 10 secondes après l'activation.",
             "",
-            "🧹 **Nettoyage** :",
-            "• Suppression des commandes de tickets pour alléger le bot.",
+            "🎲 **Jeux de rôles (JDR)** :",
+            "• `+jdr` : Génère une fiche de personnage avec Vie, Défense, Force, Vitesse, Esquive, Mana, Intelligence et Marchandage.",
+            "• Nouvelle catégorie `Jeux de rôles` ajoutée dans le `+help`.",
             "",
             "Le dev travaille fort pour le quartier 🔧"
         ]
-        
+
         embed.add_field(name="Changelog 14/01/2026", value="\n".join(changes), inline=False)
         embed.set_footer(text="Bot développé par Fazer")
         await ctx.send(embed=embed)

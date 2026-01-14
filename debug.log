@@ -2549,3 +2549,191 @@ DEBUG: Found work command. kws: {'name': 'work', 'aliases': ['khedma', 'w'], 'he
 127.0.0.1 - - [14/Jan/2026 02:47:01] "GET /api/stats HTTP/1.0" 200 -
 127.0.0.1 - - [14/Jan/2026 02:48:02] "GET /api/stats HTTP/1.0" 200 -
 127.0.0.1 - - [14/Jan/2026 02:49:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 02:50:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 02:51:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 02:52:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 02:53:02] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 02:54:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 02:55:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 02:56:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 02:57:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 02:58:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 02:59:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:00:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:01:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:02:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:03:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:04:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:05:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:06:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:07:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:08:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:09:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:10:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:11:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:12:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:13:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:14:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:15:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:16:02] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:17:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:18:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:19:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:20:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:21:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 03:22:01] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 04:24:32] "GET /api/stats HTTP/1.0" 200 -
+45.194.92.18 - - [14/Jan/2026 05:42:59] "[33mGET /index.htm HTTP/1.1[0m" 404 -
+45.194.92.18 - - [14/Jan/2026 05:42:59] code 400, message Bad request syntax ('1111\x88\x00\x00\x00\x01\x01\x00\x00\x00%\xad\x11>')
+45.194.92.18 - - [14/Jan/2026 05:42:59] "[31m[1m1111\x88\x00\x00\x00\x01\x01\x00\x00\x00%­\x11>[0m" 400 -
+45.194.92.18 - - [14/Jan/2026 05:42:59] code 400, message Bad request version ('encoding="UTF-8"?>')
+45.194.92.18 - - [14/Jan/2026 05:42:59] code 400, message Bad request version ('À\x13À')
+45.194.92.18 - - [14/Jan/2026 05:42:59] "[31m[1m\x16\x03\x01\x05¬\x01\x00\x05¨\x03\x03\x99\x14\x06\x8f\x03Ô\x8aÞfê7\x9aymwý\x80\x00êH© \x99ãMxKh2\x1e\x85\x12 3øícôlÐÑ\x17N~Àâí\x8c¬kðìØ\x8c¿·¥\x96!\x87Þ6#RÓ\x00\x1aÀ+À/À,À0Ì©Ì¨À\x09À\x13À[0m" 400 -
+45.194.92.18 - - [14/Jan/2026 05:42:59] "[31m[1m1111\x0c\x01\x00\x00\x04\x00\x00\x01\x1b\x09\x00\x00\x02\x01\x00\x00ü\x00\x00\x00admin\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00queryBasicCfg\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00<?xml version="1.0" encoding="UTF-8"?>[0m" 400 -
+45.194.92.18 - - [14/Jan/2026 05:42:59] "GET / HTTP/1.1" 200 -
+45.194.92.18 - - [14/Jan/2026 05:43:00] code 400, message Bad request syntax ('1111\x88\x00\x00\x00\x01\x01\x00\x00\x00%\xad\x11>')
+45.194.92.18 - - [14/Jan/2026 05:43:00] "[31m[1m1111\x88\x00\x00\x00\x01\x01\x00\x00\x00%­\x11>[0m" 400 -
+45.194.92.18 - - [14/Jan/2026 05:43:01] code 400, message Bad request syntax ('1111\x88\x00\x00\x00\x01\x01\x00\x00\x00%\xad\x11>')
+45.194.92.18 - - [14/Jan/2026 05:43:01] "[31m[1m1111\x88\x00\x00\x00\x01\x01\x00\x00\x00%­\x11>[0m" 400 -
+127.0.0.1 - - [14/Jan/2026 06:16:17] "[33mGET /api/.env HTTP/1.0[0m" 404 -
+127.0.0.1 - - [14/Jan/2026 06:16:22] "[33mGET /login/.env HTTP/1.0[0m" 404 -
+127.0.0.1 - - [14/Jan/2026 06:16:30] "[33mGET /api/v2/.env HTTP/1.0[0m" 404 -
+127.0.0.1 - - [14/Jan/2026 06:23:51] "GET /me HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 06:47:26] "[33mGET /api/.env HTTP/1.0[0m" 404 -
+101.36.108.192 - - [14/Jan/2026 07:01:57] "GET / HTTP/1.1" 200 -
+101.36.108.192 - - [14/Jan/2026 07:01:58] code 400, message Bad request version ('d')
+101.36.108.192 - - [14/Jan/2026 07:01:58] "[31m[1m\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03\x9b³ÌÏÓÏ\x80ÕâÝ\x7fþ÷I\x10S\x99°(|Ý\x82£Èð\x15Kz(j~7 ¯3`cL)È ÚNBÞÇ\x17\x08¤ý¡\x0cU d[0m" 400 -
+101.36.108.192 - - [14/Jan/2026 07:01:58] code 400, message Bad request version ('\x00\x04\x03\x00\x01\x02\x00')
+101.36.108.192 - - [14/Jan/2026 07:01:58] "[31m[1m\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03 :==´aE\x84Çü\x917)\x97R\x93\x18\x9f\x16â\x97+\\tu%Å$\x8cVCS §P6ô¥ªÇtr_\x85/§E\x98\x95\x97F\x11÷ã¢\x8aw?P¬â\x04_ë2\x00$\x13\x02\x13\x03\x13\x01À,À0À+À/Ì©Ì¨À$À(À#À'\x00\x9f\x00\x9e\x00k\x00g\x00ÿ\x01\x00\x01\x8f\x00\x00\x00\x13\x00\x11\x00\x00\x0ewww.fazer.city\x00\x0b\x00\x04\x03\x00\x01\x02\x00[0m" 400 -
+101.36.108.192 - - [14/Jan/2026 07:01:59] code 400, message Bad request version ('\x00\x04\x03\x00\x01\x02\x00')
+101.36.108.192 - - [14/Jan/2026 07:01:59] "[31m[1m\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03jóÈ"\x9aå¯ëôÄ\x0fA¦j\x18s\x15ÜÉc¿äÖ\x97ËÖ\x92ï-OÕÁ \x1aa\x87`ëùÁ\x82§QÃ#§\x0eú;¦?b\x00\x0b\x0d3ëm\x8b\x19¹mëëì\x00$\x13\x02\x13\x03\x13\x01À,À0À+À/Ì©Ì¨À$À(À#À'\x00\x9f\x00\x9e\x00k\x00g\x00ÿ\x01\x00\x01\x8f\x00\x00\x00\x13\x00\x11\x00\x00\x0ewww.fazer.city\x00\x0b\x00\x04\x03\x00\x01\x02\x00[0m" 400 -
+101.36.108.192 - - [14/Jan/2026 07:02:00] code 400, message Bad request version ('\x00\x04\x03\x00\x01\x02\x00')
+101.36.108.192 - - [14/Jan/2026 07:02:00] "[31m[1m\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03ºÒ\x12æÔ/cx½t}a\x8awÙUOå÷\x8cn¹[á\x14ÿD¡ö\x96\x85\x92 \x17K\x09î½úZÆË\x8fbèg&á¤7\x13¿"\x94eQ&hx4J\x80\x88"ë\x00$\x13\x02\x13\x03\x13\x01À,À0À+À/Ì©Ì¨À$À(À#À'\x00\x9f\x00\x9e\x00k\x00g\x00ÿ\x01\x00\x01\x8f\x00\x00\x00\x13\x00\x11\x00\x00\x0ewww.fazer.city\x00\x0b\x00\x04\x03\x00\x01\x02\x00[0m" 400 -
+101.36.108.192 - - [14/Jan/2026 07:02:01] code 400, message Bad request version ('\x00\x04\x03\x00\x01\x02\x00')
+101.36.108.192 - - [14/Jan/2026 07:02:01] "[31m[1m\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03Ò\x97¥ ]\x1d\x9c\x1b£\x8f\x1cÇ\x1c\x7fYS\x07\x8fs\x8eò\x0f¢ÑÊ©\x94©xt5S #zD+^\x11ãÕE\x99\x86ùû{ûÖR\x9aï\x19ù-tÞ¢=\x9e\x17h\x84¬ë\x00$\x13\x02\x13\x03\x13\x01À,À0À+À/Ì©Ì¨À$À(À#À'\x00\x9f\x00\x9e\x00k\x00g\x00ÿ\x01\x00\x01\x8f\x00\x00\x00\x13\x00\x11\x00\x00\x0ewww.fazer.city\x00\x0b\x00\x04\x03\x00\x01\x02\x00[0m" 400 -
+101.36.108.192 - - [14/Jan/2026 07:02:01] code 400, message Bad request syntax ('\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03q\x8döÙ$"\x05S\\}>è®ý¢g\x13àwÕpö4')
+101.36.108.192 - - [14/Jan/2026 07:02:01] "[31m[1m\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03q\x8döÙ$"\x05S\\}>è®ý¢g\x13àwÕpö4[0m" 400 -
+101.36.108.192 - - [14/Jan/2026 07:02:03] code 400, message Bad request version ('\x00\x04\x03\x00\x01\x02\x00')
+101.36.108.192 - - [14/Jan/2026 07:02:03] "[31m[1m\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x039cëæ_Ä+\x95¿Ø\x82W\x1d´\x10\\vÉ­\x84D\x05¤¤M±ßÚ\x86?9¤ ÅË\x9a/¿¼Ä"\x1d\x92æ0ÝaG\x1a'_Ï<\x1eªôÔ¹\x00¥L¶\x1b\x80ç\x00$\x13\x02\x13\x03\x13\x01À,À0À+À/Ì©Ì¨À$À(À#À'\x00\x9f\x00\x9e\x00k\x00g\x00ÿ\x01\x00\x01\x8f\x00\x00\x00\x13\x00\x11\x00\x00\x0ewww.fazer.city\x00\x0b\x00\x04\x03\x00\x01\x02\x00[0m" 400 -
+101.36.108.192 - - [14/Jan/2026 07:02:04] code 400, message Bad HTTP/0.9 request type ('\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03\x94a')
+101.36.108.192 - - [14/Jan/2026 07:02:04] "[31m[1m\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03\x94a\x1eïq\x9aF\x99Ë¢\x82\x840DÎ¹J[0m" 400 -
+101.36.108.192 - - [14/Jan/2026 07:02:04] code 400, message Bad request version ('ÏÐ`¨_Ñþ$\x9d?2\x12\x8f')
+101.36.108.192 - - [14/Jan/2026 07:02:04] "[31m[1m\x16\x03\x01\x02\x00\x01\x00\x01ü\x03\x03\x88Á·sÊ¶Z½\x12\x87í¨úÒÕ\x0b\x99\x93½\x17¬\x04yÞZvÆ\x1aüHN± 94!è\x1d\x07\x98Õ\x8d×\x07÷û\x0bÏÐ`¨_Ñþ$\x9d?2\x12\x8f[0m" 400 -
+216.218.206.66 - - [14/Jan/2026 07:03:03] "GET / HTTP/1.1" 200 -
+216.218.206.66 - - [14/Jan/2026 07:03:31] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+216.218.206.102 - - [14/Jan/2026 07:03:36] "GET http://api.ipify.org/?format=json HTTP/1.1" 200 -
+216.218.206.78 - - [14/Jan/2026 07:03:39] "[33mCONNECT www.shadowserver.org:443 HTTP/1.1[0m" 404 -
+3.149.59.26 - - [14/Jan/2026 07:14:50] "GET / HTTP/1.1" 200 -
+3.149.59.26 - - [14/Jan/2026 07:16:55] "GET / HTTP/1.1" 200 -
+3.149.59.26 - - [14/Jan/2026 07:18:32] code 400, message Bad HTTP/0.9 request type ('\x16\x03\x01\x00{\x01\x00\x00w\x03\x03´Â4ÈêUJ\x1bNÜ4\x11;\x93eqU\x93rA;ë\x1aÑ\x94ÝeÓ\x15ëVÐ\x00\x00\x1aÀ/À+À\x11À\x07À\x13À')
+3.149.59.26 - - [14/Jan/2026 07:18:32] "[31m[1m\x16\x03\x01\x00{\x01\x00\x00w\x03\x03´Â4ÈêUJ\x1bNÜ4\x11;\x93eqU\x93rA;ë\x1aÑ\x94ÝeÓ\x15ëVÐ\x00\x00\x1aÀ/À+À\x11À\x07À\x13À\x09À\x14À[0m" 400 -
+3.149.59.26 - - [14/Jan/2026 07:20:25] code 400, message Bad request syntax ('SSH-2.0-Go')
+3.149.59.26 - - [14/Jan/2026 07:20:25] "[31m[1mSSH-2.0-Go[0m" 400 -
+3.149.59.26 - - [14/Jan/2026 07:20:48] code 400, message Bad HTTP/0.9 request type ('\x16\x03\x01\x00{\x01\x00\x00w\x03\x03\x81º\x02ÎS\x03ÂÐB!\x83F¼"\x1a©\x95$ûôì\x8fi\x96ÅM£*\x9b7!÷\x00\x00\x1aÀ/À+À\x11À\x07À\x13À')
+3.149.59.26 - - [14/Jan/2026 07:20:48] "[31m[1m\x16\x03\x01\x00{\x01\x00\x00w\x03\x03\x81º\x02ÎS\x03ÂÐB!\x83F¼"\x1a©\x95$ûôì\x8fi\x96ÅM£*\x9b7!÷\x00\x00\x1aÀ/À+À\x11À\x07À\x13À\x09À\x14À[0m" 400 -
+216.180.246.53 - - [14/Jan/2026 07:27:43] code 400, message Bad request syntax ('\x16\x03\x01\x00î\x01\x00\x00ê\x03\x03\x89\x00¾çðÜàÜW×P@ÌWÉ\x16¨#\x13¤Zt')
+216.180.246.53 - - [14/Jan/2026 07:27:43] "[31m[1m\x16\x03\x01\x00î\x01\x00\x00ê\x03\x03\x89\x00¾çðÜàÜW×P@ÌWÉ\x16¨#\x13¤Zt[0m" 400 -
+216.180.246.53 - - [14/Jan/2026 07:28:19] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [14/Jan/2026 07:38:36] "GET /me?v=final_fix HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 07:38:39] "GET /me?v=final_fix HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 07:38:41] "GET /me?v=final_fix HTTP/1.0" 200 -
+216.180.246.53 - - [14/Jan/2026 07:39:26] code 400, message Bad request version ('À\x14À')
+216.180.246.53 - - [14/Jan/2026 07:39:26] "[31m[1m\x16\x03\x01\x00ú\x01\x00\x00ö\x03\x03Ð\x96]¬¶8\x04ZÍZVv\x0dKn\x1aTcpç\x0eÂv§\x0c®QÙo{ü$ \x17áð<\x91ËÂüé\x1c³~[²\x94\x88\x1d=\x9c\x10ÞgBÝ5Z\x13\x9dM\x90\x1be\x002À/À+À\x11À\x07À\x13À\x09À\x14À[0m" 400 -
+216.180.246.53 - - [14/Jan/2026 07:39:37] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+95.214.55.246 - - [14/Jan/2026 07:41:07] code 400, message Bad HTTP/0.9 request type ('\x16\x03\x01\x00þ\x01\x00\x00ú\x03\x03ÑäÈ\x88\x90ü\x9d\x14ä)\x0eÃTf.\x03¯¬ÿ5.\x8e\x02')
+95.214.55.246 - - [14/Jan/2026 07:41:07] "[31m[1m\x16\x03\x01\x00þ\x01\x00\x00ú\x03\x03ÑäÈ\x88\x90ü\x9d\x14ä)\x0eÃTf.\x03¯¬ÿ5.\x8e\x02\x85\x10s\x9e<1[0m" 400 -
+95.214.55.246 - - [14/Jan/2026 07:41:07] code 400, message Bad request version ('À\x13À')
+95.214.55.246 - - [14/Jan/2026 07:41:07] "[31m[1m\x16\x03\x01\x00þ\x01\x00\x00ú\x03\x03äï-ÎpF\x81\\'\x1ayf\x10"\x9dØ\x96®\x09Ð)ÊÄêÁôpE\x1d±öU \x9a\x93\x12ú\x0bý\x14¢\x9b3\x0c\x8c¬¯+­Ô¥p'>å¯tá"´xë^ £\x002À+À/À,À0Ì©Ì¨À\x09À\x13À[0m" 400 -
+95.214.55.246 - - [14/Jan/2026 07:41:07] code 400, message Bad request version ('À\x13À')
+95.214.55.246 - - [14/Jan/2026 07:41:07] "[31m[1m\x16\x03\x01\x00þ\x01\x00\x00ú\x03\x03Ç\x98\x070©\x81!\x828\x97òó\x9a\x0d\x8cEÇKÕ©¸ÙûÜ\\ãäMÍ\x178í ½Þ\x99W\x8d/´E\x11\x1e\x8f)ëtÕ±@EG­Ñ~ý/\x9c\x1eåãôº\x091\x002À+À/À,À0Ì©Ì¨À\x09À\x13À[0m" 400 -
+95.214.55.246 - - [14/Jan/2026 07:41:07] code 400, message Bad request version ('À\x13À')
+95.214.55.246 - - [14/Jan/2026 07:41:07] "[31m[1m\x16\x03\x01\x00þ\x01\x00\x00ú\x03\x03w¥âX\x8dR¢5Èâè»F\x1d¸%Ã\x0eõ\x8c\x8a4H\x82\x94Ì¯\x85ö\x03\x83Ú 5z]Ï3ÐWÄ¼æ·\x04Å`ñkM\x85áÐC\x94lî\x1b\x98³û\x1a?âk\x002À+À/À,À0Ì©Ì¨À\x09À\x13À[0m" 400 -
+95.214.55.246 - - [14/Jan/2026 07:41:07] code 400, message Bad request version ('À\x13À')
+95.214.55.246 - - [14/Jan/2026 07:41:07] "[31m[1m\x16\x03\x01\x00þ\x01\x00\x00ú\x03\x03h¨/'º9\x1e\x86¥ÂÒ±ì\x8b\x93ª1\x8a\x15\x7fÜ\x88³eTb\x8eB\x95lÅ¦ Q\x1e\x17Ü_L\x16ß#\x9bN\x01¼û}*TäVeÜé\x0eCàK\x04°\x97x$õ\x002À+À/À,À0Ì©Ì¨À\x09À\x13À[0m" 400 -
+95.214.55.246 - - [14/Jan/2026 07:41:07] code 400, message Bad request syntax ('\x16\x03\x01\x00þ\x01\x00\x00ú\x03\x03\x816\x95þH¯ü\x00]N\x86h\x98\x8d¤Æhsn:\x10')
+95.214.55.246 - - [14/Jan/2026 07:41:07] "[31m[1m\x16\x03\x01\x00þ\x01\x00\x00ú\x03\x03\x816\x95þH¯ü\x00]N\x86h\x98\x8d¤Æhsn:\x10[0m" 400 -
+95.214.55.246 - - [14/Jan/2026 07:42:12] "[31m[1mPOST / HTTP/1.1[0m" 405 -
+95.214.55.246 - - [14/Jan/2026 07:42:12] "[33mPOST /_next HTTP/1.1[0m" 404 -
+95.214.55.246 - - [14/Jan/2026 07:42:12] "[33mPOST /api HTTP/1.1[0m" 404 -
+95.214.55.246 - - [14/Jan/2026 07:42:12] "[33mPOST /_next/server HTTP/1.1[0m" 404 -
+95.214.55.246 - - [14/Jan/2026 07:42:12] "[33mPOST /app HTTP/1.1[0m" 404 -
+95.214.55.246 - - [14/Jan/2026 07:42:12] "[33mPOST /api/route HTTP/1.1[0m" 404 -
+127.0.0.1 - - [14/Jan/2026 10:20:43] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:20:44] "GET /api/commands HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:20:53] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:21:03] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:21:13] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:21:23] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:21:33] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:21:43] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:21:53] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:22:03] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:22:13] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:22:23] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:22:33] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:27:41] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:27:41] "GET /api/commands HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:27:50] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:28:00] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:28:10] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:28:20] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:28:30] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:28:41] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:28:50] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:29:00] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:29:10] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:29:20] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:29:30] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:29:40] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:29:50] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:30:00] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:30:10] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:30:20] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:30:30] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:30:40] "GET /me HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:30:55] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:30:56] "GET /api/commands HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:31:05] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:31:15] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:31:25] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:31:35] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:31:45] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:31:55] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:32:05] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:32:15] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 10:32:25] "GET /api/stats HTTP/1.0" 200 -
+204.76.203.18 - - [14/Jan/2026 11:36:03] "GET / HTTP/1.1" 200 -
+204.76.203.18 - - [14/Jan/2026 11:42:25] "[33mGET /bins/ HTTP/1.1[0m" 404 -
+204.76.203.18 - - [14/Jan/2026 11:58:56] "[33mGET /bin/ HTTP/1.1[0m" 404 -
+204.76.203.18 - - [14/Jan/2026 12:05:29] "[33mGET /backup/ HTTP/1.1[0m" 404 -
+205.210.31.244 - - [14/Jan/2026 13:40:49] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [14/Jan/2026 13:43:17] "[33mGET /api/v1/guest/comm/config HTTP/1.0[0m" 404 -
+127.0.0.1 - - [14/Jan/2026 13:43:18] "[33mGET /api/v1/guest/comm/config HTTP/1.0[0m" 404 -
+127.0.0.1 - - [14/Jan/2026 13:43:20] "[33mGET /api/v1/guest/comm/config HTTP/1.0[0m" 404 -
+127.0.0.1 - - [14/Jan/2026 14:12:11] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 14:12:12] "GET /api/commands HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 15:05:28] "GET /me HTTP/1.0" 200 -
+ * Detected change in '/opt/mro_dash/bot/cogs/fun.py', reloading
+DEBUG: Found work command. kws: {'name': 'work', 'aliases': ['khedma', 'w'], 'help': "Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.", 'usage': 'work'}
+DEBUG: Found work command. kws: {'name': 'work', 'aliases': ['khedma', 'w'], 'help': "Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.", 'usage': 'work'}
+DEBUG: Found work command. kws: {'name': 'work', 'aliases': ['khedma', 'w'], 'help': "Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.", 'usage': 'work'}
+DEBUG: Found work command. kws: {'name': 'work', 'aliases': ['khedma', 'w'], 'help': "Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.", 'usage': 'work'}
+DEBUG: Found work command. kws: {'name': 'work', 'aliases': ['khedma', 'w'], 'help': "Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.", 'usage': 'work'}
+DEBUG: Found work command. kws: {'name': 'work', 'aliases': ['khedma', 'w'], 'help': "Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.", 'usage': 'work'}
+DEBUG: Found work command. kws: {'name': 'work', 'aliases': ['khedma', 'w'], 'help': "Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.", 'usage': 'work'}
+DEBUG: Found work command. kws: {'name': 'work', 'aliases': ['khedma', 'w'], 'help': "Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.", 'usage': 'work'}
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 130-929-207
+ * Detected change in '/opt/mro_dash/bot/cogs/help.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 130-929-207
+127.0.0.1 - - [14/Jan/2026 15:49:09] "GET /api/stats HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 15:49:09] "GET /api/commands HTTP/1.0" 200 -
+127.0.0.1 - - [14/Jan/2026 15:49:19] "GET /api/stats HTTP/1.0" 200 -
+ * Detected change in '/opt/mro_dash/bot/cogs/help.py', reloading
+DEBUG: Found work command. kws: {'name': 'work', 'aliases': ['khedma', 'w'], 'help': "Travaille et gagne de l'argent (Bonus Orga !). Cooldown 5 min.", 'usage': 'work'}
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 130-929-207
