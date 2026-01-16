@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="fr">
-  <head>
+  <head data-org="Organisation L'Emprise">
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Fazer City - Le Bot Discord Francophone (Casino, Modération, Fun)</title>
+    <title>Fazer City - Bot Discord français pour ton serveur (Casino, Modération, Fun)</title>
     <link rel="icon" type="image/png" href="images/favicon.png">
-    <meta name="description" content="Découvrez Fazer City, le meilleur bot Discord français. Système de casino complet, modération avancée, commandes fun et niveaux. Ajoutez-le à votre serveur dès maintenant !">
+    <meta name="description" content="Fazer City est un bot Discord français pour ton serveur : casino, modération, fun et niveaux. Ajoute le bot à ton serveur en quelques clics.">
     <meta name="keywords" content="bot discord, fazer city, bot casino, bot modération, bot discord français, bot fun, discord bot, serveur discord, faire de l'argent discord">
 
     <meta property="og:type" content="website">
@@ -19,6 +19,43 @@
     <meta name="twitter:title" content="Fazer City - Bot Discord">
     <meta name="twitter:description" content="Le bot Discord indispensable : Casino, Modération, Fun.">
     <meta name="twitter:image" content="images/video.gif">
+    <meta name="x-organisation" content="Organisation L'Emprise">
+    <meta name="google-site-verification" content="AeDEzKsrY0d5fWKOe_-Kz34gJsn6D_FtdwvtnB1IXaY">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://fazer.city/">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "url": "https://fazer.city/",
+          "name": "Fazer City - Bot Discord français",
+          "inLanguage": "fr-FR",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://fazer.city/?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "Fazer City",
+          "applicationCategory": "CommunicationApplication",
+          "operatingSystem": "Web",
+          "url": "https://fazer.city/",
+          "description": "Bot Discord français pour serveur : casino, modération, fun et niveaux.",
+          "inLanguage": "fr-FR",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "EUR"
+          }
+        }
+      ]
+    }
+    </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,120 +63,7 @@
     <link rel="stylesheet" href="assets/style.css">
   </head>
   <body>
-    <div id="loader-overlay">
-      <div class="loader">
-        <svg id="cloud" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-          <defs>
-            <filter id="roundness">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="1.5"></feGaussianBlur>
-              <feColorMatrix
-                values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 20 -10"
-              ></feColorMatrix>
-            </filter>
-            <mask id="shapes">
-              <g fill="white">
-                <polygon points="50 37.5 80 75 20 75 50 37.5"></polygon>
-                <circle cx="20" cy="60" r="15"></circle>
-                <circle cx="80" cy="60" r="15"></circle>
-                <g>
-                  <circle cx="20" cy="60" r="15"></circle>
-                  <circle cx="20" cy="60" r="15"></circle>
-                  <circle cx="20" cy="60" r="15"></circle>
-                </g>
-              </g>
-            </mask>
-            <mask id="clipping" clipPathUnits="userSpaceOnUse">
-              <g id="lines" filter="url(#roundness)">
-                <g mask="url(#shapes)" stroke="white">
-                  <line x1="-50" y1="-40" x2="150" y2="-40"></line>
-                  <line x1="-50" y1="-31" x2="150" y2="-31"></line>
-                  <line x1="-50" y1="-22" x2="150" y2="-22"></line>
-                  <line x1="-50" y1="-13" x2="150" y2="-13"></line>
-                  <line x1="-50" y1="-4" x2="150" y2="-4"></line>
-                  <line x1="-50" y1="5" x2="150" y2="5"></line>
-                  <line x1="-50" y1="14" x2="150" y2="14"></line>
-                  <line x1="-50" y1="23" x2="150" y2="23"></line>
-                  <line x1="-50" y1="32" x2="150" y2="32"></line>
-                  <line x1="-50" y1="41" x2="150" y2="41"></line>
-                  <line x1="-50" y1="50" x2="150" y2="50"></line>
-                  <line x1="-50" y1="59" x2="150" y2="59"></line>
-                  <line x1="-50" y1="68" x2="150" y2="68"></line>
-                  <line x1="-50" y1="77" x2="150" y2="77"></line>
-                  <line x1="-50" y1="86" x2="150" y2="86"></line>
-                  <line x1="-50" y1="95" x2="150" y2="95"></line>
-                  <line x1="-50" y1="104" x2="150" y2="104"></line>
-                  <line x1="-50" y1="113" x2="150" y2="113"></line>
-                  <line x1="-50" y1="122" x2="150" y2="122"></line>
-                  <line x1="-50" y1="131" x2="150" y2="131"></line>
-                  <line x1="-50" y1="140" x2="150" y2="140"></line>
-                </g>
-              </g>
-            </mask>
-          </defs>
-          <rect
-            x="0"
-            y="0"
-            width="100"
-            height="100"
-            rx="0"
-            ry="0"
-            mask="url(#clipping)"
-          ></rect>
-          <g>
-            <path
-              d="M33.52,68.12 C35.02,62.8 39.03,58.52 44.24,56.69 C49.26,54.93 54.68,55.61 59.04,58.4 C59.04,58.4 56.24,60.53 56.24,60.53 C55.45,61.13 55.68,62.37 56.63,62.64 C56.63,62.64 67.21,65.66 67.21,65.66 C67.98,65.88 68.75,65.3 68.74,64.5 C68.74,64.5 68.68,53.5 68.68,53.5 C68.67,52.51 67.54,51.95 66.75,52.55 C66.75,52.55 64.04,54.61 64.04,54.61 C57.88,49.79 49.73,48.4 42.25,51.03 C35.2,53.51 29.78,59.29 27.74,66.49 C27.29,68.08 28.22,69.74 29.81,70.19 C30.09,70.27 30.36,70.31 30.63,70.31 C31.94,70.31 33.14,69.44 33.52,68.12Z"
-            ></path>
-            <path
-              d="M69.95,74.85 C68.35,74.4 66.7,75.32 66.25,76.92 C64.74,82.24 60.73,86.51 55.52,88.35 C50.51,90.11 45.09,89.43 40.73,86.63 C40.73,86.63 43.53,84.51 43.53,84.51 C44.31,83.91 44.08,82.67 43.13,82.4 C43.13,82.4 32.55,79.38 32.55,79.38 C31.78,79.16 31.02,79.74 31.02,80.54 C31.02,80.54 31.09,91.54 31.09,91.54 C31.09,92.53 32.22,93.09 33.01,92.49 C33.01,92.49 35.72,90.43 35.72,90.43 C39.81,93.63 44.77,95.32 49.84,95.32 C52.41,95.32 55,94.89 57.51,94.01 C64.56,91.53 69.99,85.75 72.02,78.55 C72.47,76.95 71.54,75.3 69.95,74.85Z"
-            ></path>
-          </g>
-        </svg>
-      </div>
-    </div>
-    <div class="animated-bg">
-      <div class="bg-blob bg-blob-1"></div>
-      <div class="bg-blob bg-blob-2"></div>
-      <div class="bg-blob bg-blob-3"></div>
-    </div>
-    
-    <div class="hero-graph-bg" aria-hidden="true">
-      <!-- Complex realistic financial chart curve -->
-      <svg viewBox="0 0 1440 320" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="graphGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stop-color="#10b981" stop-opacity="0.25"/>
-            <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
-          </linearGradient>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-            <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>
-        </defs>
-        <path class="graph-area" 
-          d="M0,320 L0,256 C80,240 120,280 200,220 C280,160 320,190 400,150 C480,110 520,140 600,100 C680,60 720,90 800,50 C880,10 920,40 1000,20 C1080,0 1120,30 1200,10 C1280,-10 1360,5 1440,0 L1440,320 Z" 
-          fill="url(#graphGradient)"/>
-        <path class="graph-line" 
-          d="M0,256 C80,240 120,280 200,220 C280,160 320,190 400,150 C480,110 520,140 600,100 C680,60 720,90 800,50 C880,10 920,40 1000,20 C1080,0 1120,30 1200,10 C1280,-10 1360,5 1440,0" 
-          fill="none" stroke="#10b981" stroke-width="2.5" filter="url(#glow)"/>
-      </svg>
-    </div>
-
-    <a class="skiplink" href="#main-content">Aller au contenu principal</a>
-
-    <div class="fixed-invite" aria-label="Invitation du bot">
-      <a
-        class="btn btn-primary"
-        href="https://discord.com/oauth2/authorize?client_id=1448011692867977266&permissions=8&integration_type=0&scope=bot"
-        target="_blank"
-        rel="noopener"
-      >
-        Inviter le bot
-      </a>
-      <img src="/images/dessous.png" class="invite-decor" alt="" aria-hidden="true"></div>
-    </div>
+  <a class="skiplink" href="#main-content">Aller au contenu principal</a>
 
     <header class="topbar">
       <div class="topbar-inner">
@@ -174,7 +98,7 @@
       </div>
     </header>
 
-    <main class="container">
+    <main class="container" data-emprise="true">
       <section class="hero" aria-label="Accueil">
         <a href="/me" class="hero-side-image" aria-label="En savoir plus sur moi">
           <img src="/4images/allonge.png" alt="">
@@ -187,7 +111,7 @@
             Tout ce qu'il faut pour votre serveur.
           </p>
           <div class="hero-cta">
-            <a class="btn btn-primary" href="#commandes">
+            <a class="btn btn-primary" href="#commandes" style="box-shadow: none;">
               <span>Voir les commandes</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
             </a>
@@ -223,6 +147,7 @@
             <div class="muted" id="cmdCount">Chargement…</div>
           </div>
           <div class="commands-toolbar">
+            <button id="toggleCommandsBtn" class="btn btn-sm" type="button" style="margin-right: 10px;">Masquer</button>
             <label for="cmdSearch" class="sr-only">Rechercher une commande</label>
             <input class="input" id="cmdSearch" type="search" placeholder="Rechercher une commande…" autocomplete="off">
             <div class="select-wrapper">
@@ -241,22 +166,19 @@
         <div class="cmd-grid" id="cmdGrid" aria-live="polite"></div>
       </section>
 
-      <footer class="site-footer">
-        <div class="footer-actions">
-          <a class="btn" href="#commandes">Voir toutes les commandes</a>
-          <a class="btn" href="/maj">Mises à jour</a>
-          <a class="btn" href="https://discord.com/oauth2/authorize?client_id=1448011692867977266&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Inviter le bot</a>
-        </div>
-        <div class="supporters-marquee">
-          <div class="marquee-content">
-            Merci la famille : aurianavvlt, 4y0pl41t, mr.korrnichon, amaeeel._., an333.back, fgddfgdfsgfsd, marwanleboss, beaucouptropcon, nyrt.kc
+      <footer>
+          <div class="footer-links-row">
+              <a href="/" class="footer-link">Accueil</a>
+              <a href="/me" class="footer-link">Fazer</a>
+              <a href="/maj" class="footer-link">Mises à jour</a>
           </div>
-        </div>
+          <div class="footer-links-row">
+              <a href="/mentions-legales" class="footer-link">Mentions Légales</a>
+              <a href="/cgu" class="footer-link">CGU</a>
+              <a href="/confidentialite" class="footer-link">Confidentialité</a>
+          </div>
+          <p>&copy; 2026 Fazer City.</p>
       </footer>
-
-      <button id="backToTop" class="back-to-top" aria-label="Retour en haut">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
-      </button>
     </main>
 
     <div id="toast"></div>

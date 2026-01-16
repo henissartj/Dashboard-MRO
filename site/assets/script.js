@@ -99,6 +99,14 @@ if (catSelect) {
   });
 }
 
+const toggleBtn = document.getElementById("toggleCommandsBtn");
+if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+        elGrid.classList.toggle("hidden");
+        toggleBtn.textContent = elGrid.classList.contains("hidden") ? "Afficher" : "Masquer";
+    });
+}
+
 function matches(cmd) {
   if (state.filter !== "all" && cmd.type !== state.filter) return false;
   if (state.catFilter !== "all" && (cmd.category || "Autre") !== state.catFilter) return false;
@@ -174,24 +182,11 @@ function render() {
   
   elGrid.innerHTML = html;
   
-  // Scroll Reveal & Click Copy
-  const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-          if (entry.isIntersecting) {
-              entry.target.classList.add('active');
-              observer.unobserve(entry.target);
-          }
-      });
-  }, { threshold: 0.1 });
-
+  // Click Copy (Animation removed)
   document.querySelectorAll('.cmd').forEach(el => {
-      el.classList.add('reveal');
-      observer.observe(el);
-      
       el.addEventListener('click', () => {
           const nameEl = el.querySelector('.cmd-name');
           let text = nameEl.innerText;
-          // text already contains + or /
           
           navigator.clipboard.writeText(text).then(() => {
               showToast(`Commande copiée : ${text}`);

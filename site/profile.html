@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dossier Citoyen - {{ user.name }}</title>
+    <link rel="icon" type="image/png" href="/images/favicon.png">
+    <meta name="description" content="Dossier Citoyen de {{ user.name }} sur Fazer City.">
+    
+    <meta property="og:type" content="profile">
+    <meta property="og:title" content="Dossier Citoyen: {{ user.name }}">
+    <meta property="og:description" content="Solde: {{ user.balance + user.bank }} Fcoins">
+    <meta property="og:image" content="{{ user.avatar }}">
+    <meta name="theme-color" content="#facc15">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/style.css">
+    <style>
+        body{overflow-y:hidden;}
+        @media(max-width:900px){body{overflow-y:auto;}}
+        .profile-card{background:radial-gradient(circle at top left,#111827,#020617);border:1px solid #27272a;border-radius:1.2rem;padding:1.5rem 1.9rem;max-width:900px;margin:1.25rem auto;box-shadow:0 24px 48px rgba(0,0,0,0.85);}
+        .profile-header{display:flex;gap:2rem;align-items:center;margin-bottom:1.5rem;}
+        .profile-main{flex:1;}
+        .avatar-frame{position:relative;width:108px;height:108px;flex-shrink:0;}
+        .profile-avatar{width:108px;height:108px;border-radius:0.9rem;border:2px solid #facc15;object-fit:cover;box-shadow:0 10px 18px rgba(0,0,0,0.9);}
+        .avatar-frame::before{content:"CITIZEN";position:absolute;left:50%;bottom:-0.45rem;transform:translateX(-50%);font-size:0.6rem;letter-spacing:.22em;text-transform:uppercase;padding:0.18rem 0.8rem;border-radius:999px;background-color:#020617;border:1px solid #4b5563;color:#e5e7eb;z-index:10;}
+        .profile-name{font-size:2.2rem;font-weight:800;color:#fff;margin-bottom:0.25rem;}
+        .profile-id{color:#a1a1aa;font-family:monospace;font-size:0.9rem;}
+        .profile-tagline{color:#e5e5e5;margin-top:0.75rem;font-size:0.95rem;}
+        .profile-layout{display:grid;grid-template-columns:repeat(2,1fr);gap:1.75rem;}
+        .section-title{font-size:0.95rem;font-weight:600;color:#e5e5e5;margin-bottom:0.9rem;text-transform:uppercase;letter-spacing:.12em;}
+        .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0.9rem;margin-bottom:0.25rem;}
+        .stat-box{background:linear-gradient(145deg,#18181b,#020617);padding:0.7rem 0.95rem;border-radius:0.7rem;border:1px solid #27272a;border-left-width:3px;box-shadow:0 14px 28px rgba(0,0,0,0.75);}
+        .stat-box.money{border-color:#22c55e;}
+        .stat-box.activity{border-color:#3b82f6;}
+        .stat-box.luck{border-color:#eab308;}
+        .stat-box.rep{border-color:#a855f7;}
+        .stat-box.detail{border-color:#6b7280;}
+        .stat-box.clickable{cursor:pointer;transition:background .15s,border-color .15s,transform .1s,box-shadow .15s;}
+        .stat-box.clickable:hover{background:#020617;transform:translateY(-2px);border-color:#facc15;box-shadow:0 20px 40px rgba(0,0,0,0.9);}
+        .stat-label{color:#a1a1aa;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem;}
+        .stat-value{font-size:1.3rem;font-weight:600;color:#facc15;}
+        .stat-sub{color:#9ca3af;font-size:0.75rem;margin-top:0.15rem;}
+        .detail-toggle{font-size:0.75rem;color:#e5e7eb;margin-top:0.2rem;text-align:right;}
+        .detail-toggle span{border-radius:999px;border:1px solid #374151;padding:0.1rem 0.5rem;}
+        .detail-list{margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid #374151;font-size:0.8rem;color:#d1d5db;max-height:160px;overflow-y:auto;}
+        .detail-row{display:flex;justify-content:space-between;gap:0.75rem;margin-bottom:0.3rem;}
+        .detail-name{font-weight:500;}
+        .detail-meta{color:#9ca3af;font-size:0.75rem;}
+        .stat-bar{position:relative;height:4px;border-radius:999px;background:#111827;margin-top:0.4rem;overflow:hidden;}
+        .stat-bar-fill{position:absolute;inset:0;border-radius:999px;background:linear-gradient(90deg,#22c55e,#facc15);}
+        .divider{height:1px;background:#27272a;margin:1.25rem 0;}
+        .share-box{background:#020617;padding:0.7rem 0.9rem;border-radius:0.5rem;display:flex;align-items:center;gap:0.75rem;justify-content:space-between;}
+        .share-url{color:#facc15;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.85rem;}
+        @media(max-width:800px){.profile-header{flex-direction:column;align-items:flex-start}.profile-layout{grid-template-columns:1fr}.share-box{flex-direction:column;align-items:flex-start}}
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand-wrapper">
+          <a href="/" style="display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit;">
+            <img src="/images/logo.png" class="brand-logo" alt="Logo">
+            <div class="brand">
+              <div class="brand-title">Fazer City</div>
+              <div class="brand-sub">Dossier Citoyen</div>
+            </div>
+          </a>
+        </div>
+        
+        <div class="top-actions">
+            {% if logged_in_user %}
+                <a class="btn btn-sm" href="/logout">Déconnexion</a>
+                {% if not is_owner %}
+                    <a class="btn btn-sm btn-primary" href="/profile">Mon Profil</a>
+                {% endif %}
+            {% else %}
+                <a class="btn btn-sm btn-primary" href="/login">Connexion</a>
+            {% endif %}
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+        <div class="profile-card">
+            <div class="profile-header">
+                <div class="profile-main">
+                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: .15em; color: #9ca3af; margin-bottom: 0.25rem;">
+                        Dossier Citoyen
+                    </div>
+                    <h1 class="profile-name">{{ user.name }}</h1>
+                    <div class="profile-id">ID: {{ user.id }}</div>
+                    <p class="profile-tagline">
+                        {% if user.organization %}
+                        <span style="color:#facc15;font-weight:600;">
+                            {{ user.organization.name }}
+                            {% if user.organization.level %} · Niveau {{ user.organization.level }}{% endif %}
+                            {% if user.organization.role %} · {{ user.organization.role }}{% endif %}
+                        </span> • 
+                        {% endif %}
+                        Rang: {{ user.rank }} • {{ user.games_played }} parties jouées • {{ user.win_rate }}% de victoire
+                    </p>
+                </div>
+                <div class="avatar-frame">
+                    <img src="{{ user.avatar }}" alt="{{ user.name }}" class="profile-avatar">
+                </div>
+            </div>
+
+            {% if user.exists %}
+                <div class="profile-layout">
+                    <div>
+                        <div class="section-title">Aperçu</div>
+                        <div class="stats-grid">
+                            <div class="stat-box money">
+                                <div class="stat-label">Fortune totale</div>
+                                <div class="stat-value">{{ "{:,}".format(user.total_wealth).replace(',', ' ') }}</div>
+                            </div>
+                            <div class="stat-box activity">
+                                <div class="stat-label">Activité</div>
+                                <div class="stat-value">{{ user.games_played }} parties</div>
+                                <div class="stat-bar">
+                                    <div class="stat-bar-fill" style="width: {{ user.activity_score }}%;"></div>
+                                </div>
+                            </div>
+                            <div class="stat-box luck">
+                                <div class="stat-label">Winrate</div>
+                                <div class="stat-value">{{ user.win_rate }}%</div>
+                                <div class="stat-bar">
+                                    <div class="stat-bar-fill" style="width: {{ user.luck_score }}%;"></div>
+                                </div>
+                                <div class="stat-sub">{{ user.games_won }} gagnées • {{ user.games_lost }} perdues</div>
+                            </div>
+                            <div class="stat-box rep">
+                                <div class="stat-label">Réputation</div>
+                                <div class="stat-value">{{ user.rep }}</div>
+                                <div class="stat-bar">
+                                    <div class="stat-bar-fill" style="width: {{ user.social_score }}%;"></div>
+                                </div>
+                                <div class="stat-sub">Réputation globale</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="section-title">Détails</div>
+                        <div class="stats-grid">
+                            <div class="stat-box detail">
+                                <div class="stat-label">Poche</div>
+                                <div class="stat-value">{{ "{:,}".format(user.balance).replace(',', ' ') }}</div>
+                            </div>
+                            <div class="stat-box detail">
+                                <div class="stat-label">Banques</div>
+                                <div class="stat-value">{{ "{:,}".format(user.bank).replace(',', ' ') }}</div>
+                            </div>
+                            <div class="stat-box detail">
+                                <div class="stat-label">Mises totales</div>
+                                <div class="stat-value">{{ "{:,}".format(user.amount_wagered).replace(',', ' ') }}</div>
+                            </div>
+                            <div class="stat-box detail">
+                                <div class="stat-label">Gains totaux</div>
+                                <div class="stat-value">{{ "{:,}".format(user.amount_won).replace(',', ' ') }}</div>
+                            </div>
+                            <div class="stat-box detail clickable" onclick="toggleDetails('immo')">
+                                <div class="stat-label">Valeur immobilière</div>
+                                <div class="stat-value">{{ "{:,}".format(user.properties_total_value).replace(',', ' ') }}</div>
+                                {% if user.properties_count > 0 %}
+                                <div class="detail-toggle"><span>Voir détails</span></div>
+                                <div id="details-immo" class="detail-list" style="display:none;">
+                                    {% for p in user.properties_detailed %}
+                                    <div class="detail-row">
+                                        <div>
+                                            <div class="detail-name">{{ p.name }}</div>
+                                            <div class="detail-meta">{{ p.qty }} bien{% if p.qty > 1 %}s{% endif %}</div>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <div class="detail-name">{{ "{:,}".format(p.total_price).replace(',', ' ') }}</div>
+                                            <div class="detail-meta">soit {{ "{:,}".format(p.unit_price).replace(',', ' ') }} /u</div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <div class="stat-sub">Aucun bien immobilier</div>
+                                {% endif %}
+                            </div>
+                            <div class="stat-box detail clickable" onclick="toggleDetails('lux')">
+                                <div class="stat-label">Assets de luxe</div>
+                                <div class="stat-value">{{ "{:,}".format(user.luxury_total_value).replace(',', ' ') }}</div>
+                                {% if user.luxury_count > 0 %}
+                                <div class="detail-toggle"><span>Voir détails</span></div>
+                                <div id="details-lux" class="detail-list" style="display:none;">
+                                    {% for a in user.luxury_detailed %}
+                                    <div class="detail-row">
+                                        <div>
+                                            <div class="detail-name">{{ a.name }}</div>
+                                            <div class="detail-meta">
+                                                {% if a.serial %}
+                                                    N° de série {{ a.serial }}
+                                                {% else %}
+                                                    Sans numéro de série
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <div class="detail-name">{{ "{:,}".format(a.price).replace(',', ' ') }}</div>
+                                            <div class="detail-meta">valeur estimée</div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <div class="stat-sub">Aucun asset de luxe</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 1rem; border-radius: 0.5rem; color: #f87171; margin-bottom: 2rem;">
+                    Ce citoyen n'a pas encore de compte bancaire actif.
+                </div>
+            {% endif %}
+
+            {% if is_owner %}
+                <div class="divider"></div>
+                <div>
+                    <p style="color: #a1a1aa; margin-bottom: 0.75rem;">Ceci est votre dossier public, à partager pour flex.</p>
+                    <div class="share-box">
+                        <code class="share-url">https://fazer.city/api/user/{{ user.id }}</code>
+                        <button onclick="navigator.clipboard.writeText('https://fazer.city/api/user/{{ user.id }}'); this.innerText='Copié!'" class="btn btn-sm">Copier</button>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </main>
+    <script>
+      function toggleDetails(key){
+        var el=document.getElementById("details-"+key);
+        if(!el)return;
+        var isHidden=el.style.display==="none"||!el.style.display;
+        el.style.display=isHidden?"block":"none";
+      }
+    </script>
+  </body>
+</html>

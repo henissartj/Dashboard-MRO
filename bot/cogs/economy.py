@@ -2350,7 +2350,7 @@ class Economy(commands.Cog):
         except:
             return (20, 20, 20)
 
-    def _draw_credit_card_sync(self, user_name, user_id, bal, bank1, bank2, bank3, assets_val, card_style=None):
+    def _draw_credit_card_sync(self, user_name, user_id, bal, bank1, assets_val, card_style=None):
         # Defaults
         start_c = (20, 20, 20)
         end_c = (25, 25, 40)
@@ -4305,14 +4305,13 @@ class Economy(commands.Cog):
         
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT * FROM user_stats WHERE user_id=%s", (member.id,))
+                await cur.execute("SELECT games_played, games_won, games_lost, amount_wagered, amount_won, commands_used FROM user_stats WHERE user_id=%s", (member.id,))
                 row = await cur.fetchone()
                 
                 if not row:
                     return await ctx.send("❌ Aucune statistique disponible pour ce joueur.")
                 
-                # user_id, games_played, games_won, games_lost, amount_wagered, amount_won, commands_used
-                _, games_played, games_won, games_lost, amount_wagered, amount_won, cmds = row
+                games_played, games_won, games_lost, amount_wagered, amount_won, cmds = row
                 
                 if games_played == 0:
                     return await ctx.send("❌ Ce joueur n'a jamais joué au casino.")

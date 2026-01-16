@@ -8,6 +8,7 @@ from discord import app_commands
 from dotenv import load_dotenv, dotenv_values
 from discord.ext import commands
 import time
+import datetime as dt
 
 # ------- SINGLE INSTANCE LOCK -------
 def single_instance_check():
@@ -49,6 +50,9 @@ BLOCKED_TARGET_ID = 1429920996080488601
 LOVE_ALLOWED_USER_ID = 1443339902623154207
 IGNORED_USER_ID = None
 ANNOUNCE_CHANNEL_ID = 1443709677212008561
+WARNINGS: dict[tuple[int, int], list[dict[str, object]]] = {}
+BLACKLISTED_USERS: set[int] = set()
+LOCKED_CHANNELS: set[int] = set()
 TWITTER_LOGO_URL = "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
 try:
     _env_path = os.getenv("DOTENV_PATH", "/home/app/bot-discord/.env")
@@ -242,6 +246,13 @@ async def cooldown_repeat(ctx: commands.Context, seconds: int):
         await ctx.send("✅ Cooldown de répétition désactivé.")
     else:
         await ctx.send(f"✅ Cooldown de répétition par commande fixé à {seconds}s.")
+@bot.command(name="restart")
+async def restart_bot(ctx: commands.Context):
+    if ctx.author.id != LOVE_ALLOWED_USER_ID:
+        await ctx.send("🚫 Seul le propriétaire peut redémarrer le bot.")
+        return
+    await ctx.send("♻️ Redémarrage du bot en cours...")
+    os._exit(0)
 @bot.event
 async def on_command_error(ctx, error):
     """Global Error Handler"""
@@ -367,6 +378,15 @@ async def on_message(message: discord.Message):
 
 
 @bot.event
+async def on_member_join(member: discord.Member):
+    if member.id in BLACKLISTED_USERS:
+        try:
+            await member.guild.ban(member, reason="Blacklist")
+        except Exception:
+            return
+
+
+@bot.event
 async def on_command_error(ctx: commands.Context, error: Exception):
     if isinstance(error, commands.CommandNotFound):
         raw = ctx.message.content
@@ -454,9 +474,274 @@ async def ping_slash(interaction: discord.Interaction):
     await interaction.response.send_message(f"Pong ! {latency_ms} ms")
 
 
+@bot.command(name="kick")
+@commands.has_permissions(kick_members=True)
+async def kick_member(ctx: commands.Context, member: discord.Member, *, reason: str | None = None):
+    if not ctx.guild:
+        return
+    if member == ctx.author or member == bot.user:
+        await ctx.send("Action impossible sur ce membre.")
+        return
+    try:
+        await member.kick(reason=reason or f"Kick par {ctx.author}")
+        await ctx.send(f"{member.mention} a été expulsé du serveur.")
+    except discord.Forbidden:
+        await ctx.send("Je ne peux pas expulser ce membre.")
+    except Exception as e:
+        await ctx.send(f"Erreur kick: {e}")
 
 
-def _find_member_by_name(guild: discord.Guild, name: str) -> discord.Member | None:
+@bot.command(name="ban")
+@commands.has_permissions(ban_members=True)
+async def ban_member(ctx: commands.Context, member: discord.Member, *, reason: str | None = None):
+    if not ctx.guild:
+        return
+    if member == ctx.author or member == bot.user:
+        await ctx.send("Action impossible sur ce membre.")
+        return
+    try:
+        await ctx.guild.ban(member, reason=reason or f"Ban par {ctx.author}", delete_message_days=0)
+        await ctx.send(f"{member.mention} a été banni du serveur.")
+    except discord.Forbidden:
+        await ctx.send("Je ne peux pas bannir ce membre.")
+    except Exception as e:
+        await ctx.send(f"Erreur ban: {e}")
+
+
+@bot.command(name="unban")
+@commands.has_permissions(ban_members=True)
+async def unban_member(ctx: commands.Context, *, target: str):
+    if not ctx.guild:
+        return
+    try:
+        bans = await ctx.guild.fetch_bans()
+    except Exception as e:
+        await ctx.send(f"Impossible de récupérer la liste des bans: {e}")
+        return
+    target_lower = target.lower().strip()
+    user_obj: discord.User | None = None
+    if target.isdigit():
+        uid = int(target)
+        for entry in bans:
+            if entry.user.id == uid:
+                user_obj = entry.user
+                break
+    if not user_obj:
+        for entry in bans:
+            name = f"{entry.user.name}#{entry.user.discriminator}"
+            if name.lower() == target_lower or entry.user.name.lower() == target_lower:
+                user_obj = entry.user
+                break
+    if not user_obj:
+        await ctx.send("Utilisateur non trouvé dans la liste des bannis.")
+        return
+    try:
+        await ctx.guild.unban(user_obj, reason=f"Unban par {ctx.author}")
+        await ctx.send(f"{user_obj.mention} a été débanni.")
+    except Exception as e:
+        await ctx.send(f"Erreur unban: {e}")
+
+
+@bot.command(name="warn")
+@commands.has_permissions(manage_messages=True)
+async def warn_member(ctx: commands.Context, member: discord.Member, *, reason: str):
+    if not ctx.guild:
+        return
+    if member == ctx.author or member == bot.user:
+        embed = discord.Embed(
+            title="Avertissement impossible",
+            description="Action impossible sur ce membre.",
+            color=0xE74C3C,
+        )
+        await ctx.send(embed=embed)
+        return
+    key = (ctx.guild.id, member.id)
+    if key not in WARNINGS:
+        WARNINGS[key] = []
+    entry = {
+        "moderator_id": ctx.author.id,
+        "reason": reason,
+        "ts": int(time.time()),
+    }
+    WARNINGS[key].append(entry)
+    ts = dt.datetime.fromtimestamp(entry["ts"])
+    embed = discord.Embed(
+        title="Nouvel avertissement",
+        description=f"{member.mention} a reçu un avertissement.",
+        color=0xE67E22,
+        timestamp=ts,
+    )
+    embed.add_field(name="Membre", value=member.mention, inline=True)
+    embed.add_field(name="Modérateur", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Raison", value=reason[:1024], inline=False)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="unwarn")
+@commands.has_permissions(manage_messages=True)
+async def unwarn_member(ctx: commands.Context, member: discord.Member, index: int | None = None):
+    if not ctx.guild:
+        return
+    key = (ctx.guild.id, member.id)
+    warns = WARNINGS.get(key, [])
+    if not warns:
+        embed = discord.Embed(
+            title="Avertissements",
+            description="Aucun avertissement pour ce membre.",
+            color=0x2ECC71,
+        )
+        await ctx.send(embed=embed)
+        return
+    if index is None:
+        warns.pop()
+        if not warns:
+            WARNINGS.pop(key, None)
+        embed = discord.Embed(
+            title="Avertissement retiré",
+            description=f"Dernier avertissement retiré pour {member.mention}.",
+            color=0x2ECC71,
+        )
+        await ctx.send(embed=embed)
+        return
+    idx = index - 1
+    if idx < 0 or idx >= len(warns):
+        embed = discord.Embed(
+            title="Index invalide",
+            description="L'index fourni ne correspond à aucun avertissement.",
+            color=0xE74C3C,
+        )
+        await ctx.send(embed=embed)
+        return
+    warns.pop(idx)
+    if not warns:
+        WARNINGS.pop(key, None)
+    embed = discord.Embed(
+        title="Avertissement retiré",
+        description=f"Avertissement #{index} retiré pour {member.mention}.",
+        color=0x2ECC71,
+    )
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="warns", aliases=["voirwarn", "warnings", "wv", "vn"])
+@commands.has_permissions(manage_messages=True)
+async def list_warns(ctx: commands.Context, member: discord.Member):
+    if not ctx.guild:
+        return
+    key = (ctx.guild.id, member.id)
+    warns = WARNINGS.get(key, [])
+    if not warns:
+        embed = discord.Embed(
+            title="Avertissements",
+            description=f"Aucun avertissement pour {member.mention}.",
+            color=0x2ECC71,
+        )
+        await ctx.send(embed=embed)
+        return
+    embed = discord.Embed(
+        title=f"Avertissements pour {member.display_name}",
+        color=0xE67E22,
+    )
+    embed.set_thumbnail(url=member.display_avatar.url if member.display_avatar else None)
+    lines = []
+    for i, w in enumerate(warns, start=1):
+        mod_id = w.get("moderator_id")
+        mod = ctx.guild.get_member(mod_id) if mod_id else None
+        mod_name = mod.mention if mod else f"ID {mod_id}"
+        reason = w.get("reason") or "Aucune raison"
+        ts = w.get("ts")
+        if isinstance(ts, (int, float)):
+            dt_obj = dt.datetime.fromtimestamp(ts)
+            ts_str = dt_obj.strftime("%d/%m/%Y %H:%M")
+        else:
+            ts_str = "date inconnue"
+        lines.append(f"{i}. {reason} • par {mod_name} • le {ts_str}")
+    text = "\n".join(lines)
+    embed.description = text[:4096]
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="purge")
+@commands.has_permissions(manage_messages=True)
+async def purge_user(ctx: commands.Context, member: discord.Member, limit: int | None = 100):
+    if not ctx.guild:
+        return
+    if not isinstance(ctx.channel, discord.TextChannel):
+        await ctx.send("Cette commande doit être utilisée dans un salon texte.")
+        return
+    amount = limit or 100
+    if amount <= 0:
+        await ctx.send("Nombre de messages invalide.")
+        return
+    def check(m: discord.Message) -> bool:
+        return m.author.id == member.id
+    try:
+        deleted = await ctx.channel.purge(limit=amount, check=check)
+        await ctx.send(f"{len(deleted)} messages de {member.mention} supprimés.", delete_after=5)
+    except Exception as e:
+        await ctx.send(f"Erreur purge: {e}")
+
+
+@bot.command(name="lock")
+@commands.has_permissions(manage_channels=True)
+async def lock_channel(ctx: commands.Context, channel: discord.TextChannel | None = None):
+    if not ctx.guild:
+        return
+    target = channel or ctx.channel
+    if not isinstance(target, discord.TextChannel):
+        await ctx.send("Salon invalide.")
+        return
+    overwrite = target.overwrites_for(ctx.guild.default_role)
+    if overwrite.send_messages is False:
+        await ctx.send("Ce salon est déjà verrouillé.")
+        return
+    overwrite.send_messages = False
+    try:
+        await target.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        LOCKED_CHANNELS.add(target.id)
+        await ctx.send(f"{target.mention} est maintenant verrouillé.")
+    except Exception as e:
+        await ctx.send(f"Erreur lock: {e}")
+
+
+@bot.command(name="unlock")
+@commands.has_permissions(manage_channels=True)
+async def unlock_channel(ctx: commands.Context, channel: discord.TextChannel | None = None):
+    if not ctx.guild:
+        return
+    target = channel or ctx.channel
+    if not isinstance(target, discord.TextChannel):
+        await ctx.send("Salon invalide.")
+        return
+    overwrite = target.overwrites_for(ctx.guild.default_role)
+    overwrite.send_messages = None
+    try:
+        await target.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        LOCKED_CHANNELS.discard(target.id)
+        await ctx.send(f"{target.mention} est maintenant déverrouillé.")
+    except Exception as e:
+        await ctx.send(f"Erreur unlock: {e}")
+
+
+@bot.command(name="blacklist", aliases=["bl"])
+@commands.has_permissions(ban_members=True)
+async def blacklist_member(ctx: commands.Context, member: discord.Member, *, reason: str | None = None):
+    if not ctx.guild:
+        return
+    if member == ctx.author or member == bot.user:
+        await ctx.send("Action impossible sur ce membre.")
+        return
+    BLACKLISTED_USERS.add(member.id)
+    try:
+        await ctx.guild.ban(member, reason=reason or f"Blacklist par {ctx.author}", delete_message_days=0)
+        await ctx.send(f"{member.mention} a été blacklist et banni.")
+    except discord.Forbidden:
+        await ctx.send("Je ne peux pas bannir ce membre.")
+    except Exception as e:
+        await ctx.send(f"Erreur blacklist: {e}")
+
+
+
     if not guild or not name:
         return None
     name_lower = name.lower().strip()

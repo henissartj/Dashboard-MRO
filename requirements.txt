@@ -24,3 +24,8 @@ aiomysql>=0.2.0
 cryptography>=41.0.0
 gTTS>=2.4.0
 PyNaCl>=1.5.0
+
+Flask
+pymysql
+requests
+requests-oauthlib

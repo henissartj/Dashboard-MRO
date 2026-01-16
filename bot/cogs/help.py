@@ -143,9 +143,24 @@ class Help(commands.Cog):
             f"`{prefix}ping` : Voir la latence",
             f"`{prefix}poll <question> [choix...]` : Créer un sondage",
             f"`{prefix}report <message>` : Signaler un problème",
-            f"`{prefix}afk <raison>` : Se mettre en mode AFK"
+            f"`{prefix}afk <raison>` : Se mettre en mode AFK",
+            f"`{prefix}restart` : Redémarrer le bot (owner)"
         ]
         embed.add_field(name="ℹ️ Divers & Communauté", value="\n".join(misc_cmds), inline=False)
+
+        mod_cmds = [
+            f"`{prefix}kick <@user> [raison]` : Expulser un membre",
+            f"`{prefix}ban <@user> [raison]` : Bannir un membre",
+            f"`{prefix}unban <id|nom#0000>` : Révoquer un bannissement",
+            f"`{prefix}warn <@user> <raison>` : Donner un avertissement",
+            f"`{prefix}unwarn <@user> [index]` : Retirer un avertissement",
+            f"`{prefix}wv <@user>` : Voir les avertissements détaillés",
+            f"`{prefix}purge <@user> [limite]` : Purger ses messages",
+            f"`{prefix}lock [#salon]` : Verrouiller un salon texte",
+            f"`{prefix}unlock [#salon]` : Déverrouiller un salon texte",
+            f"`{prefix}blacklist <@user> [raison]` : Blacklist + ban fort"
+        ]
+        embed.add_field(name="🛡️ Modération", value="\n".join(mod_cmds), inline=False)
 
         # --- 🛡️ Admin / Police ---
         if ctx.author.guild_permissions.administrator:
@@ -169,8 +184,20 @@ class Help(commands.Cog):
 
     @commands.command(name="maj")
     async def maj(self, ctx: commands.Context):
-        embed = discord.Embed(title="📜 Note de Mise à Jour v2.2.2", color=discord.Color.gold())
-        embed.description = "**Réputation, AFK & Jeux de rôles**"
+        embed = discord.Embed(title="📜 Note de Mise à Jour v2.3.0", color=discord.Color.gold())
+        embed.description = "Modération avancée, warnings détaillés et qualité de vie."
+
+        mod_changes = [
+            "🛡️ **Modération avancée** :",
+            "• Nouvelles commandes `+kick`, `+ban`, `+unban`, `+purge`, `+lock`, `+unlock`, `+blacklist` / `+bl`.",
+            "",
+            "📋 **Système d'avertissements** :",
+            "• `+warn @user <raison>` obligatoire avec stockage de la raison.",
+            "• `+wv @user` affiche tous les warns avec raison, date et modérateur.",
+            "",
+            "⚙️ **Qualité de vie** :",
+            "• `+restart` pour redémarrer le bot (owner uniquement)."
+        ]
 
         changes = [
             "🏆 **Système de Réputation** :",
@@ -187,6 +214,7 @@ class Help(commands.Cog):
             "Le dev travaille fort pour le quartier 🔧"
         ]
 
+        embed.add_field(name="Changelog 16/01/2026", value="\n".join(mod_changes), inline=False)
         embed.add_field(name="Changelog 14/01/2026", value="\n".join(changes), inline=False)
         embed.set_footer(text="Bot développé par Fazer")
         await ctx.send(embed=embed)
