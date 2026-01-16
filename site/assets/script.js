@@ -207,10 +207,10 @@ async function initCommands() {
   elGrid.innerHTML = Array(6).fill(0).map(() => `
     <div class="cmd" style="cursor:default">
       <div class="cmd-top">
-        <div class="cmd-name" style="width:100px;height:20px;background:rgba(255,255,255,0.1);border-radius:4px"></div>
-        <div class="cmd-kind" style="width:40px;height:12px;background:rgba(255,255,255,0.1);border-radius:4px"></div>
+        <div class="cmd-name" style="width:100px;height:20px;background:rgba(255,255,255,0.1);border-radius:0"></div>
+        <div class="cmd-kind" style="width:40px;height:12px;background:rgba(255,255,255,0.1);border-radius:0"></div>
       </div>
-      <div class="cmd-desc" style="margin-top:10px;height:14px;background:rgba(255,255,255,0.1);border-radius:4px;width:80%"></div>
+      <div class="cmd-desc" style="margin-top:10px;height:14px;background:rgba(255,255,255,0.1);border-radius:0;width:80%"></div>
     </div>
   `).join("");
 

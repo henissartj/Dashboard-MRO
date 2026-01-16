@@ -1,4 +1,4 @@
-<!doctype html>
+<!doctype html> 
 <html lang="fr">
   <head>
     <meta charset="utf-8">
@@ -11,50 +11,286 @@
     <meta property="og:title" content="Dossier Citoyen: {{ user.name }}">
     <meta property="og:description" content="Solde: {{ user.balance + user.bank }} Fcoins">
     <meta property="og:image" content="{{ user.avatar }}">
-    <meta name="theme-color" content="#facc15">
+    <meta name="theme-color" content="#0b1220">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/style.css">
     <style>
-        body{overflow-y:hidden;}
-        @media(max-width:900px){body{overflow-y:auto;}}
-        .profile-card{background:radial-gradient(circle at top left,#111827,#020617);border:1px solid #27272a;border-radius:1.2rem;padding:1.5rem 1.9rem;max-width:900px;margin:1.25rem auto;box-shadow:0 24px 48px rgba(0,0,0,0.85);}
-        .profile-header{display:flex;gap:2rem;align-items:center;margin-bottom:1.5rem;}
+        *{box-sizing:border-box}
+        body{
+            margin:0;
+            font-family:'Inter',system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+            background:radial-gradient(circle at top,#1b2a41 0,#020b16 55%,#000 100%);
+            color:#e5e7eb;
+            overflow-y:auto;
+        }
+
+        /* Barre du haut proche de GTA Online */
+        .topbar{
+            background:linear-gradient(to right,#050913,#0b1626);
+            border-bottom:1px solid #1f2933;
+            box-shadow:0 8px 24px rgba(0,0,0,0.75);
+        }
+        .topbar-inner{
+            max-width:1100px;
+            margin:0 auto;
+        }
+
+        .brand-title{
+            font-weight:800;
+            letter-spacing:.12em;
+            text-transform:uppercase;
+        }
+        .brand-sub{
+            font-size:.75rem;
+            letter-spacing:.16em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        }
+
+        main.container{
+            max-width:1100px;
+            margin:6rem auto 1rem;
+            padding:0 1rem;
+        }
+
+        .profile-card{
+            position:relative;
+            background:linear-gradient(135deg,rgba(3,7,18,0.96),rgba(3,18,36,0.98));
+            border:1px solid #1f2937;
+            border-radius:0;
+            padding:0.75rem 1.5rem 1rem;
+            box-shadow:0 24px 60px rgba(0,0,0,0.9);
+        }
+
+        /* Titre style "GTA Online" */
+        .profile-card::before{
+            content:"FAZER CITY ONLINE";
+            position:absolute;
+            left:1.75rem;
+            top:0.65rem;
+            font-size:0.9rem;
+            font-weight:800;
+            letter-spacing:.22em;
+            color:#f9fafb;
+            text-transform:uppercase;
+        }
+
+        .profile-header{
+            display:flex;
+            gap:1.5rem;
+            align-items:center;
+            margin-top:1.25rem;
+            margin-bottom:1rem;
+            border-bottom:1px solid rgba(148,163,184,0.25);
+            padding-bottom:0.5rem;
+        }
         .profile-main{flex:1;}
-        .avatar-frame{position:relative;width:108px;height:108px;flex-shrink:0;}
-        .profile-avatar{width:108px;height:108px;border-radius:0.9rem;border:2px solid #facc15;object-fit:cover;box-shadow:0 10px 18px rgba(0,0,0,0.9);}
-        .avatar-frame::before{content:"CITIZEN";position:absolute;left:50%;bottom:-0.45rem;transform:translateX(-50%);font-size:0.6rem;letter-spacing:.22em;text-transform:uppercase;padding:0.18rem 0.8rem;border-radius:999px;background-color:#020617;border:1px solid #4b5563;color:#e5e7eb;z-index:10;}
-        .profile-name{font-size:2.2rem;font-weight:800;color:#fff;margin-bottom:0.25rem;}
-        .profile-id{color:#a1a1aa;font-family:monospace;font-size:0.9rem;}
-        .profile-tagline{color:#e5e5e5;margin-top:0.75rem;font-size:0.95rem;}
-        .profile-layout{display:grid;grid-template-columns:repeat(2,1fr);gap:1.75rem;}
-        .section-title{font-size:0.95rem;font-weight:600;color:#e5e5e5;margin-bottom:0.9rem;text-transform:uppercase;letter-spacing:.12em;}
-        .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0.9rem;margin-bottom:0.25rem;}
-        .stat-box{background:linear-gradient(145deg,#18181b,#020617);padding:0.7rem 0.95rem;border-radius:0.7rem;border:1px solid #27272a;border-left-width:3px;box-shadow:0 14px 28px rgba(0,0,0,0.75);}
-        .stat-box.money{border-color:#22c55e;}
-        .stat-box.activity{border-color:#3b82f6;}
-        .stat-box.luck{border-color:#eab308;}
-        .stat-box.rep{border-color:#a855f7;}
-        .stat-box.detail{border-color:#6b7280;}
-        .stat-box.clickable{cursor:pointer;transition:background .15s,border-color .15s,transform .1s,box-shadow .15s;}
-        .stat-box.clickable:hover{background:#020617;transform:translateY(-2px);border-color:#facc15;box-shadow:0 20px 40px rgba(0,0,0,0.9);}
-        .stat-label{color:#a1a1aa;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem;}
-        .stat-value{font-size:1.3rem;font-weight:600;color:#facc15;}
-        .stat-sub{color:#9ca3af;font-size:0.75rem;margin-top:0.15rem;}
-        .detail-toggle{font-size:0.75rem;color:#e5e7eb;margin-top:0.2rem;text-align:right;}
-        .detail-toggle span{border-radius:999px;border:1px solid #374151;padding:0.1rem 0.5rem;}
-        .detail-list{margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid #374151;font-size:0.8rem;color:#d1d5db;max-height:160px;overflow-y:auto;}
-        .detail-row{display:flex;justify-content:space-between;gap:0.75rem;margin-bottom:0.3rem;}
+
+        .avatar-frame{
+            position:relative;
+            width:110px;
+            height:110px;
+            flex-shrink:0;
+            border:1px solid #1f2937;
+            background:#020617;
+        }
+        .profile-avatar{
+            width:100%;
+            height:100%;
+            object-fit:cover;
+            border-radius:0;
+            box-shadow:none;
+        }
+
+        .profile-name{
+            font-size:1.6rem;
+            font-weight:800;
+            color:#f9fafb;
+            margin:0 0 .15rem;
+        }
+        .profile-id{
+            color:#9ca3af;
+            font-family:monospace;
+            font-size:.8rem;
+        }
+        .profile-tagline{
+            color:#cbd5f5;
+            margin-top:.5rem;
+            font-size:.9rem;
+        }
+
+        .profile-layout{
+            display:grid;
+            grid-template-columns:repeat(2,1fr);
+            gap:2rem;
+            margin-top:1rem;
+        }
+
+        .section-title{
+            font-size:.8rem;
+            font-weight:700;
+            color:#93c5fd;
+            margin-bottom:.5rem;
+            text-transform:uppercase;
+            letter-spacing:.18em;
+            border-bottom:1px solid rgba(148,163,184,0.35);
+            padding-bottom:.25rem;
+        }
+
+        .stats-grid{
+            display:grid;
+            grid-template-columns:1fr;
+            gap:.35rem;
+        }
+
+        /* Ligne de stats façon GTA */
+        .stat-box{
+            background:transparent;
+            padding:.25rem 0 .45rem;
+            border-radius:0;
+            border:0;
+            border-bottom:1px solid rgba(15,23,42,0.9);
+            box-shadow:none;
+        }
+        .stat-box:last-child{
+            border-bottom:none;
+        }
+
+        .stat-label{
+            font-size:.75rem;
+            text-transform:uppercase;
+            letter-spacing:.16em;
+            color:#9ca3af;
+            margin-bottom:.2rem;
+        }
+        .stat-value{
+            font-size:1rem;
+            font-weight:600;
+            color:#f9fafb;
+        }
+        .stat-sub{
+            color:#9ca3af;
+            font-size:.75rem;
+            margin-top:.2rem;
+        }
+
+        .stat-bar{
+            position:relative;
+            height:10px;
+            border-radius:0;
+            background:#020617;
+            border:1px solid #111827;
+            margin-top:.3rem;
+            overflow:hidden;
+        }
+        .stat-bar-fill{
+            position:absolute;
+            inset:0;
+            border-radius:0;
+            background:linear-gradient(90deg,#38bdf8,#bfdbfe);
+        }
+
+        .stat-box.money .stat-bar-fill{background:linear-gradient(90deg,#22c55e,#bbf7d0);}
+        .stat-box.rep .stat-bar-fill{background:linear-gradient(90deg,#6366f1,#a5b4fc);}
+        .stat-box.luck .stat-bar-fill{background:linear-gradient(90deg,#facc15,#fde68a);}
+        .stat-box.activity .stat-bar-fill{background:linear-gradient(90deg,#38bdf8,#bfdbfe);}
+
+        .stat-box.detail{
+            border-bottom:1px solid rgba(15,23,42,0.9);
+        }
+
+        .stat-box.clickable{
+            cursor:pointer;
+        }
+        .stat-box.clickable:hover{
+            background:rgba(15,23,42,0.65);
+        }
+
+        .detail-toggle{
+            font-size:.7rem;
+            color:#cbd5f5;
+            margin-top:.25rem;
+            text-align:right;
+        }
+        .detail-toggle span{
+            border-radius:999px;
+            border:1px solid #4b5563;
+            padding:.12rem .55rem;
+        }
+
+        .detail-list{
+            margin-top:.4rem;
+            padding-top:.35rem;
+            border-top:1px solid #1f2937;
+            font-size:.78rem;
+            color:#e5e7eb;
+            max-height:160px;
+            overflow-y:auto;
+        }
+        .detail-row{
+            display:flex;
+            justify-content:space-between;
+            gap:.75rem;
+            margin-bottom:.35rem;
+        }
         .detail-name{font-weight:500;}
-        .detail-meta{color:#9ca3af;font-size:0.75rem;}
-        .stat-bar{position:relative;height:4px;border-radius:999px;background:#111827;margin-top:0.4rem;overflow:hidden;}
-        .stat-bar-fill{position:absolute;inset:0;border-radius:999px;background:linear-gradient(90deg,#22c55e,#facc15);}
-        .divider{height:1px;background:#27272a;margin:1.25rem 0;}
-        .share-box{background:#020617;padding:0.7rem 0.9rem;border-radius:0.5rem;display:flex;align-items:center;gap:0.75rem;justify-content:space-between;}
-        .share-url{color:#facc15;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.85rem;}
-        @media(max-width:800px){.profile-header{flex-direction:column;align-items:flex-start}.profile-layout{grid-template-columns:1fr}.share-box{flex-direction:column;align-items:flex-start}}
+        .detail-meta{
+            color:#9ca3af;
+            font-size:.72rem;
+        }
+
+        .divider{
+            height:1px;
+            background:#111827;
+            margin:1.25rem 0 1rem;
+        }
+
+        .share-box{
+            background:rgba(15,23,42,0.9);
+            padding:.6rem .9rem;
+            border-radius:0;
+            border:1px solid #1f2937;
+            display:flex;
+            align-items:center;
+            gap:.75rem;
+            justify-content:space-between;
+        }
+        .share-url{
+            color:#93c5fd;
+            font-family:monospace;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            white-space:nowrap;
+            font-size:.82rem;
+        }
+
+        .btn{
+            border-radius:0;
+        }
+
+        @media(max-width:800px){
+            .profile-header{
+                flex-direction:column;
+                align-items:flex-start;
+            }
+            .avatar-frame{
+                margin-top:.5rem;
+            }
+            .profile-layout{
+                grid-template-columns:1fr;
+                gap:1.5rem;
+            }
+            .profile-card::before{
+                left:1.25rem;
+            }
+            .share-box{
+                flex-direction:column;
+                align-items:flex-start;
+            }
+        }
     </style>
   </head>
   <body>
@@ -217,20 +453,13 @@
                     </div>
                 </div>
             {% else %}
-                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 1rem; border-radius: 0.5rem; color: #f87171; margin-bottom: 2rem;">
+                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 1rem; color: #fecaca; margin-bottom: 2rem;">
                     Ce citoyen n'a pas encore de compte bancaire actif.
                 </div>
             {% endif %}
 
             {% if is_owner %}
-                <div class="divider"></div>
-                <div>
-                    <p style="color: #a1a1aa; margin-bottom: 0.75rem;">Ceci est votre dossier public, à partager pour flex.</p>
-                    <div class="share-box">
-                        <code class="share-url">https://fazer.city/api/user/{{ user.id }}</code>
-                        <button onclick="navigator.clipboard.writeText('https://fazer.city/api/user/{{ user.id }}'); this.innerText='Copié!'" class="btn btn-sm">Copier</button>
-                    </div>
-                </div>
+                <!-- Owner content hidden as requested -->
             {% endif %}
         </div>
     </main>
